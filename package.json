@@ -1,0 +1,67 @@
+{
+  "name": "git-smart-proxy-core",
+  "version": "1.0.0",
+  "description": "Core functionality for *-git-smart-proxy.",
+  "main": "lib/index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "lint": "tsc --noEmit -p . && tslint src/**/*.ts",
+    "test": "jest",
+    "build": "tsc -p .",
+    "pretest": "npm run lint",
+    "prebuild": "npm run test",
+    "prepublish": "npm run build",
+    "postpublish": "del-cli lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/revam/git-smart-proxy-core.git"
+  },
+  "keywords": [
+    "git",
+    "push",
+    "pull",
+    "deploy",
+    "typescript"
+  ],
+  "author": "Mikal Stordal <mikalstordal@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/revam/git-smart-proxy-core/issues"
+  },
+  "homepage": "https://github.com/revam/git-smart-proxy-core#readme",
+  "devDependencies": {
+    "@types/http-status": "^0.2.30",
+    "@types/jest": "^22.0.0",
+    "@types/koa": "^2.0.43",
+    "@types/node": "^8.5.2",
+    "@types/through": "0.0.29",
+    "del-cli": "^1.1.0",
+    "into-stream": "^3.1.0",
+    "jest": "^22.0.4",
+    "tempy": "^0.2.1",
+    "through": "^2.3.8",
+    "ts-jest": "^22.0.0",
+    "tslint": "^5.8.0",
+    "typescript": "^2.6.2"
+  },
+  "dependencies": {
+    "git-side-band-message": "0.0.3"
+  },
+  "jest": {
+    "transform": {
+      "^.+\\.tsx?$": "ts-jest"
+    },
+    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "json",
+      "node"
+    ]
+  }
+}

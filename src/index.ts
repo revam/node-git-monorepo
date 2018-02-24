@@ -1,19 +1,7 @@
-// from packages
 import * as encode from 'git-side-band-message';
+import fetch, { Headers as FetchHeaders } from 'node-fetch';
 import { Duplex, Readable, Transform, Writable } from 'stream';
 import { promisify } from 'util';
-
-const zero_buffer = Buffer.from('0000');
-
-// Hardcoded headers
-export const Headers = {
-  'receive-pack': Buffer.from('001f# service=git-receive-pack\n0000'),
-  'upload-pack': Buffer.from('001e# service=git-upload-pack\n0000'),
-};
-
-export const SymbolSource = Symbol('source stream');
-
-export const SymbolVerbose = Symbol('verbose stream');
 
 export enum ServiceType {
   UNKNOWN,
@@ -28,64 +16,173 @@ export enum RequestStatus {
   REJECTED,
 }
 
-export interface GitMetadata {
-  want?: string[];
-  have?: string[];
-  ref?: {
-    name: string;
-    path: string;
-    type: string;
-  };
-  old_commit?: string;
-  new_commit?: string;
-  capabilities?: string[];
+export const SymbolSourceStream = Symbol('source stream');
+
+export const SymbolVerboseStream = Symbol('verbose stream');
+
+const service_headers = {
+  'receive-pack': Buffer.from('001f# service=git-receive-pack\n0000'),
+  'upload-pack': Buffer.from('001e# service=git-upload-pack\n0000'),
+};
+
+const parse_body = {
+  'git-receive-pack': /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/([^\/]+)\/(.*?))(?:\u0000([^\n]*)?\n?$)/,
+  'git-upload-pack':  /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})\n?$/,
+};
+
+const handle_metadata = {
+  'git-receive-pack': (results: RegExpExecArray, metadata: RequestMetadata) => {
+    metadata.old_commit = results[1];
+    metadata.new_commit = results[2];
+    metadata.ref = {
+      name: results[5],
+      path: results[3],
+      type: results[4],
+    };
+    metadata.capabilities = results[6] ? results[6].trim().split(' ') : [];
+  },
+  'git-upload-pack': (results: RegExpExecArray, metadata: RequestMetadata) => {
+    const type = results[1];
+
+    if (!(type in metadata)) {
+      metadata[type] = [];
+    }
+
+    metadata[type].push(results[2]);
+  },
+};
+
+const valid_services: Array<[ServiceType, RegExp]> = [
+  [ServiceType.INFO, /^\/?(.*?)(\/info\/refs)$/],
+  [ServiceType.PULL, /^\/?(.*?)(\/git-upload-pack)$/],
+  [ServiceType.PUSH, /^\/?(.*?)(\/git-receive-pack)$/],
+];
+
+const zero_buffer = Buffer.from('0000');
+
+/**
+ * Matches method, path, service and content-type against available services.
+ *
+ * @throws {ProxyError}
+ * @returns GitProxyCore instance
+ */
+export function getProxy(uri: string, method: string, path: string, service_name: string,
+                         content_type: string): GitProxyCore {
+  for (const [service, regex] of valid_services) {
+    const results = regex.exec(path);
+
+    if (results) {
+      const has_input = service !== ServiceType.INFO;
+
+      service_name = get_service_name(has_input ? service_name : path.slice(results[1].length + 1));
+      if (!service_name) {
+        throw new ProxyError({
+          have: service_name,
+          message: `Invalid service name '${service_name}'`,
+          type: ProxyErrors.InvalidServiceName,
+          want: new Set(Reflect.ownKeys(service_headers) as string[]),
+        });
+      }
+
+      const expected_method = has_input ? 'GET' : 'POST';
+      if (method !== expected_method) {
+        throw new ProxyError({
+          have: method,
+          message: `Invalid HTTP method used for service (${method} != ${expected_method})`,
+          type: ProxyErrors.InvalidMethod,
+          want: expected_method,
+        });
+      }
+
+      const expected_content_type = `application/x-git-${service_name}-request`;
+      if (has_input && content_type !== expected_content_type) {
+        throw new ProxyError({
+          have: content_type,
+          message: `Invalid content type used for service (${content_type} != ${expected_content_type})`,
+          type: ProxyErrors.InvalidContentType,
+          want: expected_content_type,
+        });
+      }
+
+      return new GitProxyCore({
+        has_input,
+        path: has_input ? results[2] : `${results[2]}?service=${service_name}`,
+        repository: results[1],
+        service,
+        uri,
+      });
+    }
+  }
 }
 
-export interface GitCommandResult {
-  stdin: Writable;
-  stdout: Readable;
-  stderr: Readable;
+/**
+ * Checks if repository exists on origin.
+ *
+ * @export
+ * @param  origin Daemon origin uri
+ * @param  repository Repository to check
+ * @param  headers Additional header to send
+ * @throws {TypeError}
+ */
+export async function repositoryExists(origin: string, repository: string, headers?: Headers): Promise<boolean> {
+  if (!origin) {
+    throw new TypeError('Origin must not be empty or undefined');
+  }
+
+  if (!repository) {
+    throw new TypeError('Repository must not be empty or undefined');
+  }
+
+  if (origin.endsWith('/')) {
+    origin = origin.substring(0, -1);
+  }
+
+  const url = `${origin}/${repository}/info/refs?service=git-upload-service`;
+  const response = await fetch(url, {headers});
+
+  return response.status === 200 || response.status === 304;
 }
 
-export type GitCommand = (repository: string, commmand: string, args?: string[]) =>
-  GitCommandResult | Promise<GitCommandResult>;
+export class GitProxyCore extends Duplex {
+  public readonly metadata: RequestMetadata = {};
+  public readonly service: ServiceType;
+  public repository: string;
+  public uri: string;
 
-export interface GitBasePackOptions {
-  has_input: boolean;
-  command: GitCommand;
-}
-
-export class GitBasePack extends Duplex {
-  public readonly metadata: GitMetadata = {};
-  public readonly service: string;
-
+  private readonly path: string;
   // @ts-ignore suppress error [1166]
-  private [SymbolSource]: SourceDuplex;
+  private [SymbolSourceStream]: SourceDuplex;
   // @ts-ignore suppress error [1166]
-  private [SymbolVerbose]?: WritableBand;
+  private [SymbolVerboseStream]?: WritableBand;
   private __needs_flush = false;
-  private __command: GitCommand;
   private __ready: number | false = false;
-  protected __next?: (err?: Error) => void;
-  protected __buffers?: Buffer[] = [];
+  private __next?: (err?: Error) => void;
+  private __buffers?: Buffer[] = [];
 
-  constructor(options: GitBasePackOptions) {
+  constructor(data: IGitProxyCoreData) {
     super();
 
-    this.__command = options.command;
+    if (data.uri.endsWith('/')) {
+      data.uri = data.uri.substring(0, -1);
+    }
+
+    this.repository = data.repository;
+    this.service = data.service;
+    this.uri = data.uri;
+    this.path = data.path;
 
     this.once('parsed', () => {
-      const source = this[SymbolSource] = new Duplex() as SourceDuplex;
+      const source = this[SymbolSourceStream] = new Duplex() as SourceDuplex;
 
-      source._write = (buffer: Buffer, encoding, next) => {
-        // compare last 4 bytes to terminate signal (0000)
-        if (buffer.length && buffer.slice(buffer.length - 4).equals(zero_buffer)) {
+      source._write = async(buffer: Buffer, encoding, next) => {
+        if (buffer.length === 4 && buffer.equals(zero_buffer)) {
           this.__needs_flush = true;
           this.push(buffer.slice(0, -4));
-        // We wern't finished, so append signal and continue.
+        // We weren't finished, so restore flush signal and continue.
         } else if (this.__needs_flush) {
           this.__needs_flush = false;
           this.push(zero_buffer);
+
           this.push(buffer);
         } else {
           this.push(buffer);
@@ -117,15 +214,15 @@ export class GitBasePack extends Duplex {
 
       source.on('error', (err) => this.emit('error', err));
 
-      const verbose = this[SymbolVerbose];
+      const verbose = this[SymbolVerboseStream];
       const flush = async() => {
         if (verbose && verbose.writable) {
           // Stop writing
           await promisify(verbose.end)();
 
           verbose._write = function _write(buf, enc, next) {
-              this.push(buf);
-              next();
+            this.push(buf);
+            next();
           };
 
           verbose.on('finish', flush);
@@ -154,28 +251,20 @@ export class GitBasePack extends Duplex {
       source.on('finish', flush);
       this.on('finish', () => source.push(null));
 
-      if (!options.has_input) {
-        this.push(Headers[this.service]);
-      }
-
       if (this.__ready) {
         source._read(this.__ready);
       }
     });
 
-    if (!options.has_input) {
+    if (!data.has_input) {
       this.writable = false;
       setImmediate(() => this.emit('parsed'));
     }
   }
 
-  public get has_input() {
-    return this.writable;
-  }
-
-  public verbose(messages: Iterable<string | Buffer> | IterableIterator<string | Buffer>) {
-    if (!this[SymbolVerbose]) {
-      const band = this[SymbolVerbose] = new Writable() as WritableBand;
+  public verbose(...messages: Array<string | Buffer>) {
+    if (!this[SymbolVerboseStream]) {
+      const band = this[SymbolVerboseStream] = new Writable() as WritableBand;
 
       band._write = function write(buffer, encoding, next) {
         band.__buffer = buffer;
@@ -183,7 +272,7 @@ export class GitBasePack extends Duplex {
       };
     }
 
-    const verbose = this[SymbolVerbose];
+    const verbose = this[SymbolVerboseStream];
 
     if (verbose.writable) {
       for (const message of messages) {
@@ -192,8 +281,36 @@ export class GitBasePack extends Duplex {
     }
   }
 
+  public process_input(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      if (this[SymbolSourceStream]) {
+        return resolve();
+      }
+
+      this.once('parsed', resolve);
+    });
+  }
+
+  public async forward(repository?: string, headers?: Headers): Promise<IForwardedResult> {
+    if (!repository) {
+      if (!this.repository) {
+        throw new TypeError('Repository cannot be empty');
+      }
+
+      repository = this.repository;
+    }
+
+    const url = `${this.uri}/${repository}/${this.path}`;
+    const source = this[SymbolSourceStream];
+    const response = await fetch(url, this.writable ? {method: 'POST', body: source, headers} : {headers});
+
+    response.body.pipe(new Seperator()).pipe(source);
+
+    return {status: response.status, headers: response.headers, repository};
+  }
+
   public _read(size) {
-    const source = this[SymbolSource];
+    const source = this[SymbolSourceStream];
 
     if (source && source.__next) {
         this.__ready = false;
@@ -207,45 +324,10 @@ export class GitBasePack extends Duplex {
     }
   }
 
-  public process_input() {
-    return new Promise<void>((resolve) => {
-      if (this[SymbolSource]) {
-        return resolve();
-      }
-
-      this.once('parsed', resolve);
-    });
-  }
-
-  public async accept(repository: string) {
-    const args = ['--stateless-rpc'];
-
-    if (!this.writable) {
-      args.push('--advertise-refs');
-    }
-
-    const source = this[SymbolSource];
-    const {stdout, stdin} = await this.__command(repository, this.service, args);
-
-    stdout.on('error', (err) => this.emit('error', err));
-    stdin.on('error', (err) => this.emit('error', err));
-
-    stdout.pipe(source).pipe(stdin);
-  }
-}
-
-const parser = {
-  'receive-pack': /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/([^\/]+)\/(.*?))(?:\u0000([^\n]*)?\n?$)/,
-  'upload-pack':  /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})\n?$/,
-};
-
-export class UploadPack extends GitBasePack {
-  public readonly service = 'upload-pack';
-
-  public async _write(buffer, enc, next) {
-    if (this[SymbolSource]) {
+  public async _write(buffer: Buffer, enc, next) {
+    if (this[SymbolSourceStream]) {
       this.__next = next;
-      this[SymbolSource].push(buffer);
+      this[SymbolSourceStream].push(buffer);
 
       return;
     }
@@ -254,62 +336,15 @@ export class UploadPack extends GitBasePack {
     this.__buffers.push(buffer);
 
     // Buffer is pre-divided to correct length
-    const length = pkt_length(buffer);
+    const length = packet_length(buffer);
 
     // Parse till we reach specal signal (0000) or unrecognisable data.
     if (length > 0) {
       const message = buffer.toString('utf8');
-      const results = parser[this.service].exec(message);
+      const results = parse_body[this.service].exec(message);
 
       if (results) {
-        const type = results[1];
-
-        if (!(type in this.metadata)) {
-          this.metadata[type] = [];
-        }
-
-        this.metadata[type].push(results[2]);
-      }
-
-      next();
-    } else {
-      this.__next = next;
-      this.emit('parsed');
-    }
-  }
-}
-
-export class ReceivePack extends GitBasePack {
-  public readonly service = 'receive-pack';
-
-  public async _write(buffer, enc, next) {
-    if (this[SymbolSource]) {
-      this.__next = next;
-      this[SymbolSource].push(buffer);
-
-      return;
-    }
-
-    // Stack buffers till fully parsed
-    this.__buffers.push(buffer);
-
-    // Buffer is pre-divided to correct length
-    const length = pkt_length(buffer);
-
-    // Parse till we reach specal signal (0000) or unrecognisable data.
-    if (length > 0) {
-      const message = buffer.toString('utf8');
-      const results = parser[this.service].exec(message);
-
-      if (results) {
-        this.metadata.old_commit = results[1];
-        this.metadata.new_commit = results[2];
-        this.metadata.ref = {
-          name: results[5],
-          path: results[3],
-          type: results[4],
-        };
-        this.metadata.capabilities = results[6] ? results[6].trim().split(' ') : [];
+        handle_metadata[this.service](results, this.metadata);
       }
 
       next();
@@ -334,7 +369,7 @@ export class Seperator extends Transform {
     let offset = -1;
     do {
       offset = offset + length + 1;
-      length = pkt_length(buffer, offset);
+      length = packet_length(buffer, offset);
 
       // Break if no length found on first iteration
       if (offset === 0 && length === -1) {
@@ -347,7 +382,7 @@ export class Seperator extends Transform {
       }
 
       // We got data underflow (assume one more buffer)
-      if (offset + length > buffer.length) {
+      if (length >= 0 && offset + length > buffer.length) {
         this.underflow = buffer.slice(offset);
         break;
       }
@@ -371,121 +406,72 @@ export class Seperator extends Transform {
   }
 }
 
-export interface MatchQuery {
-  command?: GitCommand;
-  content_type?: string;
-  method?: string;
-  path?: string;
-  service?: string;
-}
+export class ProxyError<T, U> extends Error {
+  public type: ProxyErrors;
+  public have: T;
+  public want: U;
 
-export interface MatchResult {
-  content_type?: string;
-  repository?: string;
-  service: ServiceType;
-  source?: GitBasePack;
-}
-
-const valid_services = new Map<ServiceType, [string, RegExp]>([
-  [ServiceType.INFO, ['application/x-git-%s-advertisement', /^\/?(.*?)\/info\/refs$/]],
-  [ServiceType.PULL, ['application/x-git-upload-pack-result', /^\/?(.*?)\/git-upload-pack$/]],
-  [ServiceType.PUSH, ['application/x-git-receive-pack-result', /^\/?(.*?)\/git-receive-pack$/]],
-]);
-
-export function match(input: MatchQuery = {}): MatchResult {
-  let repository: string;
-
-  if (input.method && input.path && input.command) {
-    for (let [service, [content_type, regex]] of valid_services) {
-      const results = regex.exec(input.path);
-
-      if (results) {
-        const has_input = service !== ServiceType.INFO;
-        const method = has_input ? 'GET' : 'POST';
-
-        repository = results[1];
-
-        // Invlaid method
-        if (method !== input.method) {
-          break;
-        }
-
-        const service_name = get_service(has_input
-        ? input.service
-        : input.path.slice(results[1].length + 1),
-        );
-
-        // Invalid service
-        if (!service_name) {
-          break;
-        }
-
-        // Invalid post request
-        if (has_input && input.content_type !== `application/x-git-${service_name}-request`) {
-          break;
-        }
-
-        if (!has_input) {
-          content_type = content_type.replace('%s', service_name);
-        }
-
-        const source = service_name === 'upload-pack'
-        // Upload pack
-        ? new UploadPack({
-            command: input.command,
-            has_input,
-          })
-        // Receive pack
-        : new ReceivePack({
-            command: input.command,
-            has_input,
-          });
-
-        return {
-          content_type,
-          repository,
-          service,
-          source,
-        };
-      }
-    }
+  constructor(data: IProxyErrorData<T, U>) {
+    super(data.message);
+    this.have = data.have;
+    this.type = data.type;
+    this.want = data.want;
   }
-
-  return {service: ServiceType.UNKNOWN, repository};
 }
 
-const empty_repo_error = Buffer.from('have any commits yet\n');
-
-export function exists(command: GitCommand, repository: string) {
-  return new Promise<boolean>(async(resolve) => {
-    let do_exists = true;
-
-    const {stderr} = await command(repository, 'log', ['-0']);
-
-    // If we got an error, ckech tailing
-    // bytes if the cause is an empty repo.
-    stderr.once('data', (chunk: Buffer) => {
-      do_exists = !(chunk.length >= 21 && !chunk.slice(-21).equals(empty_repo_error));
-    });
-    stderr.once('end', () => resolve(do_exists));
-  });
+export enum ProxyErrors {
+  InvalidMethod = 'InvalidMethod',
+  InvalidServiceName = 'InvalidServiceName',
+  InvalidContentType = 'InvalidContentType',
 }
 
-const valid_service_names = new Set<string>(['upload-pack', 'receive-pack']);
+export type Headers = FetchHeaders | string[] | {[index: string]: string};
 
-function get_service(input: string): string {
-  if (!(input && input.startsWith('git-'))) {
+export interface RequestMetadata {
+  want?: string[];
+  have?: string[];
+  ref?: {
+    name: string;
+    path: string;
+    type: string;
+  };
+  old_commit?: string;
+  new_commit?: string;
+  capabilities?: string[];
+}
+
+export interface IGitProxyCoreData {
+  has_input: boolean;
+  path: string;
+  repository: string;
+  service: ServiceType;
+  uri: string;
+}
+
+export interface IForwardedResult {
+  status: number;
+  headers: FetchHeaders;
+  repository: string;
+}
+
+export interface IProxyErrorData<T, U> {
+  message: string;
+  type: ProxyErrors;
+  want: U;
+  have: T;
+}
+
+function get_service_name(input: string): string {
+  if (!input || !input.startsWith('git-')) {
     return;
   }
 
-  const service = input.slice(4);
-
-  if (valid_service_names.has(service)) {
-    return service;
+  if (Reflect.has(service_headers, input)) {
+    return input;
   }
 }
 
-function pkt_length(buffer: Buffer, offset: number = 0) {
+function packet_length(buffer: Buffer, offset: number = 0) {
   try {
     return Number.parseInt(buffer.slice(offset, 4).toString('utf8'), 16);
   } catch (err) {

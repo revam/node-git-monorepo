@@ -10,7 +10,8 @@ npm install --save git-smart-proxy-core
 
 ## Usage
 
-See [source code](https://github.com/revam/koa-git-smart-proxy/blob/master/src/index.ts) for [koa-git-smart-proxy](https://www.npmjs.com/package/koa-git-smart-proxy) for how to bind this library.
+See [source code](https://github.com/revam/koa-git-smart-proxy/blob/master/src/index.ts) for
+[koa-git-smart-proxy](https://www.npmjs.com/package/koa-git-smart-proxy) for how to bind this library (for now).
 
 ## Typescript
 

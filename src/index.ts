@@ -411,7 +411,7 @@ export class GitProxyError<T, U> extends Error {
   public have: T;
   public want: U;
 
-  constructor(data: IProxyErrorData<T, U>) {
+  constructor(data: IGitProxyErrorData<T, U>) {
     super(data.message);
     this.have = data.have;
     this.type = data.type;
@@ -454,7 +454,7 @@ export interface IForwardedResult {
   repository: string;
 }
 
-export interface IProxyErrorData<T, U> {
+export interface IGitProxyErrorData<T, U> {
   message: string;
   type: ProxyErrors;
   want: U;

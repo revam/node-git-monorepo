@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Changed
 
-- Forward to a seperate git daemon instead of spawning a git sub-process (More proxy-like behaviour)
+- Forward to a seperate git server instead of spawning a git sub-process (More proxy-like behaviour)
 - Renamed exported interfaces.
 - Renamed exported function `exists` to `repositoryExists` and changed call signature.
 - Renamed exported function `match` to `getProxy`, and changed call signature and return value.
@@ -17,11 +17,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   and also moved some more properties into core.
 - Renamed `accept` to `forward` on core class to better describe what it (now) does.
 - `GitProxyCore.forward` and `repositoryExists` now throw on empty uri/repository.
-- `getProxy` now throw `ProxyError`s on invalid input.
+- `getProxy` now throw `GitProxyError`s on invalid input.
 
 ## Added
 
-- Export a new error type, `ProxyError`.
+- Export a new error type, `GitProxyError`.
 
 ## [1.0.1] - 2018-01-16
 

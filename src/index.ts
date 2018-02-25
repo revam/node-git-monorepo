@@ -76,7 +76,7 @@ export function getProxy(uri: string, method: string, path: string, service_name
 
       service_name = get_service_name(has_input ? service_name : path.slice(results[1].length + 1));
       if (!service_name) {
-        throw new ProxyError({
+        throw new GitProxyError({
           have: service_name,
           message: `Invalid service name '${service_name}'`,
           type: ProxyErrors.InvalidServiceName,
@@ -86,7 +86,7 @@ export function getProxy(uri: string, method: string, path: string, service_name
 
       const expected_method = has_input ? 'GET' : 'POST';
       if (method !== expected_method) {
-        throw new ProxyError({
+        throw new GitProxyError({
           have: method,
           message: `Invalid HTTP method used for service (${method} != ${expected_method})`,
           type: ProxyErrors.InvalidMethod,
@@ -96,7 +96,7 @@ export function getProxy(uri: string, method: string, path: string, service_name
 
       const expected_content_type = `application/x-git-${service_name}-request`;
       if (has_input && content_type !== expected_content_type) {
-        throw new ProxyError({
+        throw new GitProxyError({
           have: content_type,
           message: `Invalid content type used for service (${content_type} != ${expected_content_type})`,
           type: ProxyErrors.InvalidContentType,
@@ -406,7 +406,7 @@ export class Seperator extends Transform {
   }
 }
 
-export class ProxyError<T, U> extends Error {
+export class GitProxyError<T, U> extends Error {
   public type: ProxyErrors;
   public have: T;
   public want: U;

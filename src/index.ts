@@ -4,16 +4,17 @@ import { Duplex, Readable, Transform, Writable } from 'stream';
 import { promisify } from 'util';
 
 export enum ServiceType {
-  UNKNOWN,
-  INFO,
-  PULL,
-  PUSH,
+  Unknown = 0,
+  Advertise = 1,
+//  Archive = 2,
+  Pull = 3,
+  Push = 4,
 }
 
 export enum RequestStatus {
-  PENDING,
-  ACCEPTED,
-  REJECTED,
+  Pending,
+  Accepted,
+  Rejected,
 }
 
 export const SymbolSourceStream = Symbol('source stream');

@@ -1,3 +1,4 @@
+import { ChildProcess, spawn } from 'child_process';
 import * as encode from 'git-side-band-message';
 import fetch, { Headers as FetchHeaders } from 'node-fetch';
 import { Duplex, Readable, Transform, Writable } from 'stream';
@@ -17,9 +18,9 @@ export enum RequestStatus {
   Rejected,
 }
 
-export const SymbolSourceStream = Symbol('source stream');
+export const SymbolSource = Symbol('source stream');
 
-export const SymbolVerboseStream = Symbol('verbose stream');
+export const SymbolVerbose = Symbol('verbose stream');
 
 const service_headers = {
   'receive-pack': Buffer.from('001f# service=git-receive-pack\n0000'),
@@ -32,7 +33,7 @@ const parse_body = {
 };
 
 const handle_metadata = {
-  'git-receive-pack': (results: RegExpExecArray, metadata: RequestMetadata) => {
+  'git-receive-pack': (results: RegExpExecArray, metadata: IRequestMetadata) => {
     metadata.old_commit = results[1];
     metadata.new_commit = results[2];
     metadata.ref = {
@@ -42,7 +43,7 @@ const handle_metadata = {
     };
     metadata.capabilities = results[6] ? results[6].trim().split(' ') : [];
   },
-  'git-upload-pack': (results: RegExpExecArray, metadata: RequestMetadata) => {
+  'git-upload-pack': (results: RegExpExecArray, metadata: IRequestMetadata) => {
     const type = results[1];
 
     if (!(type in metadata)) {
@@ -54,67 +55,12 @@ const handle_metadata = {
 };
 
 const valid_services: Array<[ServiceType, RegExp]> = [
-  [ServiceType.INFO, /^\/?(.*?)(\/info\/refs)$/],
-  [ServiceType.PULL, /^\/?(.*?)(\/git-upload-pack)$/],
-  [ServiceType.PUSH, /^\/?(.*?)(\/git-receive-pack)$/],
+  [ServiceType.Advertise, /^\/?(.*?)\/(info\/refs\?service=git-(.*))$/],
+  [ServiceType.Pull, /^\/?(.*?)\/(git-(upload-pack))$/],
+  [ServiceType.Push, /^\/?(.*?)\/(git-(receive-pack))$/],
 ];
 
 const zero_buffer = Buffer.from('0000');
-
-/**
- * Matches method, path, service and content-type against available services.
- *
- * @throws {ProxyError}
- * @returns GitProxyCore instance
- */
-export function getProxy(uri: string, method: string, path: string, service_name: string,
-                         content_type: string): GitProxyCore {
-  for (const [service, regex] of valid_services) {
-    const results = regex.exec(path);
-
-    if (results) {
-      const has_input = service !== ServiceType.INFO;
-
-      service_name = get_service_name(has_input ? service_name : path.slice(results[1].length + 1));
-      if (!service_name) {
-        throw new GitProxyError({
-          have: service_name,
-          message: `Invalid service name '${service_name}'`,
-          type: ProxyErrors.InvalidServiceName,
-          want: new Set(Reflect.ownKeys(service_headers) as string[]),
-        });
-      }
-
-      const expected_method = has_input ? 'GET' : 'POST';
-      if (method !== expected_method) {
-        throw new GitProxyError({
-          have: method,
-          message: `Invalid HTTP method used for service (${method} != ${expected_method})`,
-          type: ProxyErrors.InvalidMethod,
-          want: expected_method,
-        });
-      }
-
-      const expected_content_type = `application/x-git-${service_name}-request`;
-      if (has_input && content_type !== expected_content_type) {
-        throw new GitProxyError({
-          have: content_type,
-          message: `Invalid content type used for service (${content_type} != ${expected_content_type})`,
-          type: ProxyErrors.InvalidContentType,
-          want: expected_content_type,
-        });
-      }
-
-      return new GitProxyCore({
-        has_input,
-        path: has_input ? results[2] : `${results[2]}?service=${service_name}`,
-        repository: results[1],
-        service,
-        uri,
-      });
-    }
-  }
-}
 
 /**
  * Checks if repository exists on origin.
@@ -144,36 +90,131 @@ export async function repositoryExists(origin: string, repository: string, heade
   return response.status === 200 || response.status === 304;
 }
 
-export class GitProxyCore extends Duplex {
-  public readonly metadata: RequestMetadata = {};
+export class DeployCore extends Duplex {
+  public readonly advertise: boolean;
+  public readonly metadata: IRequestMetadata;
+  public readonly origin: string;
+  public readonly remote: boolean;
   public readonly service: ServiceType;
   public repository: string;
-  public uri: string;
 
   private readonly path: string;
   // @ts-ignore suppress error [1166]
-  private [SymbolSourceStream]: SourceDuplex;
+  private [SymbolSource]: SourceDuplex;
   // @ts-ignore suppress error [1166]
-  private [SymbolVerboseStream]?: WritableBand;
+  private [SymbolVerbose]?: WritableBand;
   private __needs_flush = false;
   private __ready: number | false = false;
   private __next?: (err?: Error) => void;
   private __buffers?: Buffer[] = [];
 
-  constructor(data: IGitProxyCoreData) {
+  /**
+   * Matches method, url and content type against available services, and returns an instance if matched.
+   *
+   * @param method HTTP Method
+   * @param url HTTP Url w/wo query
+   * @param content_type HTTP Content-Type Header
+   * @param origin Origin
+   * @throws {TypeError}
+   * @throws {GitProxyError}
+   */
+  constructor(origin: string, method: string, url: string, content_type: string) {
     super();
 
-    if (data.uri.endsWith('/')) {
-      data.uri = data.uri.substring(0, -1);
+    if (typeof content_type !== 'string' || !content_type) {
+      throw new TypeError('content_type must not be empty');
     }
 
-    this.repository = data.repository;
-    this.service = data.service;
-    this.uri = data.uri;
-    this.path = data.path;
+    if (typeof url !== 'string' || !url) {
+      throw new TypeError('url must not be empty');
+    }
+
+    if (typeof method !== 'string' || !method) {
+      throw new TypeError('method must not be empty');
+    }
+
+    if (typeof origin !== 'string' || !origin) {
+      throw new TypeError('origin must not be empty');
+    }
+
+    if (origin.endsWith('/')) {
+      origin = origin.substring(0, -1);
+    }
+
+    Object.defineProperties(this, {
+      metadata: {
+        value: {},
+        writable: false,
+      },
+      origin: {
+        value: origin,
+        writable: false,
+      },
+      remote: {
+        value: /^https?:\/\//.test(origin),
+        writable: false,
+      },
+    });
+
+    for (const [service, regex] of valid_services) {
+      const results = regex.exec(url);
+      const advertise = /\?service=/.test(results[2]);
+
+      if (results) {
+        const service_name = results[3];
+        if (!check_service_name(service_name)) {
+          throw new GitProxyError({
+            errorCode: GitProxyErrors.InvalidServiceName,
+            have: service_name,
+            message: `Invalid service name '${service_name}'`,
+            want: new Set(Reflect.ownKeys(service_headers) as string[]),
+          });
+        }
+
+        const expected_method = this.advertise ? 'GET' : 'POST';
+        if (method !== expected_method) {
+          throw new GitProxyError({
+            errorCode: GitProxyErrors.InvalidMethod,
+            have: method,
+            message: `Invalid HTTP method used for service (${method} != ${expected_method})`,
+            want: expected_method,
+          });
+        }
+
+        // Only check content type for post requests
+        const expected_content_type = `application/x-git-${service_name}-request`;
+        if (!this.advertise && content_type !== expected_content_type) {
+          throw new GitProxyError({
+            errorCode: GitProxyErrors.InvalidContentType,
+            have: content_type,
+            message: `Invalid content type used for service (${content_type} != ${expected_content_type})`,
+            want: expected_content_type,
+          });
+        }
+
+        this.path = results[this.remote ? 2 : 3];
+        this.repository = results[1];
+        Object.defineProperties(this, {
+          advertise: {
+            value: advertise,
+            writable: false,
+          },
+          service: {
+            value: service,
+            writable: false,
+          },
+        });
+
+        break;
+      }
+    }
+
+    if (!this.service) {
+      throw new TypeError('Service unavailable');
+    }
 
     this.once('parsed', () => {
-      const source = this[SymbolSourceStream] = new Duplex() as SourceDuplex;
+      const source = this[SymbolSource] = new Duplex() as SourceDuplex;
 
       source._write = async(buffer: Buffer, encoding, next) => {
         if (buffer.length === 4 && buffer.equals(zero_buffer)) {
@@ -215,7 +256,7 @@ export class GitProxyCore extends Duplex {
 
       source.on('error', (err) => this.emit('error', err));
 
-      const verbose = this[SymbolVerboseStream];
+      const verbose = this[SymbolVerbose];
       const flush = async() => {
         if (verbose && verbose.writable) {
           // Stop writing
@@ -257,15 +298,15 @@ export class GitProxyCore extends Duplex {
       }
     });
 
-    if (!data.has_input) {
+    if (!this.advertise) {
       this.writable = false;
       setImmediate(() => this.emit('parsed'));
     }
   }
 
-  public verbose(...messages: Array<string | Buffer>) {
-    if (!this[SymbolVerboseStream]) {
-      const band = this[SymbolVerboseStream] = new Writable() as WritableBand;
+  public inform_client(...messages: Array<string | Buffer>) {
+    if (!this[SymbolVerbose]) {
+      const band = this[SymbolVerbose] = new Writable() as WritableBand;
 
       band._write = function write(buffer, encoding, next) {
         band.__buffer = buffer;
@@ -273,7 +314,7 @@ export class GitProxyCore extends Duplex {
       };
     }
 
-    const verbose = this[SymbolVerboseStream];
+    const verbose = this[SymbolVerbose];
 
     if (verbose.writable) {
       for (const message of messages) {
@@ -284,7 +325,7 @@ export class GitProxyCore extends Duplex {
 
   public process_input(): Promise<void> {
     return new Promise<void>((resolve) => {
-      if (this[SymbolSourceStream]) {
+      if (this[SymbolSource]) {
         return resolve();
       }
 
@@ -292,26 +333,76 @@ export class GitProxyCore extends Duplex {
     });
   }
 
-  public async forward(repository?: string, headers?: Headers): Promise<IForwardedResult> {
-    if (!repository) {
-      if (!this.repository) {
-        throw new TypeError('Repository cannot be empty');
-      }
-
-      repository = this.repository;
+  public async process_output(): Promise<IDeployCoreOutputResult>;
+  public async process_output(repository: string): Promise<IDeployCoreOutputResult>;
+  public async process_output(repository: string, headers: Headers): Promise<IDeployCoreOutputResult>;
+  public async process_output(repository?: string, headers?: Headers): Promise<IDeployCoreOutputResult> {
+    if (typeof repository === 'string') {
+      this.repository = repository;
     }
 
-    const url = `${this.uri}/${repository}/${this.path}`;
-    const source = this[SymbolSourceStream];
-    const response = await fetch(url, this.writable ? {method: 'POST', body: source, headers} : {headers});
+    if (!this.repository) {
+      throw new GitProxyError({
+        errorCode: ProxyErrors.RepositoryEmpty,
+        have: this.repository,
+        message: 'repository cannot be empty',
+        want: 'any non-empty string value',
+      });
+    }
 
-    response.body.pipe(new Seperator()).pipe(source);
+    if (this.remote) {
+      try {
+        const url = `${this.origin}/${this.repository}/${this.path}`;
+        const source = this[SymbolSource];
+        const response = await fetch(url, this.writable ? {method: 'POST', body: source, headers} : {headers});
 
-    return {status: response.status, headers: response.headers, repository};
+        response.body.pipe(new Seperator()).pipe(source);
+
+        return {status: response.status, headers: response.headers};
+      } catch (err) {
+        this.emit('error', err);
+
+        return {status: 500};
+      }
+    } else {
+      try {
+        const cwd = `${this.origin}/${this.repository}`;
+        const args = [this.path.slice(4), this.advertise ? '--advertise-refs' : '--stateless-rpc', '.'];
+        const child = spawn('git', args, {cwd});
+        const source = this[SymbolSource];
+
+        source.pipe(child.stdin);
+
+        const {exitCode, stdout, stderr} = await exec(child);
+
+        if (exitCode) {
+          const {status, errorCode} = map_error(stderr);
+
+          this.emit('error', new ServiceError({
+            errorCode,
+            message: 'Failed to execute git',
+          }));
+
+          return {status};
+        }
+
+        stdout.pipe(new Seperator()).pipe(source);
+
+        const out_headers = new FetchHeaders();
+
+        out_headers.set('Content-Type', this.advertise ? 'text/plain' : `x-git-${this.path}-result`);
+
+        return {status: 200, headers: out_headers};
+      } catch (err) {
+        this.emit('error', err);
+
+        return {status: 500};
+      }
+    }
   }
 
   public _read(size) {
-    const source = this[SymbolSourceStream];
+    const source = this[SymbolSource];
 
     if (source && source.__next) {
         this.__ready = false;
@@ -326,9 +417,9 @@ export class GitProxyCore extends Duplex {
   }
 
   public async _write(buffer: Buffer, enc, next) {
-    if (this[SymbolSourceStream]) {
+    if (this[SymbolSource]) {
       this.__next = next;
-      this[SymbolSourceStream].push(buffer);
+      this[SymbolSource].push(buffer);
 
       return;
     }
@@ -408,14 +499,14 @@ export class Seperator extends Transform {
 }
 
 export class GitProxyError<T, U> extends Error {
-  public type: ProxyErrors;
-  public have: T;
-  public want: U;
+  public errorCode: ProxyErrors;
+  public have?: T;
+  public want?: U;
 
   constructor(data: IGitProxyErrorData<T, U>) {
     super(data.message);
     this.have = data.have;
-    this.type = data.type;
+    this.errorCode = data.errorCode;
     this.want = data.want;
   }
 }
@@ -424,13 +515,14 @@ export enum ProxyErrors {
   InvalidMethod = 'InvalidMethod',
   InvalidServiceName = 'InvalidServiceName',
   InvalidContentType = 'InvalidContentType',
+  RepositoryEmpty = 'RepositoryEmpty',
 }
 
 export type Headers = FetchHeaders | string[] | {[index: string]: string};
 
-export interface RequestMetadata {
   want?: string[];
   have?: string[];
+export interface IRequestMetadata {
   ref?: {
     name: string;
     path: string;
@@ -441,35 +533,25 @@ export interface RequestMetadata {
   capabilities?: string[];
 }
 
-export interface IGitProxyCoreData {
-  has_input: boolean;
-  path: string;
-  repository: string;
-  service: ServiceType;
-  uri: string;
-}
 
-export interface IForwardedResult {
+export interface IDeployCoreOutputResult {
   status: number;
-  headers: FetchHeaders;
-  repository: string;
+  headers?: FetchHeaders;
 }
 
-export interface IGitProxyErrorData<T, U> {
+export interface IGitProxyErrorData<T = undefined, U = undefined> {
   message: string;
-  type: ProxyErrors;
-  want: U;
-  have: T;
+  errorCode: ProxyErrors;
+  want?: U;
+  have?: T;
 }
 
-function get_service_name(input: string): string {
+function check_service_name(input: string): boolean {
   if (!input || !input.startsWith('git-')) {
-    return;
+    return false;
   }
 
-  if (Reflect.has(service_headers, input)) {
-    return input;
-  }
+  return Reflect.has(service_headers, input);
 }
 
 function packet_length(buffer: Buffer, offset: number = 0) {
@@ -478,6 +560,56 @@ function packet_length(buffer: Buffer, offset: number = 0) {
   } catch (err) {
     return -1;
   }
+}
+
+function map_error(stderr: string): {status: number; errorCode: ServiceErrors} {
+  return {status: 500, errorCode: ProxyErrors.RepositoryEmpty};
+}
+
+// Taken and modified from
+// https://github.com/Microsoft/vscode/blob/2288e7cecd10bfaa491f6e04faf0f45ffa6adfc3/extensions/git/src/git.ts
+// Copyright (c) 2017-2018 Microsoft Corporation. MIT License
+async function exec(child: ChildProcess): Promise<IExecutionResult> {
+  const disposables: Array<() => void> = [];
+
+  const once = (ee: NodeJS.EventEmitter, name: string, fn: (...args: any[]) => void) => {
+    ee.once(name, fn);
+    disposables.push(() => ee.removeListener(name, fn));
+  };
+
+  const on = (ee: NodeJS.EventEmitter, name: string, fn: (...args: any[]) => void) => {
+    ee.on(name, fn);
+    disposables.push(() => ee.removeListener(name, fn));
+  };
+
+  const result = Promise.all([
+    new Promise<number>((resolve, reject) => {
+      once(child, 'error', reject);
+      once(child, 'exit', resolve);
+    }),
+    new Promise<Readable>((resolve) => {
+      once(child.stdout, 'close', () => resolve(child.stdout));
+    }),
+    new Promise<string>((resolve) => {
+      const buffers: Buffer[] = [];
+      on(child.stderr, 'data', (b: Buffer) => buffers.push(b));
+      once(child.stderr, 'close', () => resolve(Buffer.concat(buffers).toString('utf8')));
+    }),
+  ]);
+
+  try {
+    const [exitCode, stdout, stderr] = await result;
+
+    return { exitCode, stdout, stderr };
+  } finally {
+    disposables.forEach((d) => d());
+  }
+}
+
+interface IExecutionResult {
+  exitCode: number;
+  stdout: Readable;
+  stderr: string;
 }
 
 interface SourceDuplex extends Duplex {

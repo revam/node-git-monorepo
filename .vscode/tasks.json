@@ -4,6 +4,7 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "npm build",
       "type": "npm",
       "script": "build",
       "group": {
@@ -12,6 +13,7 @@
       }
     },
     {
+      "label": "npm test",
       "type": "npm",
       "script": "test",
       "group": {
@@ -20,6 +22,7 @@
       }
     },
     {
+      "label": "npm lint",
       "type": "npm",
       "script": "lint"
     }

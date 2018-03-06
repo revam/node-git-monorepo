@@ -13,7 +13,8 @@ npm install --save git-service-core
 This is a framework independent library for serving git over http(s). It exports an
 abstract service which can either be used standalone or extended to your needs.
 
-I am not a fan of event emitters used in a middleware-driven workflow, as it tends to break the pattern, so I made this library which, in my eyes, is better suited for such
+I am not a fan of event emitters used in a middleware-driven workflow, as it tends to
+break the pattern, so I made this library which, in my eyes, is better suited for such
 uses. It's a side-project, so expect irregular updates, if any, in case you want to use
 it. Below you can find some simular projects which helped me greatly when creating this
 package. Also a great help was the technical documentation for git, which can be found
@@ -21,7 +22,9 @@ package. Also a great help was the technical documentation for git, which can be
 
 ## Why start at version 2?
 
-Because this is actually a rewrite of a previous package. But since the main reason for the package changed, so did the name. If you're interested, the previous package can be found [here](.).
+Because this is actually a rewrite of another package. But since the main reason for the
+package changed, so did the name. If you're interested, the other package can be found
+[here](.).
 
 ## Features
 
@@ -33,7 +36,7 @@ Because this is actually a rewrite of a previous package. But since the main rea
   - [ ] forward to git (protocol) server (planned)
 - [x] support http smart protocol (git-upload-pack & git-receive-pack)
 - [x] can push sideband messages to client (inform client)
-- [ ] check access per repository per service
+- [ ] check access per service per repository (lookup in config)
 
 ## Framework spesific packages
 
@@ -113,12 +116,47 @@ server.listen(3000, () => console.log("server is listening on port 3000"));
 
 ## Public API
 
-**Note:** Any property marked with [read-only] can only be read, and not written to.
-Writing will throw an error.
+### Flags explained
 
-**Note:** Any method/function marked with [async] returns a promise resolving to the return value shown.
+In the api you will find that some arguments/properties/methods are marked with one or more flags. Below is a list explaining what does flags mean.
 
-### Service (class)
+#### Property modifiers
+
+- *[optional]* - Any argument/property marked with this flag can be omitted.
+
+- *[read-only]* - Any property marked with this flag can only be read, and not written to.
+
+#### Value modifiers
+
+- *[async]* - Any property/method marked with this flag has the value wrapped in a `Promise` resolving to it.
+
+- *[array]* - Any argument/property/method marked with this flag has the value shown wrapped in an `Array` instance containing only typeof value.
+
+- *[set]* - Any argument/property/method marked with this flag has the value shown wrapped in an `Set` instance containing only typeof value.
+
+### Index
+
+API grouped by relevance
+
+- `Service`
+  - [Service](.)
+  - [ServiceType](.)
+  - [RequestStatus](.)
+  - [IServiceAcceptData](.)
+  - [IServiceRejectData](.)
+  - [IRequestPullData](.)
+  - [IRequestPushData](.)
+- `IServiceDriver`
+  - [IServiceDriver](.)
+  - [createDriver](.)
+  - [createLocalDriver](.)
+  - [createHttpDriver](.)
+  - [isValidDriver](.)
+- `ServiceError`
+  - [ServiceError](.)
+  - [ServiceErrorCode](.)
+
+### **Service** (class)
 
 High-level git service.
 
@@ -132,7 +170,7 @@ arguments.
   Service driver to use. See [createDriver](.) for how to create a driver.
 - `method`
   \<[String](.)>
-  Upper-case HTTP method for request.
+  Upper-cased HTTP method for request.
 - `url_fragment`
   \<[String](.)>
   The full URL or tail of the url. Will extract repository from here if possible.
@@ -149,33 +187,35 @@ arguments.
 #### Properties
 
 - `awaitReady`
-  [read-only]
-  \<[Promise](.)>
+  *[read-only]*
+  *[async]*
+  \<[void](.)>
   Resolves when input is parsed.
 - `capebilities`
-  [read-only]
-  \<[Set](.)>
+  *[read-only]*
+  *[set]*
+  \<[String](.)>
   Capebilities client is able to use. Each capebility is expressed as a string.
-  Only used with [`ServiceType.Pull`](.) or [`ServiceType.Push`](.).
 - `driver`
-  [read-only]
+  *[read-only]*
   \<[IServiceDriver](.)>
   Service driver.
 - `type`
-  [read-only]
+  *[read-only]*
   \<[ServiceType](.)>
   Requested service. Defaults to [`ServiceType.Unknown`](.).
 - `metadata`
-  [read-only]
-  \<[IRequestMetadata](.)>
-  Request metadata.
-  Only used with [`ServiceType.Pull`](.) or [`ServiceType.Push`](.).
+  *[read-only]*
+  *[array]*
+  \<[IRequestPullData](.)
+  | [IRequestPushData](.)>
+  An array containing request pull/push data depending on `Service.type`.
 - `ready`
-  [read-only]
+  *[read-only]*
   \<[Boolean](.)>
   Indicates input is parsed.
 - `status`
-  [read-only]
+  *[read-only]*
   \<[RequestStatus](.)>
   Request status, incdicates if service was accepted, rejected or is still pending.
 - `repository`
@@ -185,45 +225,46 @@ arguments.
 #### Methods
 
 - `accept`
-  [async]
+  *[async]*
   \<[void](.)>
-  Accept service. Will only show results once.
+  Accept service. Result may be rejected if driver returns a status of `4xx` or `5xx`. Will only show results once.
 - `reject`
-  [async]
+  *[async]*
   \<[void](.)>
   Reject service. Will only show results once.
   - `status`
-    [optional]
+    *[optional]*
     \<[Number](.)>
     Status code to reject with. Either a `4xx` or `5xx` code.
   - `reason`
-    [optional]
+    *[optional]*
     \<[String](.)>
     Reason for rejection. Defaults to status message.
 - `empty`
-  [async]
+  *[async]*
   \<[Boolean](.)>
   Check if repository exists and is empty.
 - `exists`
-  [async]
+  *[async]*
   \<[Boolean](.)>
   Check if repository exists.
 - `access`
-  [async]
+  *[async]*
   \<[Boolean](.)>
   Check if current service is available for use. (Service may still be forced).
 - `init`
-  [async]
+  *[async]*
   \<[Boolean](.)>
   Initialises repository, but only if non-existant.
 - `inform`
-  [async]
+  *[async]*
   \<[void](.)>
   Informs client of messages.
   - `...messages`
-    \<[Array](.)>
-    Messages to show. Messages may either be [Strings](.)
-    or [Buffers](.).
+    *[array]*
+    \<[String](.)
+    | [Buffer](.)>
+    Messages to inform client.
 
 #### Signals
 
@@ -239,7 +280,7 @@ arguments.
   \<[Signal](https://www.npmjs.com/package/micro-signals#signal)>
   Dispatched when anything internal goes wrong with thrown error.
 
-### ServiceError (class)
+### **ServiceError** (class)
 
 Dispatched on service if any abnormaltis araise. Extends inbuilt [Error](.).
 
@@ -249,7 +290,7 @@ Dispatched on service if any abnormaltis araise. Extends inbuilt [Error](.).
   \<[ServiceErrorCode](.)>
   Error code
 
-### ServiceType (enum)
+### **ServiceType** (enum)
 
 #### Values
 
@@ -258,79 +299,137 @@ Dispatched on service if any abnormaltis araise. Extends inbuilt [Error](.).
 - `Pull` = 2
 - `Push` = 3
 
-### RequestStatus (enum)
+### **RequestStatus** (enum)
 
 #### Values
 
 - `Pending` = 0
 - `Accepted` = 1
 - `Rejected` = 2
+- `AcceptedButRejected` = 3
 
-### ServiceErrorCode (string enum)
+### **ServiceErrorCode** (enum)
+
+#### Values
 
 - `InvalidContentType`
 - `InvalidMethod`
 - `InvalidServiceName`
 - `RepositoryCannotBeEmpty`
+- `UnknownError`
 
-### RequestMetadata (interface)
+### **IRequestPullData** (interface)
+
+Contains data of what client wants from this pull request.
 
 #### Properties
 
-### IServiceDriver (interface)
+- `commits`
+  *[array]*
+  \<[String](.)>
+  Commit. In plural form for compatibility with IRequestPushData.
+- `type`
+  \<`"have"`
+  | `"want"`>
+  Pull type, can be either have or want.
+
+### **IRequestPushData** (interface)
+
+Contains data of what client want to do in this push request.
+
+#### Properties
+
+- `commits`
+  *[array]*
+  \<[String](.)>
+  Commits. In order of old commit, new commit.
+- `type`
+  \<`"create"`
+  | `"delete"`
+  | `"update"`>
+  Push type, can be one of create, delete or update.
+- `refname`
+  \<[String](.)>
+  Reference to work with.
+
+### **IServiceDriver** (interface)
 
 Abstract driver to work with git.
 
 #### Properties
 
 - `origin`
-  [read-only]
+  *[read-only]*
   \<[String](.)>
   Either an URL or absolute path leading to repositories.
 
 #### Methods
 
 - `access`
-  [async]
+  *[async]*
   \<[Boolean](.)>
-  Checks access to service indicated by hint for repository at origin. Returned promise resolves to a boolean.
+  Checks access to service indicated by hint for repository at origin.
   - `repository`
     \<[String](.)>
     Repository to check.
   - `hint`
     \<[String](.)>
-    Hint to service to check.
+    Hint indicating service to check.
 - `empty`
-  [async]
+  *[async]*
   \<[Promise](.)>
-  Check if repository exists and is empty at origin. Returned promise resolves to a boolean.
+  Check if repository exists and is empty at origin.
   - `repository`
     \<[String](.)>
     Repository to check.
-  [async]
+  *[async]*
 - `exists`
-  [async]
+  *[async]*
   \<[Promise](.)>
-  Check if repository exists at origin. Returned promise resolves to a boolean.
+  Check if repository exists at origin.
   - `repository`
     \<[String](.)>
     Repository to check.
+- `get`
+  *[async]*
+  \<[IServiceAcceptData](.)>
+  Process service indicated by hint, and return data from git.
+  - `repository`
+    \<[String](.)>
+    Repository to work with.
+  - `hint`
+    \<[String](.)>
+    Hint indicating service to check.
+  - `headers`
+    \<[Headers](.)>
+    Http headers to append if sent over http(s).
+  - `input`
+    *[optional]*
+    \<[Readable](.)>
+    Input (processed request body)
+  - `messages`
+    *[optional]*
+    *[array]*
+    \<[Buffer](.)>
+    Buffered messages to client.
 - `hint`
   \<[String](.)>
   Get hint used by driver to determine service. Return value must be chosen hint.
   - `...hints`
-    \<[Array](.)>
+    *[array]*
+    \<[String](.)>
     An array contaings hints to choose from. Currently only 2 hints available.
-- `get`
-  [async]
-  \<[Promise](.)>
 - `init`
-  [async]
-  \<[Promise](.)>
+  *[async]*
+  \<[Boolean](.)>
+  Initialise a bare repository at origin, but only if repository does not exist.
+  - `repository`
+    \<[String](.)>
+    Repository to init.
 
-### IServiceAcceptData (interface)
+### **IServiceAcceptData** (interface)
 
-Data needed to fufill request.
+Contains data needed to fufill request.
 
 #### Properties
 
@@ -344,9 +443,9 @@ Data needed to fufill request.
   \<[Readable](.)>
   Body for response.
 
-### IServiceRejectData (interface)
+### **IServiceRejectData** (interface)
 
-Data needed to reject request.
+Contains data needed to reject request.
 
 #### Properties
 
@@ -357,10 +456,11 @@ Data needed to reject request.
   \<[Headers](.)>
   Headers for response.
 - `reason`
+  *[optional]*
   \<[String](.)>
   Optional reason for rejection.
 
-### createDriver (function)
+### **createDriver** (function)
 
 Creates and returns a driver fit for origin. Also see [IServiceDriver](.).
 
@@ -370,7 +470,7 @@ Creates and returns a driver fit for origin. Also see [IServiceDriver](.).
   \<[String](.)>
   Either an url or a path.
 
-### createLocalDriver (function)
+### **createLocalDriver** (function)
 
 Creates a service driver for the filesystem.
 
@@ -381,7 +481,7 @@ Creates a service driver for the filesystem.
   A relative or absolute path. Path will be resolved from current working directory if
   relative.
 
-### createHttpDriver (function)
+### **createHttpDriver** (function)
 
 Creates a service driver forwarding to a http(s) server.
 

@@ -1,12 +1,16 @@
 // from packages
 import { spawn } from 'child_process';
-import { appendFile, mkdir } from "fs";
+import * as fs from "fs";
 import { join } from 'path';
 import { promisify } from 'util';
 
+const appendFile = promisify(fs.appendFile);
+const exists = promisify(fs.exists);
+const mkdir = promisify(fs.mkdir);
+
 export async function create_repo(path: string) {
   // Create directory
-  await promisify(mkdir)(path);
+  await mkdir(path);
 
   // Init normal repo
   await new Promise((done, reject) => {
@@ -21,7 +25,7 @@ export async function create_repo(path: string) {
   });
 
   // Create an empty README.md
-  await promisify(appendFile)(join(path, 'README.md'), '');
+  await appendFile(join(path, 'README.md'), '');
 
   // Add files
   await new Promise((done, reject) => {
@@ -50,7 +54,7 @@ export async function create_repo(path: string) {
 
 export async function create_bare_repo(path: string) {
   // Create directory
-  await promisify(mkdir)(path);
+  await mkdir(path);
 
   // Init bare repo
   await new Promise((done, reject) => {
@@ -65,7 +69,6 @@ export async function create_bare_repo(path: string) {
   });
 }
 
-export async function create_non_repo(path: string) {
-  // Create directory
-  await promisify(mkdir)(path);
+export async function sync_repos(repo1: string, repo2: string) {
+  return;
 }

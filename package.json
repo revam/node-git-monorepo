@@ -40,6 +40,8 @@
     "@types/node-fetch": "^1.6.7",
     "@types/through": "0.0.29",
     "del-cli": "^1.1.0",
+    "dotenv": "^5.0.1",
+    "http-status": "^1.0.1",
     "into-stream": "^3.1.0",
     "jest": "^22.0.4",
     "tempy": "^0.2.1",
@@ -50,6 +52,7 @@
   },
   "dependencies": {
     "git-side-band-message": "0.0.3",
+    "micro-signals": "^2.0.0",
     "node-fetch": "^2.0.0"
   },
   "jest": {

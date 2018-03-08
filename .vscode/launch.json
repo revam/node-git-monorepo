@@ -1,0 +1,16 @@
+{
+  "configurations": [
+
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Launch Test Server",
+      "program": "${workspaceFolder}/test/test-server.js",
+      "preLaunchTask": "npm build",
+      "envFile": "${workspaceFolder}/.env",
+      "runtimeArgs": [
+        "--require dotenv/config"
+      ]
+    }
+  ]
+}

@@ -46,8 +46,7 @@ export class ParseInput extends Transform {
           break;
         }
 
-        const result_buffer = buffer.slice(offset, length >= 0 ? offset + length : undefined);
-        const message = result_buffer.toString('utf8');
+        const message = buffer.toString('utf8', offset, offset + length);
         const results = this.regex.exec(message);
         if (results) {
           this.parse(results, this[SymbolSource]);
@@ -100,7 +99,7 @@ export class FuseOutput extends Transform {
 
 const MetadataMap = new Map<ServiceType, [RegExp, (results: RegExpExecArray, service: Service) => any]>([
   [ServiceType.Push, [
-    /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)(?:\0( [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/,
+    /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/,
     (results: RegExpExecArray, service: Service) => {
       let type: 'create' | 'delete' | 'update';
       if ('0000000000000000000000000000000000000000' === results[1]) {
@@ -129,7 +128,7 @@ const MetadataMap = new Map<ServiceType, [RegExp, (results: RegExpExecArray, ser
     },
   ]],
   [ServiceType.Pull, [
-    /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})(?:\0( [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/,
+    /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/,
     (results: RegExpExecArray, service: Service) => {
       const metadata: IRequestPullData = {
         commits: [results[2]],

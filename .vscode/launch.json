@@ -8,9 +8,6 @@
       "program": "${workspaceFolder}/test/test-server.js",
       "preLaunchTask": "npm build",
       "envFile": "${workspaceFolder}/.env",
-      "runtimeArgs": [
-        "--require dotenv/config"
-      ]
     }
   ]
 }

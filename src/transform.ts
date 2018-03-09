@@ -53,11 +53,11 @@ export class ParseInput extends Transform {
           this.parse(results, this[SymbolSource]);
         }
 
-        offset += length;
-        length = packet_length(buffer, offset);
-
         // Wait till next tick so we can do other stuff inbetween.
         await new Promise<void>((resolve) => process.nextTick(resolve));
+
+        offset += length;
+        length = packet_length(buffer, offset);
       }
 
       if (length <= 0) {

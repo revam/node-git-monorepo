@@ -23,7 +23,7 @@ export class Service {
   /**
    * Requested capebilities client support/want.
    */
-  public readonly capabilities: Map<string, true | string>;
+  public readonly capabilities: Map<string, string>;
   /**
    * Low-level service driver
    */

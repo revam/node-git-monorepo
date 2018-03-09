@@ -120,19 +120,9 @@ server.listen(3000, () => console.log("server is listening on port 3000"));
 
 In the api you will find that some arguments/properties/methods are marked with one or more flags. Below is a list explaining what does flags mean.
 
-#### Property modifiers
-
 - *[optional]* - Any argument/property marked with this flag can be omitted.
 
 - *[read-only]* - Any property marked with this flag can only be read, and not written to.
-
-#### Value modifiers
-
-- *[async]* - Any property/method marked with this flag has the value wrapped in a `Promise` resolving to it.
-
-- *[array]* - Any argument/property/method marked with this flag has the value shown wrapped in an `Array` instance containing only typeof value.
-
-- *[set]* - Any argument/property/method marked with this flag has the value shown wrapped in an `Set` instance containing only typeof value.
 
 ### Index
 
@@ -188,14 +178,13 @@ arguments.
 
 - `awaitReady`
   *[read-only]*
-  *[async]*
-  \<[void](.)>
+  \<[Promise](.)\<[void](.)>>
   Resolves when input is parsed.
 - `capebilities`
   *[read-only]*
-  *[set]*
-  \<[String](.)>
-  Capebilities client is able to use. Each capebility is expressed as a string.
+  \<[Map](.)\<[String](.), `true`
+  | [String](.)>>
+  Capebilities of client.
 - `driver`
   *[read-only]*
   \<[IServiceDriver](.)>
@@ -206,9 +195,8 @@ arguments.
   Requested service. Defaults to [`ServiceType.Unknown`](.).
 - `metadata`
   *[read-only]*
-  *[array]*
-  \<[IRequestPullData](.)
-  | [IRequestPushData](.)>
+  \<[Array](.)\<[IRequestPullData](.)
+  | [IRequestPushData](.)>>
   An array containing request pull/push data depending on `Service.type`.
 - `ready`
   *[read-only]*
@@ -225,12 +213,10 @@ arguments.
 #### Methods
 
 - `accept`
-  *[async]*
-  \<[void](.)>
+  \<[Promise](.)\<[void](.)>>
   Accept service. Result may be rejected if driver returns a status of `4xx` or `5xx`. Will only show results once.
 - `reject`
-  *[async]*
-  \<[void](.)>
+  \<[Promise](.)\<[void](.)>>
   Reject service. Will only show results once.
   - `status`
     *[optional]*
@@ -241,28 +227,22 @@ arguments.
     \<[String](.)>
     Reason for rejection. Defaults to status message.
 - `empty`
-  *[async]*
-  \<[Boolean](.)>
+  \<[Promise](.)\<[Boolean](.)>>
   Check if repository exists and is empty.
 - `exists`
-  *[async]*
-  \<[Boolean](.)>
+  \<[Promise](.)\<[Boolean](.)>>
   Check if repository exists.
 - `access`
-  *[async]*
-  \<[Boolean](.)>
+  \<[Promise](.)\<[Boolean](.)>>
   Check if current service is available for use. (Service may still be forced).
 - `init`
-  *[async]*
-  \<[Boolean](.)>
+  \<[Promise](.)\<[Boolean](.)>>
   Initialises repository, but only if non-existant.
 - `inform`
-  *[async]*
-  \<[void](.)>
+  \<[Promise](.)\<[void](.)>>
   Informs client of messages.
   - `...messages`
-    *[array]*
-    \<[String](.)
+  \<[Array](.)\<[String](.)>
     | [Buffer](.)>
     Messages to inform client.
 
@@ -325,8 +305,7 @@ Contains data of what client wants from this pull request.
 #### Properties
 
 - `commits`
-  *[array]*
-  \<[String](.)>
+  \<[Array](.)\<[String](.)>>
   Commit. In plural form for compatibility with IRequestPushData.
 - `type`
   \<`"have"`
@@ -340,8 +319,7 @@ Contains data of what client want to do in this push request.
 #### Properties
 
 - `commits`
-  *[array]*
-  \<[String](.)>
+  \<[Array](.)\<[String](.)>>
   Commits. In order of old commit, new commit.
 - `type`
   \<`"create"`
@@ -366,8 +344,7 @@ Abstract driver to work with git.
 #### Methods
 
 - `access`
-  *[async]*
-  \<[Boolean](.)>
+  \<[Promise](.)\<[Boolean](.)>>
   Checks access to service indicated by hint for repository at origin.
   - `repository`
     \<[String](.)>
@@ -376,23 +353,19 @@ Abstract driver to work with git.
     \<[String](.)>
     Hint indicating service to check.
 - `empty`
-  *[async]*
-  \<[Promise](.)>
+  \<[Promise](.)\<[Promise](.)>>
   Check if repository exists and is empty at origin.
   - `repository`
     \<[String](.)>
     Repository to check.
-  *[async]*
 - `exists`
-  *[async]*
-  \<[Promise](.)>
+  \<[Promise](.)\<[Promise](.)>>
   Check if repository exists at origin.
   - `repository`
     \<[String](.)>
     Repository to check.
 - `get`
-  *[async]*
-  \<[IServiceAcceptData](.)>
+  \<[Promise](.)\<[IServiceAcceptData](.)>>
   Process service indicated by hint, and return data from git.
   - `repository`
     \<[String](.)>
@@ -409,19 +382,16 @@ Abstract driver to work with git.
     Input (processed request body)
   - `messages`
     *[optional]*
-    *[array]*
-    \<[Buffer](.)>
+  \<[Array](.)\<[Buffer](.)>>
     Buffered messages to client.
 - `hint`
   \<[String](.)>
   Get hint used by driver to determine service. Return value must be chosen hint.
   - `...hints`
-    *[array]*
-    \<[String](.)>
+  \<[Array](.)\<[String](.)>>
     An array contaings hints to choose from. Currently only 2 hints available.
 - `init`
-  *[async]*
-  \<[Boolean](.)>
+  \<[Promise](.)\<[Boolean](.)>>
   Initialise a bare repository at origin, but only if repository does not exist.
   - `repository`
     \<[String](.)>

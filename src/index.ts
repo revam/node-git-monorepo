@@ -23,7 +23,7 @@ export class Service {
   /**
    * Requested capebilities client support/want.
    */
-  public readonly capabilities: Set<string>;
+  public readonly capabilities: Map<string, true | string>;
   /**
    * Low-level service driver
    */
@@ -113,7 +113,7 @@ export class Service {
     this.__ready = false;
     Object.defineProperties(this, {
       capabilities: {
-        value: new Set(),
+        value: new Map(),
         writable: false,
       },
       driver: {

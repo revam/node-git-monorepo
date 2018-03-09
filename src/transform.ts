@@ -118,7 +118,12 @@ const MetadataMap = new Map<ServiceType, [RegExp, (results: RegExpExecArray, ser
       service.metadata.push(metadata);
       if (results[4]) {
         for (const c of results[4].trim().split(' ')) {
-          service.capabilities.add(c);
+          if (/=/.test(c)) {
+            const [k, v] = c.split('=');
+            service.capabilities.set(k, v);
+          } else {
+            service.capabilities.set(c, true);
+          }
         }
       }
     },
@@ -133,7 +138,12 @@ const MetadataMap = new Map<ServiceType, [RegExp, (results: RegExpExecArray, ser
       service.metadata.push(metadata);
       if (results[3]) {
         for (const c of results[3].trim().split(' ')) {
-          service.capabilities.add(c);
+          if (/=/.test(c)) {
+            const [k, v] = c.split('=');
+            service.capabilities.set(k, v);
+          } else {
+            service.capabilities.set(c, true);
+          }
         }
       }
     },

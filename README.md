@@ -138,9 +138,11 @@ API grouped by relevance
   - [IRequestPushData](.)
 - `IServiceDriver`
   - [IServiceDriver](.)
+  - [IServiceDriverCache](.)
   - [createDriver](.)
   - [createLocalDriver](.)
   - [createHttpDriver](.)
+  - [createDriverCache](.)
   - [isValidDriver](.)
 - `ServiceError`
   - [ServiceError](.)
@@ -336,6 +338,11 @@ Abstract driver to work with git.
 
 #### Properties
 
+- `cache`
+  *[read-only]*
+  *[optional]*
+  \<[IServiceDriverCache](.)>
+  Cached responses. Optional for driver to have.
 - `origin`
   *[read-only]*
   \<[String](.)>
@@ -397,6 +404,67 @@ Abstract driver to work with git.
     \<[String](.)>
     Repository to init.
 
+### **IServiceDriverCache** (interface)
+
+Service driver cache interface. Stores responses from IServiceDriver.
+
+#### Methods
+
+- `clear`
+  \<[void](.)>
+  Clears all cached data.
+- `delete`
+  \<[Boolean](.)>
+  Deletes an entry from cache.
+  - `command`
+    \<[String](.)>
+    Command
+  - `origin`
+    \<[String](.)>
+    Origin
+  - `repository`
+    \<[String](.)>
+    Repository
+- `get`
+  \<`T`>
+  Gets an entry of type `T` from cache.
+  - `command`
+    \<[String](.)>
+    Command
+  - `origin`
+    \<[String](.)>
+    Origin
+  - `repository`
+    \<[String](.)>
+    Repository
+- `has`
+  \<[Boolean](.)>
+  Checks if an entry exists in cache.
+  - `command`
+    \<[String](.)>
+    Command
+  - `origin`
+    \<[String](.)>
+    Origin
+  - `repository`
+    \<[String](.)>
+    Repository
+- `set`
+  \<[void](.)>
+  Sets value for entry in cache.
+  - `command`
+    \<[String](.)>
+    Command
+  - `origin`
+    \<[String](.)>
+    Origin
+  - `repository`
+    \<[String](.)>
+    Repository
+  - `value`
+    \<`T`>
+    Value of type `T`.
+
 ### **IServiceAcceptData** (interface)
 
 Contains data needed to fufill request.
@@ -440,6 +508,11 @@ Creates and returns a driver fit for origin. Also see [IServiceDriver](.).
   \<[String](.)>
   Either an url or a path.
 
+- `cache`
+  *[optional]*
+  \<[IServiceDriverCache](.)>
+  Cache to use with driver.
+
 ### **createLocalDriver** (function)
 
 Creates a service driver for the filesystem.
@@ -451,6 +524,11 @@ Creates a service driver for the filesystem.
   A relative or absolute path. Path will be resolved from current working directory if
   relative.
 
+- `cache`
+  *[optional]*
+  \<[IServiceDriverCache](.)>
+  Cache to use with driver.
+
 ### **createHttpDriver** (function)
 
 Creates a service driver forwarding to a http(s) server.
@@ -460,6 +538,15 @@ Creates a service driver forwarding to a http(s) server.
 - `origin`
   \<[String](.)>
   An url using the http(s) protocol.
+
+- `cache`
+  *[optional]*
+  \<[IServiceDriverCache](.)>
+  Cache to use with driver.
+
+### **createDriverCache** (function)
+
+Creates an cache for one or more service drivers.
 
 ## Typescript
 

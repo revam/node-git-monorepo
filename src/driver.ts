@@ -2,7 +2,7 @@ import { ChildProcess, spawn } from "child_process";
 import fetch, { Headers } from "node-fetch";
 import { join, normalize, resolve } from "path";
 import { Readable } from "stream";
-import { IServiceAcceptData, IServiceDriver, ServiceError } from ".";
+import { IServiceAcceptData, IServiceDriver, IServiceDriverCache, ServiceError } from ".";
 import { ServiceErrorCode, SymbolSource } from "./constants";
 import { ParseOutput } from "./transform";
 
@@ -16,24 +16,25 @@ export function isDriver(driver: any): boolean {
          'get' in driver && typeof driver.get === 'function';
 }
 
-export function createDriver(origin: string = './repos'): IServiceDriver {
+export function createDriver(origin: string = './repos', cache?: IServiceDriverCache): IServiceDriver {
   if (/https?:\/\//.test(origin)) {
-    return createHttpDriver(origin);
+    return createHttpDriver(origin, cache);
   } else {
     if (/file:\/\//.test(origin)) {
       origin = origin.slice(7);
     }
     origin = resolve(normalize(origin));
-    return createLocalDriver(origin);
+    return createLocalDriver(origin, cache);
   }
 }
 
-export function createLocalDriver(origin: string): IServiceDriver {
+export function createLocalDriver(origin: string, cache?: IServiceDriverCache): IServiceDriver {
   return {
+    get cache() { return cache; },
     get origin() { return origin; },
     access(repository, hint) { return accessLocal(origin, repository, hint); },
-    empty(repository) { return empty(origin, repository); },
-    exists(repository) { return exists(origin, repository); },
+    empty(repository) { return empty(cache, origin, repository); },
+    exists(repository) { return exists(cache, origin, repository); },
     get(repository, hint, headers, input?, messages?) {
       return getLocal(origin, repository, hint, input, messages);
     },
@@ -42,17 +43,29 @@ export function createLocalDriver(origin: string): IServiceDriver {
   };
 }
 
-export function createHttpDriver(origin: string): IServiceDriver {
+export function createHttpDriver(origin: string, cache?: IServiceDriverCache): IServiceDriver {
   return {
+    get cache() { return cache; },
     get origin() { return origin; },
     access(repository, hint) { return accessHttp(origin, repository, hint); },
-    empty(repository) { return empty(origin, repository); },
-    exists(repository) { return exists(origin, repository); },
+    empty(repository) { return empty(cache, origin, repository); },
+    exists(repository) { return exists(cache, origin, repository); },
     get(repository, hint, headers, input?, messages?) {
       return getHttp(origin, repository, hint, headers, input, messages);
     },
     hint(...hints) { return hintHttp(...hints); },
     init(repository) { return Promise.resolve(false); },
+  };
+}
+
+export function createDriverCache(): IServiceDriverCache {
+  const map = new Map<string, any>();
+  return {
+    clear() { return map.clear(); },
+    delete(...args) { return map.delete(args.join(';')); },
+    has(...args) { return map.has(args.join(';')); },
+    get(...args) { return map.get(args.join(';')); },
+    set(c, o, r, v) { return map.set(`${c};${o};${r}`, v); },
   };
 }
 
@@ -64,14 +77,28 @@ function hintHttp(...hints: string[]): string {
   return hints[0];
 }
 
-async function exists(origin: string, repository: string): Promise<boolean> {
-  const exitCode = await lsRemote(origin, repository);
+async function exists(cache: IServiceDriverCache, origin: string, repository: string): Promise<boolean> {
+  if (cache && cache.has('exists', origin, repository)) {
+    return cache.get('exists', origin, repository);
+  }
 
-  return exitCode === 0;
+  const exitCode = await lsRemote(origin, repository);
+  if (cache) {
+    cache.set('exists', origin, repository, exitCode);
+  }
+
+  return exitCode === 0 || exitCode === 2;
 }
 
-async function empty(origin: string, repository: string): Promise<boolean> {
+async function empty(cache: IServiceDriverCache, origin: string, repository: string): Promise<boolean> {
+  if (cache && cache.has('exists', origin, repository)) {
+    return cache.get('exists', origin, repository);
+  }
+
   const exitCode = await lsRemote(origin, repository);
+  if (cache) {
+    cache.set('exists', origin, repository, exitCode);
+  }
 
   return exitCode === 2;
 }

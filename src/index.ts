@@ -10,7 +10,7 @@ import { ParseInput } from './transform';
 
 export { Headers } from 'node-fetch';
 export { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from "./constants";
-export { createDriver, createLocalDriver, createHttpDriver, isDriver } from './driver';
+export { createDriver, createLocalDriver, createHttpDriver, createDriverCache, isDriver } from './driver';
 
 /**
  * High-level git service.
@@ -395,6 +395,10 @@ export interface IRequestPushData {
  */
 export interface IServiceDriver {
   /**
+   * Driver cached responses. Optional.
+   */
+  readonly cache?: IServiceDriverCache;
+  /**
    * Either an URL or absolute path leading to repositories.
    */
   readonly origin: string;
@@ -435,6 +439,32 @@ export interface IServiceDriver {
    * @param repository Repository to init
    */
   init(repository: string): Promise<boolean>;
+}
+
+/**
+ * Service driver cache interface. Stores responses from IServiceDriver.
+ */
+export interface IServiceDriverCache {
+  /**
+   * Clears all cached data.
+   */
+  clear();
+  /**
+   * Deletes an entry from cache.
+   */
+  delete(command: string, origin: string, repository: string): boolean;
+  /**
+   * Gets an entry from cache.
+   */
+  get<T>(command: string, origin: string, repository: string): T;
+  /**
+   * Checks if an entry exists in cache.
+   */
+  has(command: string, origin: string, repository: string): boolean;
+  /**
+   * Sets value for entry in cache.
+   */
+  set<T>(command: string, origin: string, repository: string, value: T);
 }
 
 /**

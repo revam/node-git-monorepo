@@ -43,7 +43,7 @@ export class Service {
   /**
    *
    */
-  public readonly onError: Signal<Error>;
+  public readonly onError: Signal<any>;
   /**
    * True if input is parsed.
    */

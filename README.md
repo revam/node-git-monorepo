@@ -1,11 +1,11 @@
-# git-service-core
+# git-service
 
 Serve git over http(s).
 
 ## Install
 
 ```sh
-npm install --save git-service-core
+npm install --save git-service
 ```
 
 ## What is this?
@@ -58,7 +58,7 @@ package changed, so did the name. If you're interested, the other package can be
 ```js
 import http from "http";
 import HttpStatus from "http-status";
-import { Service, ServiceType, createDriver } from "git-service-core";
+import { Service, ServiceType, createDriver } from "git-service";
 
 const { ORIGIN_ENV: origin = "/data/repos" } = process.env;
 const driver = createDriver(origin);

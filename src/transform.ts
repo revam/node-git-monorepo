@@ -1,4 +1,4 @@
-import { Transform, Writable } from "stream";
+import { Readable, Transform } from "stream";
 import { IRequestPullData, IRequestPushData, Service } from ".";
 import { ServiceType, SymbolSource } from "./constants";
 
@@ -78,22 +78,20 @@ export class ParseInput extends Transform {
   }
 }
 
-export class FuseOutput extends Transform {
+export class ParseOutput extends Readable {
   public byteLength: number;
-  constructor(messages?: Buffer[]) {
+  private [SymbolSource]: IterableIterator<Buffer>;
+  constructor(buffers: Buffer[], index: number = 0) {
     super();
-    this.byteLength = 0;
-    if (messages && messages.length) {
-      for (const message of messages) {
-        this.write(message);
-      }
-    }
+    this.byteLength = buffers.reduce((p, c) => p + c.length, 0);
+    this[SymbolSource] = createPacketIterator(index, ...buffers);
   }
 
-  public _transform(buffer: Buffer, encoding: string, next: (err?: Error) => void) {
-    this.byteLength += buffer.length;
-    this.push(buffer);
-    next();
+  public _read() {
+    const {done, value} = this[SymbolSource].next();
+    if (!done) {
+      this.push(value);
+    }
   }
 }
 
@@ -150,7 +148,7 @@ const MetadataMap = new Map<ServiceType, [RegExp, (results: RegExpExecArray, ser
 ]);
 
 /**
- * Parse packet length at offset, but reurn
+ * Parse packet length at offset
  * @param buffer Packet buffer
  * @param offset Start offset
  */
@@ -160,4 +158,34 @@ function packet_length(buffer: Buffer, offset: number = 0) {
   } catch (err) {
     return -1;
   }
+}
+
+/**
+ * Creates an iterator yielding packets from buffers.
+ * @param index Main buffer index
+ * @param buffers Buffers to read
+ */
+function *createPacketIterator(index: number, ...buffers: Buffer[]): IterableIterator<Buffer> {
+  let counter = 0;
+  for (const buffer of buffers) {
+    let offset = 0;
+    let length = packet_length(buffer);
+    while (offset < buffer.length) {
+      yield buffer.slice(offset, offset + length);
+
+      offset += length;
+      length = packet_length(buffer, offset);
+      if (length === 0) {
+        if (index === counter) {
+          break;
+        }
+
+        length = 4;
+      }
+    }
+
+    counter++;
+  }
+  yield Buffer.from('0000');
+  yield null;
 }

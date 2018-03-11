@@ -1,10 +1,10 @@
 import { ChildProcess, spawn } from "child_process";
 import fetch, { Headers } from "node-fetch";
 import { join, normalize, resolve } from "path";
-import { PassThrough, Readable, Transform, Writable } from "stream";
+import { Readable } from "stream";
 import { IServiceAcceptData, IServiceDriver, ServiceError } from ".";
 import { ServiceErrorCode, SymbolSource } from "./constants";
-import { FuseOutput } from "./transform";
+import { ParseOutput } from "./transform";
 
 export function isDriver(driver: any): boolean {
   return 'origin' in driver && typeof driver.origin === 'string' &&
@@ -105,9 +105,8 @@ async function getLocal(origin: string, repository: string, command: string,
                         input?: Readable, messages?: Buffer[]): Promise<IServiceAcceptData> {
   const headers = new Headers();
 
-  const cwd = `${origin}/${repository}`;
-  const args = [command, '--strict', input ? '--stateless-rpc' : '--advertise-refs', '.'];
-  const child = spawn('git', args, {cwd});
+  const fullpath = `${origin}/${repository}`;
+  const child = spawn('git', [command, input ? '--stateless-rpc' : '--advertise-refs', fullpath]);
 
   if (input) {
     input.pipe(child.stdin);
@@ -122,9 +121,7 @@ async function getLocal(origin: string, repository: string, command: string,
     });
   }
 
-  const body = stdout.pipe(new FuseOutput(input ? messages : [service_headers[command]]), {end: true});
-
-  await new Promise((a) => body.on('finish', a));
+  const body = input ? new ParseOutput([stdout, ...messages]) : new ParseOutput([service_headers[command], stdout], 1);
   headers.set('Content-Type', `application/x-git-${command}-${input ? 'result' : 'advertisement'}`);
   headers.set('Content-Length', body.byteLength.toString());
   return {status: 200, headers, body};
@@ -138,19 +135,22 @@ async function getHttp(origin: string, repository: string, path: string, in_head
   in_headers.delete('Accept-Encoding');
   in_headers.set('Accept-Encoding', 'identity');
 
-  const {status, headers: out_headers, body: output} = await fetch(
-    url,
-    input ? {method: 'POST', body: input, headers: in_headers} : {headers: in_headers},
-  );
+  const response = await fetch(url, input ? {method: 'POST', body: input, headers: in_headers} : {headers: in_headers});
 
-  // Only append messages if result was OK
-  const body = status === 200 ? output.pipe(new FuseOutput(input ? messages : undefined)) : output as Readable;
-  if (body instanceof FuseOutput) {
-    await new Promise((a) => body.once('finish', a));
-    out_headers.set('Content-Length', body.byteLength.toString());
+  let body: any;
+  if (response.status === 200) {
+    const output = await response.buffer();
+    if (messages && messages.length) {
+      body = new ParseOutput([output, ...messages]);
+      response.headers.set('Content-Length', body.byteLength.toString());
+    } else {
+      body = new ParseOutput([output]);
+    }
+  } else {
+    body = response.body;
   }
 
-  return { body, headers: out_headers, status };
+  return { body, headers: response.headers, status: response.status };
 }
 
 function map_error(stderr: string): ServiceErrorCode {
@@ -178,9 +178,10 @@ async function exec(child: ChildProcess): Promise<IExecutionResult> {
       once(child, 'error', r);
       once(child, 'exit', a);
     }),
-    new Promise<Readable>((a, r) => {
-      const passthrough = child.stdout.pipe(new PassThrough());
-      once(child.stderr, 'close', () => a(passthrough));
+    new Promise<Buffer>((a) => {
+      const buffers: Buffer[] = [];
+      on(child.stdout, 'data', (b: Buffer) => buffers.push(b));
+      once(child.stdout, 'close', () => a(Buffer.concat(buffers)));
     }),
     new Promise<string>((a) => {
       const buffers: Buffer[] = [];
@@ -200,6 +201,6 @@ async function exec(child: ChildProcess): Promise<IExecutionResult> {
 
 interface IExecutionResult {
   exitCode: number;
-  stdout: Readable;
+  stdout: Buffer;
   stderr: string;
 }

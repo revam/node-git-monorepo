@@ -13,11 +13,11 @@ npm install --save git-service
 This is a framework independent library for serving git over http(s). It exports an
 abstract service which can either be used standalone or extended to your needs.
 
-I am not a fan of event emitters used in a middleware-driven workflow, as it tends to
-break the pattern, so I made this library which, in my eyes, is better suited for such
-uses. It's a side-project, so expect irregular updates, if any, in case you want to use
-it. Below you can find some simular projects which helped me greatly when creating this
-package. Also a great help was the technical documentation for git, which can be found
+I am not a fan of events used in a middleware-driven workflow, as it breaks the pattern,
+so I made this library which, in my eyes, is better suited for such uses. It's a side-project,
+so expect irregular updates, if any, in case you want to use it. Below you can find some simular
+projects which helped me greatly when creating this package. Also a great help was the technical
+documentation for git, which can be found
 [at github](https://github.com/git/git/blob/master/Documentation/technical).
 
 ## Why start at version 2?
@@ -34,11 +34,11 @@ package changed, so did the name. If you're interested, the other package can be
   - [x] forward to http(s) server
   - [ ] forward to ssh server (planned)
   - [ ] forward to git (protocol) server (planned)
-- [x] support http smart protocol (git-upload-pack & git-receive-pack)
-- [x] can push sideband messages to client (inform client)
-- [ ] check access per service per repository (lookup in config)
+- [x] support the http smart protocol
+- [x] can inform client (inform client)
+- [ ] check access per service per repository (planned)
 
-## Framework spesific packages
+## Framework spesific packages (sub-packages)
 
 - [git-service-http](.)
 - [git-service-koa](.)
@@ -53,7 +53,7 @@ package changed, so did the name. If you're interested, the other package can be
 
 ## Usage
 
-**Note:** It is recommended to use a service or middleware from a sub-package.
+**Note:** It is recommended to use a function or class from a sub-package.
 
 ```js
 import http from "http";
@@ -559,6 +559,13 @@ types, so install `@types/node`:
 npm install --save-dev @types/node
 ```
 
+## Changelog and versioning
+
+All notable changes to this project will be documented in [CHANGELOG.md](./CHANGELOG.md).
+
+The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
+and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
+
 ## License
 
-MIT. See [LICENSE](./license)
+This project is licensed under the MIT license. See [LICENSE](./LICENSE) for the full terms.

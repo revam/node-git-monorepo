@@ -18,7 +18,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/revam/git-smart-proxy-core.git"
+    "url": "git+https://github.com/revam/node-git-service.git"
   },
   "keywords": [
     "git",
@@ -30,9 +30,9 @@
   "author": "Mikal Stordal <mikalstordal@gmail.com>",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/revam/git-smart-proxy-core/issues"
+    "url": "https://github.com/revam/node-git-service/issues"
   },
-  "homepage": "https://github.com/revam/git-smart-proxy-core#readme",
+  "homepage": "https://github.com/revam/node-git-service#readme",
   "devDependencies": {
     "@types/http-status": "^0.2.30",
     "@types/jest": "^22.0.0",

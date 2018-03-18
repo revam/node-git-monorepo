@@ -81,7 +81,7 @@ export class Service {
    * @throws {TypeError}
    */
   constructor(driver: IServiceDriver, method: string, url_fragment: string,
-              headers: Headers | string[] | {[index: string]: string},
+              headers: Headers | Array<[string, string]> | {[index: string]: string},
               input: Readable) {
     if (!isDriver(driver)) {
       throw new TypeError('Driver must be a valid service driver');
@@ -107,6 +107,7 @@ export class Service {
       throw new TypeError('argument `input` must be s sub-instance of stream.Readable');
     }
 
+    // @ts-ignore incomplete definition file for package "node-fetch"
     this.__headers = new Headers(headers);
     this.__messages = [];
     this.__status = RequestStatus.Pending;

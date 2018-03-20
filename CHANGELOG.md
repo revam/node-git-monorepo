@@ -7,21 +7,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-## Changed
+### Added
 
-- Forward to a seperate git server instead of spawning a git sub-process (More proxy-like behaviour)
-- Renamed exported interfaces.
-- Renamed exported function `exists` to `repositoryExists` and changed call signature.
-- Renamed exported function `match` to `getProxy`, and changed call signature and return value.
-- Combined `GitBasePack`, `ReceivePack` and `UploadPack` into `GitProxyCore`,
-  and also moved some more properties into core.
-- Renamed `accept` to `forward` on core class to better describe what it (now) does.
-- `GitProxyCore.forward` and `repositoryExists` now throw on empty uri/repository.
-- `getProxy` now throw `GitProxyError`s on invalid input.
+- New exports: `Service`, `IRequestPullData`, `IRequestPushData`, `IServiceAcceptData`,
+  `IServiceRejectData`, `IServiceDriver`, `IServiceDriverCache`
+- Made all enums ParscalCase. (ServiceType.PULL -> ServiceType.Pull)
+- All exports have sane names.
+- New sections in README.md
 
-## Added
+### Changed
 
-- Export a new error type, `GitProxyError`.
+- New package name
+- Reworked README.md
+- Reworked package exports
+
+### Removed
+
+- Removed exports: `GitBasePack`, `UploadPack`, `ReceivePack`, `match`, `exists`
 
 ## [1.0.1] - 2018-01-16
 

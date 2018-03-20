@@ -39,7 +39,7 @@ export class ParseInput extends Transform {
       }
 
       let offset = 0;
-      let length = packet_length(buffer);
+      let length = parsePacketLength(buffer);
       while (length > 0 && offset < buffer.length) {
         if (offset + length > buffer.length) {
           this.underflow = buffer.slice(offset);
@@ -56,7 +56,7 @@ export class ParseInput extends Transform {
         await new Promise<void>((resolve) => process.nextTick(resolve));
 
         offset += length;
-        length = packet_length(buffer, offset);
+        length = parsePacketLength(buffer, offset);
       }
 
       if (length <= 0) {
@@ -81,10 +81,10 @@ export class ParseInput extends Transform {
 export class ParseOutput extends Readable {
   public byteLength: number;
   private [SymbolSource]: IterableIterator<Buffer>;
-  constructor(buffers: Buffer[], index: number = 0) {
+  constructor(buffers: Buffer[], index?: number) {
     super();
     this.byteLength = buffers.reduce((p, c) => p + c.length, 0);
-    this[SymbolSource] = createPacketIterator(index, ...buffers);
+    this[SymbolSource] = iteratePacketsInBuffers(buffers, index);
   }
 
   public _read() {
@@ -148,44 +148,60 @@ const MetadataMap = new Map<ServiceType, [RegExp, (results: RegExpExecArray, ser
 ]);
 
 /**
- * Parse packet length at offset
+ * Parse packet length from the four next bytes after `offset`
  * @param buffer Packet buffer
  * @param offset Start offset
  */
-function packet_length(buffer: Buffer, offset: number = 0) {
-  try {
-    return Number.parseInt(buffer.slice(offset, offset + 4).toString('utf8'), 16);
-  } catch (err) {
+function parsePacketLength(buffer: Buffer, offset: number = 0) {
+  if (buffer.length - offset < 4) {
     return -1;
   }
+  const input = buffer.toString('utf8', offset, offset + 4);
+  if (!/^[0-9a-f]{4}$/.test(input)) {
+    return -1;
+  }
+  return Number.parseInt(input, 16);
 }
 
 /**
- * Creates an iterator yielding packets from buffers.
- * @param index Main buffer index
+ * Creates an iterator yielding packets from multiple buffers.
  * @param buffers Buffers to read
+ * @param index Pauseable buffer index
  */
-function *createPacketIterator(index: number, ...buffers: Buffer[]): IterableIterator<Buffer> {
+function *iteratePacketsInBuffers(buffers: Buffer[], index: number = 0): IterableIterator<Buffer> {
   let counter = 0;
+  let paused: number;
   for (const buffer of buffers) {
-    let offset = 0;
-    let length = packet_length(buffer);
-    while (offset < buffer.length) {
-      yield buffer.slice(offset, offset + length);
-
-      offset += length;
-      length = packet_length(buffer, offset);
-      if (length === 0) {
-        if (index === counter) {
-          break;
-        }
-
-        length = 4;
-      }
+    if (index === counter) {
+      paused = yield* iteratePacketsInBuffer(buffer, 0, true);
+    } else {
+      yield* iteratePacketsInBuffer(buffer, 0);
     }
-
     counter++;
   }
-  yield Buffer.from('0000');
+  if (paused && paused < buffers[index].length) {
+    yield* iteratePacketsInBuffer(buffers[index], paused);
+  }
   yield null;
+}
+
+/**
+ * Iterates all packets in a single buffer. if `pause` is true will return offset when met with special symbol.
+ * @param buffer Buffer
+ * @param offset Start offset
+ * @param pause should pause stream
+ */
+function *iteratePacketsInBuffer(buffer: Buffer, offset: number, pause: boolean = false): IterableIterator<Buffer> {
+  let length = parsePacketLength(buffer, offset);
+  while (offset < buffer.length) {
+    yield buffer.slice(offset, offset + length);
+    offset += length;
+    length = parsePacketLength(buffer, offset);
+    if (length === 0) {
+      if (pause) {
+        return offset;
+      }
+      length = 4;
+    }
+  }
 }

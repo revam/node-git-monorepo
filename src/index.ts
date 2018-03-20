@@ -84,7 +84,7 @@ export class Service {
               headers: Headers | Array<[string, string]> | {[index: string]: string},
               input: Readable) {
     if (!isDriver(driver)) {
-      throw new TypeError('Driver must be a valid service driver');
+      throw new TypeError('argument `driver` must be a valid service driver interface');
     }
 
     if (typeof method !== 'string' || !method) {

@@ -6,7 +6,7 @@ import { Readable, Transform, Writable } from 'stream';
 import { promisify } from 'util';
 import { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from './constants';
 import { isDriver } from './driver';
-import { ParseInput } from './transform';
+import { ParseInput, ParseInputHandler } from './transform';
 
 export { Headers } from 'node-fetch';
 export { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from "./constants";
@@ -203,7 +203,8 @@ export class Service {
       const onError = (ee, cb) => { ee.on('error', cb); disposables.push(() => ee.removeListener('error', cb)); };
       onError(input, (err) => this.onError.dispatch(err));
 
-      const parser = this[SymbolSource] = new ParseInput(this);
+      const [regex, parse] = MetadataMap.get(this.type);
+      const parser = this[SymbolSource] = new ParseInput(this, regex, parse);
       onError(parser, (err) => this.onError.dispatch(err));
 
       parser.done.then(() => {
@@ -517,4 +518,56 @@ const ServiceMap: Map<ServiceType, RegExp> = new Map([
   [ServiceType.Advertise, /^\/?(.*?)\/(info\/refs\?service=git-(.*))$/],
   [ServiceType.Pull, /^\/?(.*?)\/(git-(upload-pack))$/],
   [ServiceType.Push, /^\/?(.*?)\/(git-(receive-pack))$/],
+]);
+
+const MetadataMap = new Map<ServiceType, [RegExp, ParseInputHandler]>([
+  [ServiceType.Push, [
+    /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/,
+    (results: RegExpExecArray, service: Service) => {
+      let type: 'create' | 'delete' | 'update';
+      if ('0000000000000000000000000000000000000000' === results[1]) {
+        type = 'create';
+      } else if ('0000000000000000000000000000000000000000' === results[1]) {
+        type = 'delete';
+      } else {
+        type = 'update';
+      }
+      const metadata: IRequestPushData = {
+        commits: [results[1], results[2]],
+        refname: results[3],
+        type,
+      };
+      service.metadata.push(metadata);
+      if (results[4]) {
+        for (const c of results[4].trim().split(' ')) {
+          if (/=/.test(c)) {
+            const [k, v] = c.split('=');
+            service.capabilities.set(k, v);
+          } else {
+            service.capabilities.set(c, undefined);
+          }
+        }
+      }
+    },
+  ]],
+  [ServiceType.Pull, [
+    /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/,
+    (results: RegExpExecArray, service: Service) => {
+      const metadata: IRequestPullData = {
+        commits: [results[2]],
+        type: results[1] as ('want' | 'have'),
+      };
+      service.metadata.push(metadata);
+      if (results[3]) {
+        for (const c of results[3].trim().split(' ')) {
+          if (/=/.test(c)) {
+            const [k, v] = c.split('=');
+            service.capabilities.set(k, v);
+          } else {
+            service.capabilities.set(c, undefined);
+          }
+        }
+      }
+    },
+  ]],
 ]);

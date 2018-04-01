@@ -36,36 +36,34 @@ export class ParseInput extends Transform {
         buffer = Buffer.concat([this.underflow, buffer]);
         this.underflow = undefined;
       }
-
-      let offset = 0;
-      let length = parsePacketLength(buffer);
-      while (length > 0 && offset < buffer.length) {
-        if (offset + length > buffer.length) {
-          this.underflow = buffer.slice(offset);
-          break;
+      let iterator = iteratePacketsInBuffer(buffer, true, false);
+      let result: IteratorResult<Buffer>;
+      do {
+        result = await iterator.next();
+        if (result.done) {
+          if (result.value) {
+            const length = parsePacketLength(result.value);
+            if (length === 0) {
+              result.done = false;
+              if (typeof this.__done === 'function') {
+                this.__done();
+                this.__done = true;
+              }
+              iterator = iteratePacketsInBuffer(result.value, false, false);
+            } else {
+              this.underflow = result.value;
+            }
+          }
+        } else if (result.value) {
+          const message = result.value.toString('utf8');
+          const results = this.regex.exec(message);
+          if (results) {
+            this.parse(results, this[SymbolSource]);
+          }
         }
-
-        const message = buffer.toString('utf8', offset, offset + length);
-        const results = this.regex.exec(message);
-        if (results) {
-          this.parse(results, this[SymbolSource]);
-        }
-
-        // Wait till next tick so we can do other stuff inbetween.
-        await new Promise<void>((resolve) => process.nextTick(resolve));
-
-        offset += length;
-        length = parsePacketLength(buffer, offset);
-      }
-
-      if (length <= 0) {
-        this.__done();
-        this.__done = true;
-      }
-
-      this.push(this.underflow && offset > 0 ? buffer.slice(offset) : buffer);
+      } while (!result.done);
+      this.push(this.underflow ? buffer.slice(0, -(this.underflow.length)) : buffer);
     }
-
     next();
   }
 
@@ -119,17 +117,17 @@ function parsePacketLength(buffer: Buffer, offset: number = 0) {
  */
 function *iteratePacketsInBuffers(buffers: Buffer[], index: number = 0): IterableIterator<Buffer> {
   let counter = 0;
-  let paused: number;
+  let paused: Buffer;
   for (const buffer of buffers) {
     if (index === counter) {
-      paused = yield* iteratePacketsInBuffer(buffer, 0, true);
+      paused = yield* iteratePacketsInBuffer(buffer, true);
     } else {
-      yield* iteratePacketsInBuffer(buffer, 0);
+      yield* iteratePacketsInBuffer(buffer);
     }
     counter++;
   }
-  if (paused && paused < buffers[index].length) {
-    yield* iteratePacketsInBuffer(buffers[index], paused);
+  if (paused) {
+    yield* iteratePacketsInBuffer(paused);
   }
   yield null;
 }
@@ -137,20 +135,37 @@ function *iteratePacketsInBuffers(buffers: Buffer[], index: number = 0): Iterabl
 /**
  * Iterates all packets in a single buffer. if `pause` is true will return offset when met with special symbol.
  * @param buffer Buffer
- * @param offset Start offset
- * @param pause should pause stream
+ * @param breakAtZero should break at next zero length
+ * @param throwErrors should throw errors or return rest of buffer
  */
-function *iteratePacketsInBuffer(buffer: Buffer, offset: number, pause: boolean = false): IterableIterator<Buffer> {
-  let length = parsePacketLength(buffer, offset);
-  while (offset < buffer.length) {
-    yield buffer.slice(offset, offset + length);
-    offset += length;
-    length = parsePacketLength(buffer, offset);
+function *iteratePacketsInBuffer(buffer: Buffer, breakAtZero: boolean = false, throwErrors: boolean = true,
+): IterableIterator<Buffer> {
+  let offset = 0;
+  do {
+    let length = parsePacketLength(buffer, offset);
     if (length === 0) {
-      if (pause) {
-        return offset;
+      if (breakAtZero) {
+        return buffer.slice(offset);
       }
       length = 4;
     }
-  }
+    if (length > 0) {
+      if (offset + length < buffer.length) {
+        yield buffer.slice(offset, offset + length);
+        offset += length;
+      } else {
+        if (throwErrors) {
+          throw new Error(`Invalid packet ending at position ${offset + length} in buffer (${buffer.length}`);
+        } else {
+          return buffer.slice(offset);
+        }
+      }
+    } else if (length < 0) {
+      if (throwErrors) {
+        throw new Error(`Invalid packet starting at position ${offset} in buffer (${buffer.length})`);
+      } else {
+        return;
+      }
+    }
+  } while (offset < buffer.length);
 }

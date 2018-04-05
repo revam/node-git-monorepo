@@ -1,4 +1,5 @@
 import { ChildProcess, spawn } from 'child_process';
+import { createPacketInspectStream } from 'git-packet-streams';
 import * as encode from 'git-side-band-message';
 import { Signal } from 'micro-signals';
 import fetch, { Headers } from 'node-fetch';
@@ -6,7 +7,6 @@ import { Readable, Transform } from 'stream';
 import { promisify } from 'util';
 import { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from './constants';
 import { isDriver } from './driver';
-import { createPacketInspectStream } from './transform';
 
 export { Headers } from 'node-fetch';
 export { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from "./constants";

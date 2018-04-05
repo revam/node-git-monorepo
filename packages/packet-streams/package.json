@@ -1,7 +1,7 @@
 {
-  "name": "git-service",
-  "version": "2.0.0",
-  "description": "Serve git over http(s)",
+  "name": "git-packet-streams",
+  "version": "1.0.0",
+  "description": "Helper streams for to work with the git packet format",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "directories": {
@@ -22,9 +22,8 @@
   },
   "keywords": [
     "git",
-    "push",
-    "pull",
-    "deploy",
+    "packet",
+    "pack-format",
     "typescript"
   ],
   "author": "Mikal Stordal <mikalstordal@gmail.com>",
@@ -34,27 +33,11 @@
   },
   "homepage": "https://github.com/revam/node-git-service#readme",
   "devDependencies": {
-    "@types/http-status": "^0.2.30",
-    "@types/jest": "^22.0.0",
-    "@types/node": "^8.5.2",
-    "@types/node-fetch": "^1.6.7",
-    "@types/through": "0.0.29",
     "del-cli": "^1.1.0",
-    "dotenv": "^5.0.1",
-    "http-status": "^1.0.1",
-    "into-stream": "^3.1.0",
     "jest": "^22.0.4",
-    "tempy": "^0.2.1",
-    "through": "^2.3.8",
     "ts-jest": "^22.0.0",
     "tslint": "^5.8.0",
     "typescript": "^2.7.2"
-  },
-  "dependencies": {
-    "git-packet-streams": "^1.0.0",
-    "git-side-band-message": "0.0.3",
-    "micro-signals": "^2.0.0",
-    "node-fetch": "^2.0.0"
   },
   "jest": {
     "transform": {

@@ -1,10 +1,10 @@
 import { ChildProcess, spawn } from "child_process";
+import { createPacketReadableStream } from "git-packet-streams";
 import fetch, { Headers } from "node-fetch";
 import { join, normalize, resolve } from "path";
 import { Readable } from "stream";
 import { IServiceAcceptData, IServiceDriver, IServiceDriverCache, ServiceError } from ".";
 import { ServiceErrorCode } from "./constants";
-import { createPacketReadableStream } from "./transform";
 
 export function isDriver(driver: any): boolean {
   return 'origin' in driver && typeof driver.origin === 'string' &&

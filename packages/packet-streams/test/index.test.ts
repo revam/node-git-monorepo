@@ -1,5 +1,5 @@
 import { Duplex, PassThrough, Readable } from "stream";
-import { createPacketInspectStream, createPacketReadableStream } from "../src/transform";
+import { createPacketInspectStream, createPacketReadableStream } from "../src";
 
 describe('createPacketReadableStream', () => {
   it(

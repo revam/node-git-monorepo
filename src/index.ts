@@ -75,14 +75,18 @@ export class Service {
    * @param method Upper-case HTTP method for request.
    * @param url_fragment The full URL or tail of the url. Will extract repository from here if possible.
    * @param headers Request headers supplied as: 1) an instance of [Headers](.),
-   *                   2) a key-value array, or 3) a plain object with headers as keys.
+   *                2) a key-value array, or 3) a plain object with headers as keys.
    * @param input Input (normally the request itself)
    *
    * @throws {TypeError}
    */
-  constructor(driver: IServiceDriver, method: string, url_fragment: string,
-              headers: Headers | Array<[string, string]> | {[index: string]: string},
-              input: Readable) {
+  constructor(
+    driver: IServiceDriver,
+    method: string,
+    url_fragment: string,
+    headers: Headers | Array<[string, string]> | {[index: string]: string},
+    input: Readable,
+  ) {
     if (!isDriver(driver)) {
       throw new TypeError('argument `driver` must be a valid service driver interface');
     }
@@ -187,11 +191,9 @@ export class Service {
 
         this.__hint = this.driver.hint(...results.slice(2));
         this.repository = results[1];
-        Object.defineProperties(this, {
-          type: {
-            value: service,
-            writable: false,
-          },
+        Object.defineProperty(this, 'type', {
+          value: service,
+          writable: false,
         });
 
         break;

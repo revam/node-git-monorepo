@@ -133,12 +133,15 @@ function *iteratePacketsInBuffers(buffers: Buffer[], index: number = 0): Iterabl
 }
 
 /**
- * Iterates all packets in a single buffer. if `pause` is true will return offset when met with special symbol.
- * @param buffer Buffer
- * @param breakAtZero should break at next zero length
- * @param throwErrors should throw errors or return rest of buffer
+ * Iterates all packets in a single buffer.
+ * @param buffer Buffer to iterate.
+ * @param breakAtZero return rest of buffer at next zero length packet if truthy
+ * @param throwErrors throw errors if truthy
  */
-function *iteratePacketsInBuffer(buffer: Buffer, breakAtZero: boolean = false, throwErrors: boolean = true,
+function *iteratePacketsInBuffer(
+  buffer: Buffer,
+  breakAtZero: boolean = false,
+  throwErrors: boolean = true,
 ): IterableIterator<Buffer> {
   let offset = 0;
   do {

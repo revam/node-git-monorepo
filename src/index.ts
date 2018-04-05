@@ -2,11 +2,11 @@ import { ChildProcess, spawn } from 'child_process';
 import * as encode from 'git-side-band-message';
 import { Signal } from 'micro-signals';
 import fetch, { Headers } from 'node-fetch';
-import { Readable, Transform, Writable } from 'stream';
+import { Readable, Transform } from 'stream';
 import { promisify } from 'util';
 import { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from './constants';
 import { isDriver } from './driver';
-import { ParseInput, ParseInputHandler } from './transform';
+import { createPacketInspectStream } from './transform';
 
 export { Headers } from 'node-fetch';
 export { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from "./constants";
@@ -61,7 +61,7 @@ export class Service {
    */
   public repository: string;
 
-  private [SymbolSource]: ParseInput;
+  private [SymbolSource]: Transform;
   private __headers: Headers;
   private __hint: string;
   private __messages: Buffer[];
@@ -205,17 +205,17 @@ export class Service {
       const onError = (ee, cb) => { ee.on('error', cb); disposables.push(() => ee.removeListener('error', cb)); };
       onError(input, (err) => this.onError.dispatch(err));
 
-      const [regex, parse] = MetadataMap.get(this.type);
-      const parser = this[SymbolSource] = new ParseInput(this, regex, parse);
+      const middleware = MetadataMap.get(this.type);
+      const [parser, awaitReady] = createPacketInspectStream(middleware(this));
       onError(parser, (err) => this.onError.dispatch(err));
 
-      parser.done.then(() => {
-        this.__ready = true;
-        disposables.forEach((d) => d());
-        disposables.length = 0;
-      });
+      this[SymbolSource] = parser;
       Object.defineProperty(this, 'awaitReady', {
-        value: parser.done,
+        value: awaitReady.then(() => {
+          this.__ready = true;
+          disposables.forEach((d) => d());
+          disposables.length = 0;
+        }),
         writable: false,
       });
 
@@ -522,54 +522,69 @@ const ServiceMap: Map<ServiceType, RegExp> = new Map([
   [ServiceType.Push, /^\/?(.*?)\/(git-(receive-pack))$/],
 ]);
 
-const MetadataMap = new Map<ServiceType, [RegExp, ParseInputHandler]>([
-  [ServiceType.Push, [
-    /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/,
-    (results: RegExpExecArray, service: Service) => {
-      let type: 'create' | 'delete' | 'update';
-      if ('0000000000000000000000000000000000000000' === results[1]) {
-        type = 'create';
-      } else if ('0000000000000000000000000000000000000000' === results[1]) {
-        type = 'delete';
-      } else {
-        type = 'update';
-      }
-      const metadata: IRequestPushData = {
-        commits: [results[1], results[2]],
-        refname: results[3],
-        type,
-      };
-      service.metadata.push(metadata);
-      if (results[4]) {
-        for (const c of results[4].trim().split(' ')) {
-          if (/=/.test(c)) {
-            const [k, v] = c.split('=');
-            service.capabilities.set(k, v);
+const MetadataMap = new Map<ServiceType, (service: Service) => (buffer: Buffer) => any>([
+  [
+    ServiceType.Push,
+    (service) => {
+      const regex =
+      /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
+      return (buffer) => {
+        const value = buffer.toString('utf8');
+        const results = regex.exec(value);
+        if (results) {
+          let type: 'create' | 'delete' | 'update';
+          if ('0000000000000000000000000000000000000000' === results[1]) {
+            type = 'create';
+          } else if ('0000000000000000000000000000000000000000' === results[1]) {
+            type = 'delete';
           } else {
-            service.capabilities.set(c, undefined);
+            type = 'update';
+          }
+          const metadata: IRequestPushData = {
+            commits: [results[1], results[2]],
+            refname: results[3],
+            type,
+          };
+          service.metadata.push(metadata);
+          if (results[4]) {
+            for (const c of results[4].trim().split(' ')) {
+              if (/=/.test(c)) {
+                const [k, v] = c.split('=');
+                service.capabilities.set(k, v);
+              } else {
+                service.capabilities.set(c, undefined);
+              }
+            }
           }
         }
-      }
-    },
-  ]],
-  [ServiceType.Pull, [
-    /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/,
-    (results: RegExpExecArray, service: Service) => {
-      const metadata: IRequestPullData = {
-        commits: [results[2]],
-        type: results[1] as ('want' | 'have'),
       };
-      service.metadata.push(metadata);
-      if (results[3]) {
-        for (const c of results[3].trim().split(' ')) {
-          if (/=/.test(c)) {
-            const [k, v] = c.split('=');
-            service.capabilities.set(k, v);
-          } else {
-            service.capabilities.set(c, undefined);
+    },
+  ],
+  [
+    ServiceType.Pull,
+    (service) => {
+      const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
+      return (buffer) => {
+        const value = buffer.toString('utf8');
+        const results = regex.exec(value);
+        if (results) {
+          const metadata: IRequestPullData = {
+            commits: [results[2]],
+            type: results[1] as ('want' | 'have'),
+          };
+          service.metadata.push(metadata);
+          if (results[3]) {
+            for (const c of results[3].trim().split(' ')) {
+              if (/=/.test(c)) {
+                const [k, v] = c.split('=');
+                service.capabilities.set(k, v);
+              } else {
+                service.capabilities.set(c, undefined);
+              }
+            }
           }
         }
-      }
+      };
     },
-  ]],
+  ],
 ]);

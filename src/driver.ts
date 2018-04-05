@@ -3,8 +3,8 @@ import fetch, { Headers } from "node-fetch";
 import { join, normalize, resolve } from "path";
 import { Readable } from "stream";
 import { IServiceAcceptData, IServiceDriver, IServiceDriverCache, ServiceError } from ".";
-import { ServiceErrorCode, SymbolSource } from "./constants";
-import { ParseOutput } from "./transform";
+import { ServiceErrorCode } from "./constants";
+import { createPacketReadableStream } from "./transform";
 
 export function isDriver(driver: any): boolean {
   return 'origin' in driver && typeof driver.origin === 'string' &&
@@ -148,9 +148,10 @@ async function getLocal(origin: string, repository: string, command: string,
     });
   }
 
-  const body = input ? new ParseOutput([stdout, ...messages]) : new ParseOutput([service_headers[command], stdout], 1);
+  const packets = input ? [stdout, ...messages] : [service_headers[command], stdout];
+  const body = createPacketReadableStream(packets, input ? 0 : 1);
   headers.set('Content-Type', `application/x-git-${command}-${input ? 'result' : 'advertisement'}`);
-  headers.set('Content-Length', body.byteLength.toString());
+  headers.set('Content-Length', count_bytes(packets).toString());
   return {status: 200, headers, body};
 }
 
@@ -164,17 +165,11 @@ async function getHttp(origin: string, repository: string, path: string, in_head
 
   const response = await fetch(url, input ? {method: 'POST', body: input, headers: in_headers} : {headers: in_headers});
 
-  let body: any;
-  if (response.status === 200) {
-    const output = await response.buffer();
-    if (messages && messages.length) {
-      body = new ParseOutput([output, ...messages]);
-      response.headers.set('Content-Length', body.byteLength.toString());
-    } else {
-      body = new ParseOutput([output]);
-    }
-  } else {
-    body = response.body;
+  let body: Readable = response.body as Readable;
+  if (input && response.status === 200 && messages && messages.length) {
+      const packets = [await response.buffer(), ...messages];
+      body = createPacketReadableStream(packets, 0);
+      response.headers.set('Content-Length', count_bytes(packets).toString());
   }
 
   return { body, headers: response.headers, status: response.status };
@@ -182,6 +177,10 @@ async function getHttp(origin: string, repository: string, path: string, in_head
 
 function map_error(stderr: string): ServiceErrorCode {
   return ServiceErrorCode.UnknownError;
+}
+
+function count_bytes(buffers: Buffer[]) {
+  return buffers.reduce((p, c) => p + c.length, 0);
 }
 
 // Taken and modified from

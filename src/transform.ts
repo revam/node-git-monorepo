@@ -1,98 +1,88 @@
 import { Readable, Transform } from "stream";
-import { IRequestPullData, IRequestPushData, Service } from ".";
-import { ServiceType, SymbolSource } from "./constants";
 
-export class ParseInput extends Transform {
-  public readonly done: Promise<void>;
-  public regex: RegExp;
-  public parse?: ParseInputHandler;
-  public [SymbolSource]: Service;
-  private __done: (() => void) | true;
-  private underflow?: Buffer;
-  constructor(service: Service, regex: RegExp, parse: ParseInputHandler) {
-    super();
-    Object.defineProperties(this, {
-      done: {
-        value: new Promise<void>((resolve) => {
-          this.__done = resolve;
-        }),
-        writable: false,
-      },
-      [SymbolSource]: {
-        value: service,
-        writable: false,
-      },
-    });
-    this.regex = regex;
-    this.parse = parse;
-    this.underflow = undefined;
+export function createPacketInspectStream(reader: (packet: Buffer) => any): [Transform, Promise<void>] {
+  if (typeof reader !== 'function') {
+    throw new TypeError(`Invalid arguement "reader". Expected type "function", got "${typeof reader}"`);
   }
-
-  public async _transform(buffer: Buffer, encoding: string, next: (err?: Error) => void) {
-    if (this.__done === true) {
-      this.push(buffer);
-    } else {
-      if (this.underflow) {
-        buffer = Buffer.concat([this.underflow, buffer]);
-        this.underflow = undefined;
-      }
-      let iterator = iteratePacketsInBuffer(buffer, true, false);
-      let result: IteratorResult<Buffer>;
-      do {
-        result = await iterator.next();
-        if (result.done) {
-          if (result.value) {
-            const length = parsePacketLength(result.value);
-            if (length === 0) {
-              result.done = false;
-              if (typeof this.__done === 'function') {
-                this.__done();
-                this.__done = true;
-              }
-              iterator = iteratePacketsInBuffer(result.value, false, false);
-            } else {
-              this.underflow = result.value;
-            }
-          }
-        } else if (result.value) {
-          const message = result.value.toString('utf8');
-          const results = this.regex.exec(message);
-          if (results) {
-            this.parse(results, this[SymbolSource]);
-          }
+  let ready = false;
+  let underflow: Buffer;
+  const stream = new Transform({
+    async transform(this: Transform, buffer: Buffer, encoding: string, next: (err?: Error) => void) {
+      if (ready) {
+        this.push(buffer);
+        next();
+      } else {
+        if (underflow) {
+          buffer = Buffer.concat([underflow, buffer]);
+          underflow = undefined;
         }
-      } while (!result.done);
-      this.push(this.underflow ? buffer.slice(0, -(this.underflow.length)) : buffer);
-    }
-    next();
-  }
-
-  public _final() {
-    if (this.underflow) {
-      this.push(this.underflow);
-      this.underflow = undefined;
-    }
-  }
+        try {
+          let iterator = iteratePacketsInBuffer(buffer, true, true);
+          let result: IteratorResult<Buffer>;
+          do {
+            // Force iteration onto next loop
+            result = await iterator.next();
+            if (result.value) {
+              if (result.done) {
+                const length = parsePacketLength(result.value);
+                if (length === 0) {
+                  result.done = false;
+                  if (!ready) {
+                    ready = true;
+                    this.emit(SymbolAwait);
+                  }
+                  iterator = iteratePacketsInBuffer(result.value, false, true);
+                } else {
+                  underflow = result.value;
+                }
+              } else {
+                reader(result.value);
+              }
+            }
+          } while (!result.done);
+          this.push(underflow ? buffer.slice(0, -(underflow.length)) : buffer);
+          next();
+        } catch (err) {
+          this.emit(SymbolAwait);
+          next(err);
+        }
+      }
+    },
+    final(this: Transform) {
+      if (underflow) {
+        const length = parsePacketLength(underflow);
+        this.emit(
+          'error',
+          new Error(`Incomplete packet with length ${length} remaining in buffer (${underflow.length})`),
+        );
+      }
+      if (!ready) {
+        this.emit(SymbolAwait);
+      }
+    },
+  });
+  const promise = new Promise<void>((resolve) => stream.on(SymbolAwait as any, resolve));
+  return [stream, promise];
 }
 
-export type ParseInputHandler = (results: RegExpExecArray, service: Service) => any;
-
-export class ParseOutput extends Readable {
-  public byteLength: number;
-  private [SymbolSource]: IterableIterator<Buffer>;
-  constructor(buffers: Buffer[], index?: number) {
-    super();
-    this.byteLength = buffers.reduce((p, c) => p + c.length, 0);
-    this[SymbolSource] = iteratePacketsInBuffers(buffers, index);
-  }
-
-  public _read() {
-    const {done, value} = this[SymbolSource].next();
-    if (!done) {
-      this.push(value);
-    }
-  }
+export function createPacketReadableStream(buffers: Buffer[], pauseBufferIndex: number = -1): Readable {
+  const iterator = iteratePacketsInBuffers(buffers, pauseBufferIndex);
+  return new Readable({
+    read(this: Readable, size: number) {
+      try {
+        const {done, value} = iterator.next();
+        if (!done) {
+          this.push(value);
+        }
+      } catch (err) {
+        this.push(null);
+        this.emit('error', err);
+      }
+    },
+  });
 }
+
+const SymbolAwait = Symbol('await');
 
 /**
  * Parse packet length from the four next bytes after `offset`
@@ -134,41 +124,37 @@ function *iteratePacketsInBuffers(buffers: Buffer[], index: number = 0): Iterabl
 
 /**
  * Iterates all packets in a single buffer.
- * @param buffer Buffer to iterate.
- * @param breakAtZero return rest of buffer at next zero length packet if truthy
- * @param throwErrors throw errors if truthy
  */
 function *iteratePacketsInBuffer(
   buffer: Buffer,
-  breakAtZero: boolean = false,
-  throwErrors: boolean = true,
+  breakOnZeroLength: boolean = false,
+  breakOnMissingChunk: boolean = false,
 ): IterableIterator<Buffer> {
+  if (!buffer.length) {
+    return;
+  }
   let offset = 0;
   do {
     let length = parsePacketLength(buffer, offset);
     if (length === 0) {
-      if (breakAtZero) {
+      if (breakOnZeroLength) {
         return buffer.slice(offset);
       }
       length = 4;
     }
     if (length > 0) {
-      if (offset + length < buffer.length) {
+      if (offset + length <= buffer.length) {
         yield buffer.slice(offset, offset + length);
         offset += length;
       } else {
-        if (throwErrors) {
-          throw new Error(`Invalid packet ending at position ${offset + length} in buffer (${buffer.length}`);
-        } else {
+        if (breakOnMissingChunk) {
           return buffer.slice(offset);
+        } else {
+          throw new Error(`Invalid packet ending at position ${offset + length} in buffer (${buffer.length})`);
         }
       }
     } else if (length < 0) {
-      if (throwErrors) {
-        throw new Error(`Invalid packet starting at position ${offset} in buffer (${buffer.length})`);
-      } else {
-        return;
-      }
+      throw new Error(`Invalid packet starting at position ${offset} in buffer (${buffer.length})`);
     }
   } while (offset < buffer.length);
 }

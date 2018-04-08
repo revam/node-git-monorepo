@@ -8,13 +8,14 @@
     "test": "test"
   },
   "scripts": {
+    "copy": "node -e \"const args=process.argv.slice(1);if(args.length%2===0){const j=args.length/2;for(let i=0;i<j;i++){fs=require('fs');fs.createReadStream(args[i*2]).pipe(fs.createWriteStream(args[i*2+1]));}}else{throw new Error('Invalid number of arguments');}\"",
     "lint": "tsc --noEmit -p . && tslint src/**/*.ts",
     "test": "jest",
     "build": "tsc -p .",
     "pretest": "npm run lint",
     "prebuild": "npm run test",
-    "prepublish": "npm run build",
-    "postpublish": "del-cli lib"
+    "prepublish": "npm run copy ../../LICENSE LICENSE ../../.npmignore .npmignore && npm run build",
+    "postpublish": "del-cli lib LICENSE .npmignore"
   },
   "repository": {
     "type": "git",

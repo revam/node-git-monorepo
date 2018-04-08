@@ -8,6 +8,7 @@ yarn-error.log*
 # Ignore source code
 src/
 test/
+packages/
 ts*.json
 
 # Runtime data

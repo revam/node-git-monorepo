@@ -2,13 +2,37 @@ import { ChildProcess, spawn } from 'child_process';
 import { createPacketInspectStream } from 'git-packet-streams';
 import * as encode from 'git-side-band-message';
 import { Signal } from 'micro-signals';
-import fetch, { Headers } from 'node-fetch';
+import { Headers } from 'node-fetch';
 import { Readable, Transform } from 'stream';
 import { promisify } from 'util';
-import { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from './constants';
 
 export { Headers } from 'node-fetch';
-export { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from "./constants";
+
+export enum RequestType {
+  Unknown,
+  Advertise,
+  Pull,
+  Push,
+}
+
+export enum RequestStatus {
+  Pending,
+  Accepted,
+  Rejected,
+  AcceptedButRejected,
+}
+
+export enum ServiceErrorCode {
+  InvalidMethod = 'InvalidMethod',
+  InvalidServiceName = 'InvalidServiceName',
+  InvalidContentType = 'InvalidContentType',
+  UnknownError = 'UnknownError',
+}
+
+/**
+ * unique source symbol
+ */
+export const SymbolSource = Symbol('source');
 
 /**
  * Checks if candidateDriver is a valid driver.
@@ -48,11 +72,11 @@ export class Service {
   /**
    *
    */
-  public readonly onAccept: Signal<IServiceAcceptData>;
+  public readonly onAccept: Signal<ISignalAcceptData>;
   /**
    *
    */
-  public readonly onReject: Signal<IServiceRejectData>;
+  public readonly onReject: Signal<ISignalRejectData>;
   /**
    *
    */
@@ -66,9 +90,9 @@ export class Service {
    */
   public readonly status: RequestStatus;
   /**
-   * Service type
+   * Requested service
    */
-  public readonly type: ServiceType;
+  public readonly type: RequestType;
   /**
    * Repository to work with.
    */
@@ -166,26 +190,22 @@ export class Service {
       const results = regex.exec(url_fragment);
 
       if (results) {
-        const advertise = service === ServiceType.Advertise;
         const service_name = results[3];
         if (!ValidServiceNames.has(service_name)) {
-          this.onError.dispatch(new ServiceError({
-            errorCode: ServiceErrorCode.InvalidServiceName,
-            have: service_name,
-            message: `Invalid service name '${service_name}'`,
-            want: ValidServiceNames,
-          }));
+          this.onError.dispatch(
+            new TypeError(
+              `Invalid service "${service_name}", want one of: "${Array.from(ValidServiceNames).join('", "')}"`,
+            ),
+          );
           break;
         }
 
+        const advertise = service === RequestType.Advertise;
         const expected_method = advertise ? 'GET' : 'POST';
         if (method !== expected_method) {
-          this.onError.dispatch(new ServiceError({
-            errorCode: ServiceErrorCode.InvalidMethod,
-            have: method,
-            message: `Invalid HTTP method used for service (${method} != ${expected_method})`,
-            want: expected_method,
-          }));
+          this.onError.dispatch(
+            new TypeError(`Unexpected HTTP ${method} request, expected a HTTP ${expected_method}) request`),
+          );
           break;
         }
 
@@ -193,12 +213,9 @@ export class Service {
         const content_type = this.__headers.get('Content-Type');
         const expected_content_type = `application/x-git-${service_name}-request`;
         if (!advertise && content_type !== expected_content_type) {
-          this.onError.dispatch(new ServiceError({
-            errorCode: ServiceErrorCode.InvalidContentType,
-            have: content_type,
-            message: `Invalid content type used for service (${content_type} != ${expected_content_type})`,
-            want: expected_content_type,
-          }));
+          this.onError.dispatch(
+            new TypeError(`Unexpected content-type "${content_type}", expected "${expected_content_type}"`),
+          );
           break;
         }
 
@@ -213,7 +230,7 @@ export class Service {
       }
     }
 
-    if ('type' in this && this.type !== ServiceType.Advertise) {
+    if ('type' in this && this.type !== RequestType.Advertise) {
       const disposables: Array<() => void> = [];
       const onError = (ee, cb) => { ee.on('error', cb); disposables.push(() => ee.removeListener('error', cb)); };
       onError(input, (err) => this.onError.dispatch(err));
@@ -236,7 +253,7 @@ export class Service {
     } else {
       if (!('type' in this)) {
         Object.defineProperty(this, 'type', {
-          value: ServiceType.Unknown,
+          value: RequestType.Unknown,
           writable: false,
         });
       }
@@ -258,7 +275,7 @@ export class Service {
 
     this.__status = RequestStatus.Accepted;
 
-    if (this.type === ServiceType.Unknown) {
+    if (this.type === RequestType.Unknown) {
       return;
     }
 
@@ -324,7 +341,7 @@ export class Service {
    * Check access to service
    */
   public async access(): Promise<boolean> {
-    if (this.type === ServiceType.Unknown) {
+    if (this.type === RequestType.Unknown) {
       return false;
     }
 
@@ -359,19 +376,6 @@ export class Service {
   public inform(...messages: Array<string | Buffer>): this {
     messages.forEach((message) => this.__messages.push(encode(message)));
     return this;
-  }
-}
-
-export class ServiceError<T, U> extends Error {
-  public errorCode: ServiceErrorCode;
-  public have?: T;
-  public want?: U;
-
-  constructor(data: IServiceErrorData<T, U>) {
-    super(data.message);
-    this.have = data.have;
-    this.errorCode = data.errorCode;
-    this.want = data.want;
   }
 }
 
@@ -439,9 +443,9 @@ export interface IServiceDriver {
    * @param input Input (processed request body)
    * @param messages Buffered messages to client
    */
-  get(repository: string, hint: string, headers: Headers): Promise<IServiceAcceptData>;
+  get(repository: string, hint: string, headers: Headers): Promise<ISignalAcceptData>;
   get(repository: string, hint: string, headers: Headers,
-      input: Readable, messages: Buffer[]): Promise<IServiceAcceptData>;
+      input: Readable, messages: Buffer[]): Promise<ISignalAcceptData>;
   /**
    * Choose hint used to determine service for this driver.
    * @param hints strings to choose from
@@ -457,7 +461,7 @@ export interface IServiceDriver {
 /**
  * Contains data needed to fufill request.
  */
-export interface IServiceAcceptData {
+export interface ISignalAcceptData {
   /**
    * Status code for response. Either a `2xx` or `3xx` code.
    */
@@ -475,7 +479,7 @@ export interface IServiceAcceptData {
 /**
  * Contains data needed to reject request.
  */
-export interface IServiceRejectData {
+export interface ISignalRejectData {
   /**
    * Status code for response. Either a `4xx` or `5xx` code.
    */
@@ -490,24 +494,17 @@ export interface IServiceRejectData {
   reason?: string;
 }
 
-export interface IServiceErrorData<T = undefined, U = undefined> {
-  message: string;
-  errorCode: ServiceErrorCode;
-  want?: U;
-  have?: T;
-}
-
 const ValidServiceNames = new Set(['receive-pack', 'upload-pack']);
 
-const ServiceMap: Map<ServiceType, RegExp> = new Map([
-  [ServiceType.Advertise, /^\/?(.*?)\/(info\/refs\?service=git-(.*))$/],
-  [ServiceType.Pull, /^\/?(.*?)\/(git-(upload-pack))$/],
-  [ServiceType.Push, /^\/?(.*?)\/(git-(receive-pack))$/],
+const ServiceMap: Map<RequestType, RegExp> = new Map([
+  [RequestType.Advertise, /^\/?(.*?)\/(info\/refs\?service=git-(.*))$/],
+  [RequestType.Pull, /^\/?(.*?)\/(git-(upload-pack))$/],
+  [RequestType.Push, /^\/?(.*?)\/(git-(receive-pack))$/],
 ]);
 
-const MetadataMap = new Map<ServiceType, (service: Service) => (buffer: Buffer) => any>([
+const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) => any>([
   [
-    ServiceType.Push,
+    RequestType.Push,
     (service) => {
       const regex =
       /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
@@ -544,7 +541,7 @@ const MetadataMap = new Map<ServiceType, (service: Service) => (buffer: Buffer) 
     },
   ],
   [
-    ServiceType.Pull,
+    RequestType.Pull,
     (service) => {
       const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
       return (buffer) => {

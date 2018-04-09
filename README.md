@@ -62,7 +62,7 @@ package changed, so did the name. If you're interested, the other package can be
 
 import http from "http";
 import HttpStatus from "http-status";
-import { ServiceType, Service } from "git-service";
+import { RequestType, Service } from "git-service";
 import { createDriver, createDriverCache } from "git-service-basic-drivers";
 
 let counter = 0;
@@ -105,7 +105,7 @@ const server = http.createServer(async function(request, response) {
     console.error(err, id);
   });
 
-  console.log(`${id} - SERVICE - ${ServiceType[service.type]} - ${service.repository}`)
+  console.log(`${id} - SERVICE - ${RequestType[service.type]} - ${service.repository}`)
 
   service.inform("Served from package 'git-service' found at npmjs.com");
 
@@ -142,15 +142,15 @@ function safeParseInt(source, default_value) {
 - `function`
   - [checkIfValidServiceDriver](.)
 - `enum`
-  - [ServiceType](.)
+  - [RequestType](.)
   - [ServiceErrorCode](.)
   - [RequestStatus](.)
 - `interface`
   - [IRequestPullData](.)
   - [IRequestPushData](.)
   - [IServiceDriver](.)
-  - [IServiceAcceptData](.)
-  - [IServiceRejectData](.)
+  - [ISignalAcceptData](.)
+  - [ISignalRejectData](.)
 
 ### Flags
 
@@ -205,8 +205,8 @@ arguments.
   Service driver.
 - `type`
   *[read-only]*
-  \<[ServiceType](.)>
-  Requested service. Defaults to [`ServiceType.Unknown`](.).
+  \<[RequestType](.)>
+  Requested service. Defaults to [`RequestType.Unknown`](.).
 - `metadata`
   *[read-only]*
   \<[Array](.)\<[IRequestPullData](.)
@@ -274,17 +274,7 @@ arguments.
   \<[Signal](https://www.npmjs.com/package/micro-signals#signal)\<[Error](.)>>
   Dispatched when anything internal goes wrong with thrown error.
 
-### **ServiceError** (class)
-
-Dispatched on service if any abnormaltis araise. Extends inbuilt [Error](.).
-
-#### Additional properties
-
-- `errorCode`
-  \<[ServiceErrorCode](.)>
-  Error code
-
-### **ServiceType** (enum)
+### **RequestType** (enum)
 
 #### Values
 
@@ -301,16 +291,6 @@ Dispatched on service if any abnormaltis araise. Extends inbuilt [Error](.).
 - `Accepted` = 1
 - `Rejected` = 2
 - `AcceptedButRejected` = 3
-
-### **ServiceErrorCode** (enum)
-
-#### Values
-
-- `InvalidContentType`
-- `InvalidMethod`
-- `InvalidServiceName`
-- `RepositoryCannotBeEmpty`
-- `UnknownError`
 
 ### **IRequestPullData** (interface)
 
@@ -379,7 +359,7 @@ Abstract driver to work with git.
     \<[String](.)>
     Repository to check.
 - `get`
-  \<[Promise](.)\<[IServiceAcceptData](.)>>
+  \<[Promise](.)\<[ISignalAcceptData](.)>>
   Process service indicated by hint, and return data from git.
   - `repository`
     \<[String](.)>
@@ -411,7 +391,7 @@ Abstract driver to work with git.
     \<[String](.)>
     Repository to init.
 
-### **IServiceAcceptData** (interface)
+### **ISignalAcceptData** (interface)
 
 Contains data needed to fufill request.
 
@@ -427,7 +407,7 @@ Contains data needed to fufill request.
   \<[Readable](.)>
   Body for response.
 
-### **IServiceRejectData** (interface)
+### **ISignalRejectData** (interface)
 
 Contains data needed to reject request.
 

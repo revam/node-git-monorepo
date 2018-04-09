@@ -1,8 +1,8 @@
 import { Readable, Transform } from "stream";
 
-export function createPacketInspectStream(reader: (packet: Buffer) => any): [Transform, Promise<void>] {
-  if (typeof reader !== 'function') {
-    throw new TypeError(`Invalid arguement "reader". Expected type "function", got "${typeof reader}"`);
+export function createPacketInspectStream(forEach: (packet: Buffer) => any): [Transform, Promise<void>] {
+  if (typeof forEach !== 'function') {
+    throw new TypeError(`Invalid arguement "reader". Expected type "function", got "${typeof forEach}"`);
   }
   let ready = false;
   let underflow: Buffer;
@@ -36,7 +36,7 @@ export function createPacketInspectStream(reader: (packet: Buffer) => any): [Tra
                   underflow = result.value;
                 }
               } else {
-                reader(result.value);
+                forEach(result.value);
               }
             }
           } while (!result.done);

@@ -38,11 +38,13 @@ package changed, so did the name. If you're interested, the other package can be
 - [x] can inform client (inform client)
 - [ ] check access per service per repository (planned)
 
-## Framework spesific packages (sub-packages)
+## Related packages
 
+- [git-service-driver](.)
 - [git-service-http](.)
+- [git-service-express](.)
 - [git-service-koa](.)
-- [git-service-express-middleware](.)
+- [git-packet-streams](.)
 
 ## Simular projects
 

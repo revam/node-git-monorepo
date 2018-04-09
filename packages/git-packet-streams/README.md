@@ -12,6 +12,14 @@ npm install --save git-packet-streams
 
 This package contains two helper functions to work with buffered (git) packet streams.
 
+## Related packages
+
+- [git-service](.)
+- [git-service-driver](.)
+- [git-service-http](.)
+- [git-service-express](.)
+- [git-service-koa](.)
+
 ## Usage
 
 ```js

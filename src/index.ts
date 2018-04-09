@@ -6,11 +6,24 @@ import fetch, { Headers } from 'node-fetch';
 import { Readable, Transform } from 'stream';
 import { promisify } from 'util';
 import { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from './constants';
-import { isDriver } from './driver';
 
 export { Headers } from 'node-fetch';
 export { RequestStatus, ServiceErrorCode, ServiceType, SymbolSource } from "./constants";
-export { createDriver, createLocalDriver, createHttpDriver, createDriverCache, isDriver } from './driver';
+
+/**
+ * Checks if candidateDriver is a valid driver.
+ * @param candidateDriver Driver candidate
+ */
+export function checkIfValidServiceDriver(candidateDriver: any): boolean {
+  return typeof candidateDriver === 'object' &&
+    'origin' in candidateDriver && typeof candidateDriver.origin === 'string' &&
+    'access' in candidateDriver && typeof candidateDriver.access === 'function' &&
+    'exists' in candidateDriver && typeof candidateDriver.exists === 'function' &&
+    'empty' in candidateDriver && typeof candidateDriver.empty === 'function' &&
+    'init' in candidateDriver && typeof candidateDriver.init === 'function' &&
+    'hint' in candidateDriver && typeof candidateDriver.hint === 'function' &&
+    'get' in candidateDriver && typeof candidateDriver.get === 'function';
+}
 
 /**
  * High-level git service.
@@ -87,7 +100,7 @@ export class Service {
     headers: Headers | Array<[string, string]> | {[index: string]: string},
     input: Readable,
   ) {
-    if (!isDriver(driver)) {
+    if (!checkIfValidServiceDriver(driver)) {
       throw new TypeError('argument `driver` must be a valid service driver interface');
     }
 
@@ -399,10 +412,6 @@ export interface IRequestPushData {
  */
 export interface IServiceDriver {
   /**
-   * Driver cached responses. Optional.
-   */
-  readonly cache?: IServiceDriverCache;
-  /**
    * Either an URL or absolute path leading to repositories.
    */
   readonly origin: string;
@@ -443,32 +452,6 @@ export interface IServiceDriver {
    * @param repository Repository to init
    */
   init(repository: string): Promise<boolean>;
-}
-
-/**
- * Service driver cache interface. Stores responses from IServiceDriver.
- */
-export interface IServiceDriverCache {
-  /**
-   * Clears all cached data.
-   */
-  clear();
-  /**
-   * Deletes an entry from cache.
-   */
-  delete(command: string, origin: string, repository: string): boolean;
-  /**
-   * Gets an entry from cache.
-   */
-  get<T>(command: string, origin: string, repository: string): T;
-  /**
-   * Checks if an entry exists in cache.
-   */
-  has(command: string, origin: string, repository: string): boolean;
-  /**
-   * Sets value for entry in cache.
-   */
-  set<T>(command: string, origin: string, repository: string, value: T);
 }
 
 /**

@@ -1,19 +1,34 @@
 import { ChildProcess, spawn } from "child_process";
 import { createPacketReadableStream } from "git-packet-streams";
+import { IServiceDriver, ISignalAcceptData } from "git-service";
 import fetch, { Headers } from "node-fetch";
 import { join, normalize, resolve } from "path";
 import { Readable } from "stream";
-import { IServiceAcceptData, IServiceDriver, IServiceDriverCache, ServiceError } from ".";
-import { ServiceErrorCode } from "./constants";
 
-export function isDriver(driver: any): boolean {
-  return 'origin' in driver && typeof driver.origin === 'string' &&
-         'access' in driver && typeof driver.access === 'function' &&
-         'exists' in driver && typeof driver.exists === 'function' &&
-         'empty' in driver && typeof driver.empty === 'function' &&
-         'init' in driver && typeof driver.init === 'function' &&
-         'hint' in driver && typeof driver.hint === 'function' &&
-         'get' in driver && typeof driver.get === 'function';
+/**
+ * Service driver cache interface. Stores responses from IServiceDriver.
+ */
+export interface IServiceDriverCache {
+  /**
+   * Clears all cached data.
+   */
+  clear(): Promise<void>;
+  /**
+   * Deletes an entry from cache.
+   */
+  delete(key: string): Promise<boolean>;
+  /**
+   * Gets an entry from cache.
+   */
+  get<T>(key: string, value?: T): Promise<T>;
+  /**
+   * Checks if a valid entry exists in cache.
+   */
+  has(key: string): Promise<boolean>;
+  /**
+   * Sets value for entry in cache.
+   */
+  set<T>(key: string, value: T, expireTimeout?: number): Promise<void>;
 }
 
 export function createDriver(origin: string = './repos', cache?: IServiceDriverCache): IServiceDriver {
@@ -24,13 +39,12 @@ export function createDriver(origin: string = './repos', cache?: IServiceDriverC
       origin = origin.slice(7);
     }
     origin = resolve(normalize(origin));
-    return createLocalDriver(origin, cache);
+    return createFileSystemDriver(origin, cache);
   }
 }
 
-export function createLocalDriver(origin: string, cache?: IServiceDriverCache): IServiceDriver {
+export function createFileSystemDriver(origin: string, cache?: IServiceDriverCache): IServiceDriver {
   return {
-    get cache() { return cache; },
     get origin() { return origin; },
     access(repository, hint) { return accessLocal(origin, repository, hint); },
     empty(repository) { return empty(cache, origin, repository); },
@@ -45,7 +59,6 @@ export function createLocalDriver(origin: string, cache?: IServiceDriverCache): 
 
 export function createHttpDriver(origin: string, cache?: IServiceDriverCache): IServiceDriver {
   return {
-    get cache() { return cache; },
     get origin() { return origin; },
     access(repository, hint) { return accessHttp(origin, repository, hint); },
     empty(repository) { return empty(cache, origin, repository); },
@@ -61,11 +74,11 @@ export function createHttpDriver(origin: string, cache?: IServiceDriverCache): I
 export function createDriverCache(): IServiceDriverCache {
   const map = new Map<string, any>();
   return {
-    clear() { return map.clear(); },
-    delete(...args) { return map.delete(args.join(';')); },
-    has(...args) { return map.has(args.join(';')); },
-    get(...args) { return map.get(args.join(';')); },
-    set(c, o, r, v) { return map.set(`${c};${o};${r}`, v); },
+    async clear() { return map.clear(); },
+    async delete(key) { return map.delete(key); },
+    async has(key) { return map.has(key); },
+    async get(key) { return map.get(key); },
+    async set(key, value) { map.set(key, value); },
   };
 }
 
@@ -78,26 +91,28 @@ function hintHttp(...hints: string[]): string {
 }
 
 async function exists(cache: IServiceDriverCache, origin: string, repository: string): Promise<boolean> {
-  if (cache && cache.has('exists', origin, repository)) {
-    return cache.get('exists', origin, repository);
+  const key = `${origin};${repository};exists`;
+  if (cache && cache.has(key)) {
+    return cache.get<boolean>(key);
   }
 
   const exitCode = await lsRemote(origin, repository);
   if (cache) {
-    cache.set('exists', origin, repository, exitCode);
+    cache.set(key, exitCode);
   }
 
   return exitCode === 0 || exitCode === 2;
 }
 
 async function empty(cache: IServiceDriverCache, origin: string, repository: string): Promise<boolean> {
-  if (cache && cache.has('exists', origin, repository)) {
-    return cache.get('exists', origin, repository);
+  const key = `${origin};${repository};exists`;
+  if (cache && cache.has(key)) {
+    return cache.get<boolean>(key);
   }
 
   const exitCode = await lsRemote(origin, repository);
   if (cache) {
-    cache.set('exists', origin, repository, exitCode);
+    cache.set(key, exitCode);
   }
 
   return exitCode === 2;
@@ -129,7 +144,7 @@ const service_headers = {
 };
 
 async function getLocal(origin: string, repository: string, command: string,
-                        input?: Readable, messages?: Buffer[]): Promise<IServiceAcceptData> {
+                        input?: Readable, messages?: Buffer[]): Promise<ISignalAcceptData> {
   const headers = new Headers();
 
   const fullpath = `${origin}/${repository}`;
@@ -142,10 +157,7 @@ async function getLocal(origin: string, repository: string, command: string,
   const {exitCode, stdout, stderr} = await exec(child);
 
   if (exitCode !== 0) {
-    throw new ServiceError({
-      errorCode: map_error(stderr),
-      message: 'Failed to execute git',
-    });
+    throw new Error('Failed to execute git');
   }
 
   const packets = input ? [stdout, ...messages] : [service_headers[command], stdout];
@@ -156,7 +168,7 @@ async function getLocal(origin: string, repository: string, command: string,
 }
 
 async function getHttp(origin: string, repository: string, path: string, in_headers: Headers,
-                       input?: Readable, messages?: Buffer[]): Promise<IServiceAcceptData> {
+                       input?: Readable, messages?: Buffer[]): Promise<ISignalAcceptData> {
   const url = `${origin}/${repository}/${path}`;
 
   // Ensure we have no encoding from backend
@@ -173,10 +185,6 @@ async function getHttp(origin: string, repository: string, path: string, in_head
   }
 
   return { body, headers: response.headers, status: response.status };
-}
-
-function map_error(stderr: string): ServiceErrorCode {
-  return ServiceErrorCode.UnknownError;
 }
 
 function count_bytes(buffers: Buffer[]) {

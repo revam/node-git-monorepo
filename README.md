@@ -62,7 +62,8 @@ package changed, so did the name. If you're interested, the other package can be
 
 import http from "http";
 import HttpStatus from "http-status";
-import { createDriver, createDriverCache, Service, ServiceType } from "git-service";
+import { ServiceType, Service } from "git-service";
+import { createDriver, createDriverCache } from "git-service-basic-drivers";
 
 let counter = 0;
 const { ORIGIN_ENV: origin = "./repos", PORT } = process.env;
@@ -128,37 +129,36 @@ function safeParseInt(source, default_value) {
 
 ## Public API
 
-### Flags explained
+**List of related apis** (grouped by type):
 
-In the api you will find that some arguments/properties/methods are marked with one or more flags. Below is a list explaining what does flags mean.
+- `class`
+  - [Header](.) ([node-fetch](https://www.npmjs.com/package/node-fetch))
+
+**List of exports** (grouped by type):
+
+- `class`
+  - [Service](.)
+  - [ServiceError](.)
+- `function`
+  - [checkIfValidServiceDriver](.)
+- `enum`
+  - [ServiceType](.)
+  - [ServiceErrorCode](.)
+  - [RequestStatus](.)
+- `interface`
+  - [IRequestPullData](.)
+  - [IRequestPushData](.)
+  - [IServiceDriver](.)
+  - [IServiceAcceptData](.)
+  - [IServiceRejectData](.)
+
+### Flags
+
+In the api reference you will find some arguments/properties/methods are marked with one or more flags. Below is a list explaining what those flags mean.
 
 - *[optional]* - Any argument/property marked with this flag can be omitted.
 
 - *[read-only]* - Any property marked with this flag can only be read, and not written to.
-
-### Index
-
-API grouped by relevance
-
-- `Service`
-  - [Service](.)
-  - [ServiceType](.)
-  - [RequestStatus](.)
-  - [IServiceAcceptData](.)
-  - [IServiceRejectData](.)
-  - [IRequestPullData](.)
-  - [IRequestPushData](.)
-- `IServiceDriver`
-  - [IServiceDriver](.)
-  - [IServiceDriverCache](.)
-  - [createDriver](.)
-  - [createLocalDriver](.)
-  - [createHttpDriver](.)
-  - [createDriverCache](.)
-  - [isValidDriver](.)
-- `ServiceError`
-  - [ServiceError](.)
-  - [ServiceErrorCode](.)
 
 ### **Service** (class)
 
@@ -177,7 +177,7 @@ arguments.
   Upper-cased HTTP method for request.
 - `url_fragment`
   \<[String](.)>
-  The full URL or tail of the url. Will extract repository from here if possible.
+  A fragement of or the full url. Will extract repository from here if possible.
 - `headers`
   \<[Headers](.)
   | [Array](.)
@@ -263,15 +263,15 @@ arguments.
 #### Signals
 
 - `onAccept`
-  \<[Signal](https://www.npmjs.com/package/micro-signals#signal)>
-  Dispatched when request is accepted with payload of type [`IServiceAcceptData`](.).
+  \<[Signal](https://www.npmjs.com/package/micro-signals#signal)\<[ISignalAcceptData](.)>>
+  Dispatched when request is accepted.
 
 - `onReject`
-  \<[Signal](https://www.npmjs.com/package/micro-signals#signal)>
-  Dispatched when request is rejected with payload of type [`IServiceRejectData`](.).
+  \<[Signal](https://www.npmjs.com/package/micro-signals#signal)\<[ISignalRejectData](.)>>
+  Dispatched when request is rejected.
 
 - `onError`
-  \<[Signal](https://www.npmjs.com/package/micro-signals#signal)>
+  \<[Signal](https://www.npmjs.com/package/micro-signals#signal)\<[Error](.)>>
   Dispatched when anything internal goes wrong with thrown error.
 
 ### **ServiceError** (class)
@@ -350,11 +350,6 @@ Abstract driver to work with git.
 
 #### Properties
 
-- `cache`
-  *[read-only]*
-  *[optional]*
-  \<[IServiceDriverCache](.)>
-  Cached responses. Optional for driver to have.
 - `origin`
   *[read-only]*
   \<[String](.)>
@@ -416,67 +411,6 @@ Abstract driver to work with git.
     \<[String](.)>
     Repository to init.
 
-### **IServiceDriverCache** (interface)
-
-Service driver cache interface. Stores responses from IServiceDriver.
-
-#### Methods
-
-- `clear`
-  \<[void](.)>
-  Clears all cached data.
-- `delete`
-  \<[Boolean](.)>
-  Deletes an entry from cache.
-  - `command`
-    \<[String](.)>
-    Command
-  - `origin`
-    \<[String](.)>
-    Origin
-  - `repository`
-    \<[String](.)>
-    Repository
-- `get`
-  \<`T`>
-  Gets an entry of type `T` from cache.
-  - `command`
-    \<[String](.)>
-    Command
-  - `origin`
-    \<[String](.)>
-    Origin
-  - `repository`
-    \<[String](.)>
-    Repository
-- `has`
-  \<[Boolean](.)>
-  Checks if an entry exists in cache.
-  - `command`
-    \<[String](.)>
-    Command
-  - `origin`
-    \<[String](.)>
-    Origin
-  - `repository`
-    \<[String](.)>
-    Repository
-- `set`
-  \<[void](.)>
-  Sets value for entry in cache.
-  - `command`
-    \<[String](.)>
-    Command
-  - `origin`
-    \<[String](.)>
-    Origin
-  - `repository`
-    \<[String](.)>
-    Repository
-  - `value`
-    \<`T`>
-    Value of type `T`.
-
 ### **IServiceAcceptData** (interface)
 
 Contains data needed to fufill request.
@@ -509,56 +443,6 @@ Contains data needed to reject request.
   *[optional]*
   \<[String](.)>
   Optional reason for rejection.
-
-### **createDriver** (function)
-
-Creates and returns a driver fit for origin. Also see [IServiceDriver](.).
-
-#### Arguments
-
-- `origin`
-  \<[String](.)>
-  Either an url or a path.
-
-- `cache`
-  *[optional]*
-  \<[IServiceDriverCache](.)>
-  Cache to use with driver.
-
-### **createLocalDriver** (function)
-
-Creates a service driver for the filesystem.
-
-#### Arguments
-
-- `origin`
-  \<[String](.)>
-  A relative or absolute path. Path will be resolved from current working directory if
-  relative.
-
-- `cache`
-  *[optional]*
-  \<[IServiceDriverCache](.)>
-  Cache to use with driver.
-
-### **createHttpDriver** (function)
-
-Creates a service driver forwarding to a http(s) server.
-
-#### Arguments
-
-- `origin`
-  \<[String](.)>
-  An url using the http(s) protocol.
-
-- `cache`
-  *[optional]*
-  \<[IServiceDriverCache](.)>
-  Cache to use with driver.
-
-### **createDriverCache** (function)
-
-Creates an cache for one or more service drivers.
 
 ## Typescript
 

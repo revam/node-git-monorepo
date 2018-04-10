@@ -1,17 +1,24 @@
-# git-service-drivers
+# git-service-driver
 
-Basic git service drivers
+Basic git service driver
 
 ## Install
 
 ```sh
-npm install --save git-service-drivers
+npm install --save git-service-driver
 ```
 
 ## What is this?
 
 This package contains some helpers to create drivers compatible with the
 [IServiceDriver](.) interface.
+
+## Related packages
+
+- [git-packet-streams](.)
+- [git-service](.)
+- [git-service-express](.)
+- [git-service-koa](.)
 
 ## Usage
 

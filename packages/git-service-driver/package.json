@@ -1,7 +1,7 @@
 {
-  "name": "git-service-drivers",
+  "name": "git-service-driver",
   "version": "1.0.0",
-  "description": "Basic git service drivers",
+  "description": "Basic git service driver",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "directories": {

@@ -11,6 +11,7 @@
     "no-parameter-properties": false,
     "no-parameter-reassignment": false,
     "no-unused-variable": false,
+    "no-console": false,
     // TODO: Enable stricter options for these
     "comment-format": [
         true,
@@ -54,9 +55,6 @@
     "max-classes-per-file": false,
     "max-line-length": [true, 120],
     "member-ordering": true,
-    "no-console": {
-      "options": ["log"]
-    },
     "no-switch-case-fall-through": true,
     "strict-boolean-expressions": [true, "allow-boolean-or-undefined"],
     "switch-default": false,

@@ -22,13 +22,6 @@ export enum RequestStatus {
   AcceptedButRejected,
 }
 
-export enum ServiceErrorCode {
-  InvalidMethod = 'InvalidMethod',
-  InvalidServiceName = 'InvalidServiceName',
-  InvalidContentType = 'InvalidContentType',
-  UnknownError = 'UnknownError',
-}
-
 /**
  * unique source symbol
  */

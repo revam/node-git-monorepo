@@ -16,7 +16,6 @@ This package contains two helper functions to work with buffered (git) packet st
 
 - [git-service](.)
 - [git-service-driver](.)
-- [git-service-http](.)
 - [git-service-express](.)
 - [git-service-koa](.)
 

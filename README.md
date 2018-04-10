@@ -41,8 +41,7 @@ package changed, so did the name. If you're interested, the other package can be
 ## Related packages
 
 - [git-service-driver](.)
-- [git-service-http](.)
-- [git-service-express](.)
+- [git-service-connect](.)
 - [git-service-koa](.)
 - [git-packet-streams](.)
 

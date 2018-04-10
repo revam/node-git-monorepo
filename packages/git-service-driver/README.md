@@ -17,7 +17,7 @@ This package contains some helpers to create drivers compatible with the
 
 - [git-packet-streams](.)
 - [git-service](.)
-- [git-service-express](.)
+- [git-service-http](.)
 - [git-service-koa](.)
 
 ## Usage

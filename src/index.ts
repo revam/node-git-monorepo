@@ -114,7 +114,7 @@ export class Service {
     driver: IServiceDriver,
     method: string,
     url_fragment: string,
-    headers: Headers | Array<[string, string]> | {[index: string]: string},
+    headers: Headers | Array<[string, string]> | {[index: string]: string | string[]},
     input: Readable,
   ) {
     if (!checkIfValidServiceDriver(driver)) {
@@ -141,8 +141,26 @@ export class Service {
       throw new TypeError('argument `input` must be s sub-instance of stream.Readable');
     }
 
+    // Workaround for string array headers
+    const multi_headers: Array<[string, string[]]> = [];
+    if (!(headers instanceof Headers || headers instanceof Array)) {
+      (Reflect.ownKeys(headers) as string[]).filter((h) => {
+        if (headers[h] instanceof Array) {
+          multi_headers.push([h, headers[h] as string[]]);
+          Reflect.deleteProperty(headers, h);
+        }
+      });
+    }
     // @ts-ignore incomplete definition file for package "node-fetch"
     this.__headers = new Headers(headers);
+    // Workaround for string array headers
+    if (multi_headers.length) {
+      for (const [header, values] of multi_headers) {
+        for (const value of values) {
+          this.__headers.append(header, value);
+        }
+      }
+    }
     this.__messages = [];
     this.__status = RequestStatus.Pending;
     this.__ready = false;

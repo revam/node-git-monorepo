@@ -8,22 +8,52 @@ import { promisify } from 'util';
 
 export { Headers } from 'node-fetch';
 
+/**
+ * Request service type.
+ */
 export enum RequestType {
+  /**
+   * Indicate an unknown service request.
+   */
   Unknown,
+  /**
+   * Indicate a request for advertisement.
+   */
   Advertise,
+  /**
+   * Indicate a pull service request.
+   */
   Pull,
+  /**
+   * Indicate a push service request.
+   */
   Push,
 }
 
+/**
+ * Request service status.
+ */
 export enum RequestStatus {
+  /**
+   * Indicate the service is still pending.
+   */
   Pending,
+  /**
+   * Indicate the service was accepted.
+   */
   Accepted,
+  /**
+   * Indocate the service was rejected.
+   */
   Rejected,
+  /**
+   * Indicate the service was accepted, but result contained a rejection code and was thus rejected.
+   */
   AcceptedButRejected,
 }
 
 /**
- * unique source symbol
+ * Unique symbol used for source object (input) in IService implementation (Service class)
  */
 export const SymbolSource = Symbol('source');
 

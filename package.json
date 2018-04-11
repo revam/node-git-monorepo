@@ -60,6 +60,10 @@
     "transform": {
       "^.+\\.tsx?$": "ts-jest"
     },
+    "testPathIgnorePatterns": [
+      "node_modules",
+      "packages"
+    ],
     "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
     "moduleFileExtensions": [
       "ts",

@@ -6,8 +6,6 @@ import { Headers } from 'node-fetch';
 import { Readable, Transform } from 'stream';
 import { promisify } from 'util';
 
-export { Headers } from 'node-fetch';
-
 /**
  * Request service type.
  */

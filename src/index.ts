@@ -71,54 +71,20 @@ export function checkIfValidServiceDriver(candidateDriver: any): boolean {
 }
 
 /**
- * High-level git service.
+ * Implemented high-level git service.
  */
-export class Service {
-  /**
-   * Resolves when metadata is ready.
-   */
+export class Service implements IService {
   public readonly awaitReady: Promise<void>;
-  /**
-   * Requested capebilities client support/want.
-   */
   public readonly capabilities: Map<string, string>;
-  /**
-   * Low-level service driver
-   */
   public readonly driver: IServiceDriver;
-  /**
-   * Request metadata, such as ref or commit info.
-   */
   public readonly metadata: Array<IRequestPullData | IRequestPushData>;
-  /**
-   *
-   */
   public readonly onAccept: Signal<ISignalAcceptData>;
-  /**
-   *
-   */
   public readonly onReject: Signal<ISignalRejectData>;
-  /**
-   *
-   */
   public readonly onError: Signal<any>;
-  /**
-   * True if input is parsed.
-   */
   public readonly ready: boolean;
-  /**
-   * Request status.
-   */
   public readonly status: RequestStatus;
-  /**
-   * Requested service
-   */
   public readonly type: RequestType;
-  /**
-   * Repository to work with.
-   */
   public repository: string;
-
   private [SymbolSource]: Transform;
   private __headers: Headers;
   private __hint: string;
@@ -304,9 +270,6 @@ export class Service {
     }
   }
 
-  /**
-   * Accepts and process request for service.
-   */
   public async accept(): Promise<void> {
     if (this.__status !== RequestStatus.Pending) {
       return;
@@ -340,11 +303,6 @@ export class Service {
     }
   }
 
-  /**
-   * Rejects service with status code and an optional reason. Only accepts codes above or equal 400.
-   * @param status Http status code
-   * @param reason Reason for rejection
-   */
   public async reject(status?: number, reason?: string): Promise<void> {
     if (this.__status !== RequestStatus.Pending) {
       return;
@@ -363,12 +321,9 @@ export class Service {
     this.onReject.dispatch({reason, status, headers});
   }
 
-  /**
-   * Check if repository exists
-   */
-  public async exists(): Promise<boolean> {
+  public async exists(ignoreEmpty: boolean = false): Promise<boolean> {
     try {
-      return await this.driver.exists(this.repository);
+      return await this.driver.exists(this.repository, ignoreEmpty);
     } catch (err) {
       this.onError.dispatch(err);
 
@@ -376,16 +331,27 @@ export class Service {
     }
   }
 
-  /**
-   * Check access to service
-   */
+  public async enabled(): Promise<boolean> {
+    if (this.type === RequestType.Unknown) {
+      return false;
+    }
+
+    try {
+      return await this.driver.enabled(this.repository, this.__hint);
+    } catch (err) {
+      this.onError.dispatch(err);
+
+      return false;
+    }
+  }
+
   public async access(): Promise<boolean> {
     if (this.type === RequestType.Unknown) {
       return false;
     }
 
     try {
-      return await this.driver.access(this.repository, this.__hint);
+      return await this.driver.access(this.repository, this.__hint, this.__headers);
     } catch (err) {
       this.onError.dispatch(err);
 
@@ -393,9 +359,6 @@ export class Service {
     }
   }
 
-  /**
-   * Init repository if not exists. Return value indicate a new repo.
-   */
   public async init(): Promise<boolean> {
     try {
       return await this.driver.init(this.repository);
@@ -406,15 +369,8 @@ export class Service {
     }
   }
 
-  /**
-   * Send messages to client. Messages appear in console.
-   * Messages are only sent if service is accepted.
-   * @param messages Messages to show
-   */
-  public inform(message: string | Buffer): this;
-  public inform(...messages: Array<string | Buffer>): this {
-    messages.forEach((message) => this.__messages.push(encode(message)));
-    return this;
+  public inform(message: string | Buffer): void {
+    this.__messages.push(encode(message));
   }
 }
 
@@ -445,40 +401,42 @@ export interface IRequestPushData {
    */
   commits: [string, string];
   /**
-   * Reference to work with
+   * Reference name
    */
   refname: string;
 }
 
 /**
- * Abstract driver to work with git.
+ * Lov-level service driver for working with git.
  */
 export interface IServiceDriver {
   /**
-   * Either an URL or absolute path leading to repositories.
+   * Repositories origin.
    */
   readonly origin: string;
   /**
-   * Checks access to service indicated by hint for repository at origin.
+   * Checks access to service indicated by hint authenticated with headers for repository at origin.
    * @param repository Repository to check.
    * @param hint Hint indicating service to check.
+   * @param headers Headers to check for access rights
    */
-  access(repository: string, hint: string): Promise<boolean>;
+  access(repository: string, hint: string, headers: Headers): Promise<boolean>;
   /**
-   * Check if repository exists and is empty at origin.
+   * Checks if service is enabled.
+   * @param repository Repository to check.
+   * @param hint Hint indication service to check.
+   */
+  enabled(repository: string, hint: string): Promise<boolean>;
+  /**
+   * Check if repository exists at origin. Can optionaly ignore empty repositories.
    * @param repository Repository to check.
    */
-  empty(repository: string): Promise<boolean>;
-  /**
-   * Check if repository exists at origin.
-   * @param repository Repository to check.
-   */
-  exists(repository: string): Promise<boolean>;
+  exists(repository: string, ignoreEmpty?: boolean): Promise<boolean>;
   /**
    * Process service indicated by hint, and return data from git.
-   * @param repository Repository to work with
+   * @param repository Repository to get
    * @param hint Service hint
-   * @param headers Http headers to append if sent over http(s)
+   * @param headers HTTP headers received with request
    * @param input Input (processed request body)
    * @param messages Buffered messages to client
    */
@@ -495,6 +453,114 @@ export interface IServiceDriver {
    * @param repository Repository to init
    */
   init(repository: string): Promise<boolean>;
+}
+
+/**
+ * High-level git service.
+ */
+export interface IService {
+  /**
+   * Resolves when metadata is ready.
+   */
+  readonly awaitReady: Promise<void>;
+  /**
+   * Requested capebilities client support/want.
+   */
+  readonly capabilities: Map<string, string>;
+  /**
+   * Low-level service driver
+   */
+  readonly driver: IServiceDriver;
+  /**
+   * Request metadata, such as ref or commit info.
+   */
+  readonly metadata: Array<IRequestPullData | IRequestPushData>;
+  /**
+   * Dispatched if request is accepted.
+   */
+  readonly onAccept: ISignal<ISignalAcceptData>;
+  /**
+   * Dispatched if request is rejected.
+   */
+  readonly onReject: ISignal<ISignalRejectData>;
+  /**
+   * Dispatched when any error ocurr. Dispatched payload may be anything.
+   */
+  readonly onError: ISignal<any>;
+  /**
+   * Determine if all metadata is parsed and ready for use.
+   */
+  readonly ready: boolean;
+  /**
+   * Request status.
+   */
+  readonly status: RequestStatus;
+  /**
+   * Requested service type.
+   */
+  readonly type: RequestType;
+  /**
+   * Repository path to use.
+   */
+  repository: string;
+  /**
+   * Accepts and process request for service.
+   */
+  accept(): Promise<void>;
+  /**
+   * Rejects service with status code and an optional reason. Only accepts codes above or equal 400.
+   * @param status 4xx or 5xx http status code with rejection. Defaults to `403`.
+   * @param reason Reason for rejection
+   */
+  reject(status?: number, reason?: string): Promise<void>;
+  /**
+   * Check if repository exists. Can optionaly ignore empty repositories.
+   * @param ignoreEmpty Should treat empty repositories as nonexistant.
+   */
+  exists(ignoreEmpty?: boolean): Promise<boolean>;
+  /**
+   * Check if service is enabled. (can still atempt a forcefull use of service)
+   */
+  enabled(): Promise<boolean>;
+  /**
+   * Checks access to service as indicated by driver.
+   */
+  access(): Promise<boolean>;
+  /**
+   * Initialise a new repository, but only if nonexistant. Return value indicate a new repo.
+   */
+  init(): Promise<boolean>;
+  /**
+   * Inform client of message, but only if service is accepted.
+   * @param message Messages to inform
+   */
+  inform(message: string | Buffer): void;
+}
+
+/**
+ * Simple signal interface, compatible with most implementions.
+ */
+export interface ISignal<T> {
+  /**
+   * Adds a listener that listens till removed.
+   * @param listener
+   */
+  add(listener: (payload: T) => any): void;
+  /**
+   * Adds a listener that only listens once.
+   * @param listener
+   */
+  addOnce(listener: (payload: T) => any): void;
+  /**
+   * Dispatches payload to all listeners.
+   * @param payload
+   */
+  dispatch(payload: T): void;
+  /**
+   * Removes a listener.
+   * @param listener
+   */
+  remove(listener: (payload: T) => any): void;
 }
 
 /**

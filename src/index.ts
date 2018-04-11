@@ -56,6 +56,39 @@ export enum RequestStatus {
 export const SymbolSource = Symbol('source');
 
 /**
+ * Default business logic following the spec. as defined in the the technical documentation.
+ *
+ * See https://github.com/git/git/blob/master/Documentation/technical/http-protocol.txt for more info.
+ * @param service Service instance
+ * @param initNonexistant Create and initialise repository when it does not exist
+ */
+export async function defaultBusinessLogic(service: IService, initNonexistant: boolean = false): Promise<void> {
+  // don't exist? -> Not found
+  if (! await service.exists()) {
+    if (initNonexistant) {
+      if (! await service.init()) {
+        return service.reject(500, "Failed to initialise new repository");
+      }
+    } else {
+      return service.reject(404);
+    }
+  }
+
+  // no access? -> Unauthorized
+  if (! await service.access()) {
+    return service.reject(401);
+  }
+
+  // not enabled? -> Forbidden
+  if (! await service.enabled()) {
+    return service.reject(403);
+  }
+
+  // accept or reject request
+  return service.accept();
+}
+
+/**
  * Checks if candidateDriver is a valid driver.
  * @param candidateDriver Driver candidate
  */

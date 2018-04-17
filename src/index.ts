@@ -665,7 +665,7 @@ const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) 
           let type: 'create' | 'delete' | 'update';
           if ('0000000000000000000000000000000000000000' === results[1]) {
             type = 'create';
-          } else if ('0000000000000000000000000000000000000000' === results[1]) {
+          } else if ('0000000000000000000000000000000000000000' === results[2]) {
             type = 'delete';
           } else {
             type = 'update';

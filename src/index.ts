@@ -73,30 +73,39 @@ export enum RequestStatus {
  * @param service Service instance
  * @param initNonexistant Create and initialise repository when it does not exist
  */
-export async function defaultBusinessLogic(service: IService, initNonexistant: boolean = false): Promise<void> {
+export async function defaultBusinessLogic(
+  service: IService,
+  initNonexistant: boolean = false,
+): Promise<ISignalAcceptData | ISignalRejectData> {
+  const promise = new Promise<ISignalAcceptData | ISignalRejectData>((resolve, reject) => {
+    service.onError.addOnce(reject);
+    service.onAccept.addOnce(resolve);
+    service.onReject.addOnce(resolve);
+  });
   // don't exist? -> Not found
   if (! await service.exists()) {
-    if (initNonexistant) {
-      if (! await service.init()) {
-        return service.reject(500, "Failed to initialise new repository");
-      }
-    } else {
-      return service.reject(404);
+    // should we skip creation of resource?
+    if (!initNonexistant) {
+      service.reject(404);
+      return promise;
+    }
+    if (! await service.init()) {
+      // could not create resource
+      service.reject(500, "Could not initialize new repository");
+      return promise;
     }
   }
-
   // no access? -> Unauthorized
   if (! await service.access()) {
-    return service.reject(401);
+    service.reject(401);
+    // not enabled? -> Forbidden
+  } else if (! await service.enabled()) {
+    service.reject(403);
+    // accept or reject request
+  } else {
+    service.accept();
   }
-
-  // not enabled? -> Forbidden
-  if (! await service.enabled()) {
-    return service.reject(403);
-  }
-
-  // accept or reject request
-  return service.accept();
+  return promise;
 }
 
 /**

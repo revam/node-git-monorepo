@@ -89,7 +89,7 @@ export async function defaultBusinessLogic(
       service.reject(404);
       return promise;
     }
-    if (! await service.init()) {
+    if (! await service.create()) {
       // could not create resource
       service.reject(500, "Could not initialize new repository");
       return promise;
@@ -430,9 +430,9 @@ export class Service implements IService {
     }
   }
 
-  public async init(): Promise<boolean> {
+  public async create(): Promise<boolean> {
     try {
-      return await this.driver.init(this);
+      return await this.driver.create(this);
     } catch (err) {
       this.onError.dispatch(err);
 
@@ -509,10 +509,10 @@ export interface IServiceDriver {
    */
   get(service: IService, headers: Headers, messages: Buffer[]): Promise<ISignalAcceptData>;
   /**
-   * Initialise a bare repository at origin, but only if repository does not exist.
+   * Creates and initialise a bare repository at origin, but only if repository does not exist.
    * @param service IService object with related information
    */
-  init(service: IService): Promise<boolean>;
+  create(service: IService): Promise<boolean>;
 }
 
 /**
@@ -595,9 +595,9 @@ export interface IService {
    */
   access(): Promise<boolean>;
   /**
-   * Initialise a new repository, but only if nonexistant. Return value indicate a new repo.
+   * Creates and initialises a new repository, but only if nonexistant. Return value indicate a new repo.
    */
-  init(): Promise<boolean>;
+  create(): Promise<boolean>;
   /**
    * Inform client of message, but only if service is accepted.
    * @param message Messages to inform

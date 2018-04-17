@@ -1,32 +1,47 @@
-import { ChildProcess, spawn } from 'child_process';
+import { createHash } from 'crypto';
 import { createPacketInspectStream, createPacketReadableStream } from 'git-packet-streams';
 import * as encode from 'git-side-band-message';
 import { STATUS_CODES } from "http";
 import { Signal } from 'micro-signals';
 import { Headers } from 'node-fetch';
 import { Readable, Transform } from 'stream';
-import { promisify } from 'util';
 
 /**
  * Request service type.
  */
 export enum RequestType {
   /**
-   * Indicate an unknown service request.
+   * Unknown request type.
    */
-  Unknown,
+  Unknown = 0,
   /**
-   * Indicate a request for advertisement.
+   * Requests for advertisement of references.
    */
-  Advertise,
+  Advertise = 1,
   /**
-   * Indicate a pull service request.
+   * Requests for advertisement through upload-pack service.
    */
-  Pull,
+  AdvertiseUploadPack = 3,
   /**
-   * Indicate a push service request.
+   * Requests for advertisement through receive-pack service.
    */
-  Push,
+  AdvertiseReceivePack = 5,
+  /**
+   * Indicate a pull request.
+   */
+  Pull = 2,
+  /**
+   * Requests use of git upload-pack service.
+   */
+  UploadPack = 2,
+  /**
+   * Indicate a push request.
+   */
+  Push = 4,
+  /**
+   * Requests use of git receive-pack service
+   */
+  ReceivePack = 4,
 }
 
 /**
@@ -50,11 +65,6 @@ export enum RequestStatus {
    */
   AcceptedButRejected,
 }
-
-/**
- * Unique symbol used for source object (input) in IService implementation (Service class)
- */
-export const SymbolSource = Symbol('source');
 
 /**
  * Default business logic following the spec. as defined in the the technical documentation.
@@ -95,13 +105,12 @@ export async function defaultBusinessLogic(service: IService, initNonexistant: b
  */
 export function checkIfValidServiceDriver(candidateDriver: any): boolean {
   return typeof candidateDriver === 'object' &&
-    'origin' in candidateDriver && typeof candidateDriver.origin === 'string' &&
     'access' in candidateDriver && typeof candidateDriver.access === 'function' &&
+    'enabled' in candidateDriver && typeof candidateDriver.enabled === 'function' &&
     'exists' in candidateDriver && typeof candidateDriver.exists === 'function' &&
-    'empty' in candidateDriver && typeof candidateDriver.empty === 'function' &&
+    'get' in candidateDriver && typeof candidateDriver.get === 'function' &&
     'init' in candidateDriver && typeof candidateDriver.init === 'function' &&
-    'hint' in candidateDriver && typeof candidateDriver.hint === 'function' &&
-    'get' in candidateDriver && typeof candidateDriver.get === 'function';
+    'origin' in candidateDriver && typeof candidateDriver.origin === 'string';
 }
 
 /**
@@ -109,8 +118,10 @@ export function checkIfValidServiceDriver(candidateDriver: any): boolean {
  */
 export class Service implements IService {
   public readonly awaitReady: Promise<void>;
+  public readonly body: Readable;
   public readonly capabilities: Map<string, string>;
   public readonly driver: IServiceDriver;
+  public readonly etag: string | false;
   public readonly metadata: Array<IRequestPullData | IRequestPushData>;
   public readonly onAccept: Signal<ISignalAcceptData>;
   public readonly onReject: Signal<ISignalRejectData>;
@@ -119,9 +130,8 @@ export class Service implements IService {
   public readonly status: RequestStatus;
   public readonly type: RequestType;
   public repository: string;
-  private [SymbolSource]: Transform;
+  private __etag: string | false;
   private __headers: Headers;
-  private __hint: string;
   private __messages: Buffer[];
   private __status: RequestStatus;
   private __ready: boolean;
@@ -135,6 +145,7 @@ export class Service implements IService {
    * @param headers Request headers supplied as: 1) an instance of [Headers](.),
    *                2) a key-value array, or 3) a plain object with headers as keys.
    * @param input Input (normally the request itself)
+   * @param options Service options
    *
    * @throws {TypeError}
    */
@@ -144,6 +155,7 @@ export class Service implements IService {
     url_fragment: string,
     headers: Headers | Array<[string, string]> | {[index: string]: string | string[]},
     input: Readable,
+    options: IServiceOptions = {},
   ) {
     if (!checkIfValidServiceDriver(driver)) {
       throw new TypeError('argument `driver` must be a valid service driver interface');
@@ -189,6 +201,7 @@ export class Service implements IService {
         }
       }
     }
+    this.__etag = !options.useEtag ? false : undefined;
     this.__messages = [];
     this.__status = RequestStatus.Pending;
     this.__ready = false;
@@ -200,6 +213,9 @@ export class Service implements IService {
       driver: {
         value: driver,
         writable: false,
+      },
+      etag: {
+        get() { return this.__etag; },
       },
       metadata: {
         value: [],
@@ -225,22 +241,9 @@ export class Service implements IService {
       },
     });
 
-    for (const [service, regex] of ServiceMap) {
+    for (const [service, expected_method, regex, expected_content_type] of ServiceMap) {
       const results = regex.exec(url_fragment);
-
       if (results) {
-        const service_name = results[3];
-        if (!ValidServiceNames.has(service_name)) {
-          this.onError.dispatch(
-            new TypeError(
-              `Invalid service "${service_name}", want one of: "${Array.from(ValidServiceNames).join('", "')}"`,
-            ),
-          );
-          break;
-        }
-
-        const advertise = service === RequestType.Advertise;
-        const expected_method = advertise ? 'GET' : 'POST';
         if (method !== expected_method) {
           this.onError.dispatch(
             new TypeError(`Unexpected HTTP ${method} request, expected a HTTP ${expected_method}) request`),
@@ -248,17 +251,17 @@ export class Service implements IService {
           break;
         }
 
-        // Only check content type for post requests
-        const content_type = this.__headers.get('Content-Type');
-        const expected_content_type = `application/x-git-${service_name}-request`;
-        if (!advertise && content_type !== expected_content_type) {
-          this.onError.dispatch(
-            new TypeError(`Unexpected content-type "${content_type}", expected "${expected_content_type}"`),
-          );
-          break;
+        if (expected_content_type) {
+          // Only check content type for post requests
+          const content_type = this.__headers.get('Content-Type');
+          if (content_type !== expected_content_type) {
+            this.onError.dispatch(
+              new TypeError(`Unexpected content-type "${content_type}", expected "${expected_content_type}"`),
+            );
+            break;
+          }
         }
 
-        this.__hint = this.driver.hint(...results.slice(2));
         this.repository = results[1];
         Object.defineProperty(this, 'type', {
           value: service,
@@ -278,16 +281,30 @@ export class Service implements IService {
       const [parser, awaitReady] = createPacketInspectStream(middleware(this));
       onError(parser, (err) => this.onError.dispatch(err));
 
-      this[SymbolSource] = parser;
-      Object.defineProperty(this, 'awaitReady', {
-        value: awaitReady.then(() => {
-          this.__ready = true;
-          disposables.forEach((d) => d());
-          disposables.length = 0;
-        }),
-        writable: false,
+      Object.defineProperties(this, {
+        awaitReady: {
+          value: awaitReady.then(() => {
+            this.__ready = true;
+            if (options.useEtag) {
+              const etag = createHash("sha256");
+              etag.update(this.repository);
+              etag.update(this.type.toString());
+              const metadata = this.metadata.slice().sort(sortMetadata).map((m) => JSON.stringify(m));
+              etag.update(metadata.join(","));
+              const capabilities = Array.from(this.capabilities).sort().filter((a) => a[0] !== "agent");
+              etag.update(capabilities.map((a) => a.join("=")).join(","));
+              this.__etag = etag.digest("hex");
+            }
+            disposables.forEach((d) => d());
+            disposables.length = 0;
+          }),
+          writable: false,
+        },
+        body: {
+          value: parser,
+          writable: false,
+        },
       });
-
       input.pipe(parser);
     } else {
       if (!('type' in this)) {
@@ -297,9 +314,21 @@ export class Service implements IService {
         });
       }
       this.__ready = true;
-      Object.defineProperty(this, 'awaitReady', {
-        value: Promise.resolve(),
-        writable: false,
+      if (options.useEtag) {
+        const etag = createHash("sha256");
+        etag.update(this.repository);
+        etag.update(this.type.toString());
+        this.__etag = etag.digest("hex");
+      }
+      Object.defineProperties(this, {
+        awaitReady: {
+          value: Promise.resolve(),
+          writable: false,
+        },
+        body: {
+          value: input,
+          writable: false,
+        },
       });
     }
   }
@@ -315,20 +344,12 @@ export class Service implements IService {
       return;
     }
 
-    await this.awaitReady;
-
     try {
-      const output = await this.driver.get(
-        this.repository,
-        this.__hint,
-        this.__headers,
-        this[SymbolSource],
-        this.__messages,
-      );
+      const output = await this.driver.get(this, this.__headers, this.__messages);
 
       if (output.status >= 400) {
         this.__status = RequestStatus.AcceptedButRejected;
-        this.onReject.dispatch({status: output.status, headers: output.headers, reason: 'Accepted, but rejected'});
+        this.onReject.dispatch({...output, reason: 'Accepted, but rejected'});
       } else {
         this.onAccept.dispatch(output);
       }
@@ -362,9 +383,9 @@ export class Service implements IService {
     this.onReject.dispatch({reason, status, headers, body});
   }
 
-  public async exists(ignoreEmpty: boolean = false): Promise<boolean> {
+  public async exists(): Promise<boolean> {
     try {
-      return await this.driver.exists(this.repository, ignoreEmpty);
+      return await this.driver.exists(this);
     } catch (err) {
       this.onError.dispatch(err);
 
@@ -378,7 +399,7 @@ export class Service implements IService {
     }
 
     try {
-      return await this.driver.enabled(this.repository, this.__hint);
+      return await this.driver.enabled(this);
     } catch (err) {
       this.onError.dispatch(err);
 
@@ -392,7 +413,7 @@ export class Service implements IService {
     }
 
     try {
-      return await this.driver.access(this.repository, this.__hint, this.__headers);
+      return await this.driver.access(this, this.__headers);
     } catch (err) {
       this.onError.dispatch(err);
 
@@ -402,7 +423,7 @@ export class Service implements IService {
 
   public async init(): Promise<boolean> {
     try {
-      return await this.driver.init(this.repository);
+      return await this.driver.init(this);
     } catch (err) {
       this.onError.dispatch(err);
 
@@ -457,43 +478,32 @@ export interface IServiceDriver {
   readonly origin: string;
   /**
    * Checks access to service indicated by hint authenticated with headers for repository at origin.
-   * @param repository Repository to check.
-   * @param hint Hint indicating service to check.
+   * @param service IService object with related information to check
    * @param headers Headers to check for access rights
    */
-  access(repository: string, hint: string, headers: Headers): Promise<boolean>;
+  access(service: IService, headers: Headers): Promise<boolean>;
   /**
    * Checks if service is enabled.
-   * @param repository Repository to check.
-   * @param hint Hint indication service to check.
+   * @param service IService object with related information to check
    */
-  enabled(repository: string, hint: string): Promise<boolean>;
+  enabled(service: IService): Promise<boolean>;
   /**
    * Check if repository exists at origin. Can optionaly ignore empty repositories.
-   * @param repository Repository to check.
+   * @param service IService object with related information to check
    */
-  exists(repository: string, ignoreEmpty?: boolean): Promise<boolean>;
+  exists(service: IService): Promise<boolean>;
   /**
    * Process service indicated by hint, and return data from git.
-   * @param repository Repository to get
-   * @param hint Service hint
+   * @param service IService object with related information
    * @param headers HTTP headers received with request
-   * @param input Input (processed request body)
-   * @param messages Buffered messages to client
+   * @param messages Buffered messages to inform client
    */
-  get(repository: string, hint: string, headers: Headers): Promise<ISignalAcceptData>;
-  get(repository: string, hint: string, headers: Headers,
-      input: Readable, messages: Buffer[]): Promise<ISignalAcceptData>;
-  /**
-   * Choose hint used to determine service for this driver.
-   * @param hints strings to choose from
-   */
-  hint(...hints: string[]): string;
+  get(service: IService, headers: Headers, messages: Buffer[]): Promise<ISignalAcceptData>;
   /**
    * Initialise a bare repository at origin, but only if repository does not exist.
-   * @param repository Repository to init
+   * @param service IService object with related information
    */
-  init(repository: string): Promise<boolean>;
+  init(service: IService): Promise<boolean>;
 }
 
 /**
@@ -505,6 +515,10 @@ export interface IService {
    */
   readonly awaitReady: Promise<void>;
   /**
+   * Request body from client.
+   */
+  readonly body: Readable;
+  /**
    * Requested capebilities client support/want.
    */
   readonly capabilities: Map<string, string>;
@@ -512,6 +526,10 @@ export interface IService {
    * Low-level service driver
    */
   readonly driver: IServiceDriver;
+  /**
+   * Represents digest of generic uniform request.
+   */
+  readonly etag: string | false;
   /**
    * Request metadata, such as ref or commit info.
    */
@@ -576,6 +594,15 @@ export interface IService {
    * @param message Messages to inform
    */
   inform(message: string | Buffer): void;
+}
+
+export interface IServiceOptions {
+  /**
+   * Digests etag for each request. Off by default.
+   *
+   * If you don't use etags, you can turn this off, witch in turn spares resources.
+   */
+  useEtag?: boolean;
 }
 
 /**
@@ -644,17 +671,16 @@ export interface ISignalRejectData {
   reason: string;
 }
 
-const ValidServiceNames = new Set(['receive-pack', 'upload-pack']);
-
-const ServiceMap: Map<RequestType, RegExp> = new Map([
-  [RequestType.Advertise, /^\/?(.*?)\/(info\/refs\?service=git-(.*))$/],
-  [RequestType.Pull, /^\/?(.*?)\/(git-(upload-pack))$/],
-  [RequestType.Push, /^\/?(.*?)\/(git-(receive-pack))$/],
-]);
+const ServiceMap: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
+  [RequestType.AdvertiseUploadPack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
+  [RequestType.AdvertiseReceivePack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
+  [RequestType.UploadPack, 'POST',  /^\/?(.*?)\/git-upload-pack$/, 'application/x-git-upload-pack-request'],
+  [RequestType.ReceivePack, 'POST',  /^\/?(.*?)\/git-receive-pack$/, 'application/x-git-receive-pack-request'],
+];
 
 const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) => any>([
   [
-    RequestType.Push,
+    RequestType.ReceivePack,
     (service) => {
       const regex =
       /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
@@ -691,7 +717,7 @@ const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) 
     },
   ],
   [
-    RequestType.Pull,
+    RequestType.UploadPack,
     (service) => {
       const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
       return (buffer) => {
@@ -718,3 +744,8 @@ const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) 
     },
   ],
 ]);
+
+function sortMetadata(a: IRequestPullData | IRequestPushData, b: IRequestPullData | IRequestPushData): number {
+  // TODO: Make a predictable sort for metadata
+  return 0;
+}

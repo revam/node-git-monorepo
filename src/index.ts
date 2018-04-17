@@ -1,6 +1,7 @@
 import { ChildProcess, spawn } from 'child_process';
-import { createPacketInspectStream } from 'git-packet-streams';
+import { createPacketInspectStream, createPacketReadableStream } from 'git-packet-streams';
 import * as encode from 'git-side-band-message';
+import { STATUS_CODES } from "http";
 import { Signal } from 'micro-signals';
 import { Headers } from 'node-fetch';
 import { Readable, Transform } from 'stream';
@@ -347,11 +348,18 @@ export class Service implements IService {
       status = 403;
     }
 
+    if (!(reason && typeof reason === 'string')) {
+      reason = STATUS_CODES[status] || 'Unknown reason';
+    }
+
+    const buffer = Buffer.from(reason);
+    const body = createPacketReadableStream([buffer]);
     const headers = new Headers();
 
     headers.set('Content-Type', 'text/plain');
+    headers.set('Content-Length', buffer.length.toString());
 
-    this.onReject.dispatch({reason, status, headers});
+    this.onReject.dispatch({reason, status, headers, body});
   }
 
   public async exists(ignoreEmpty: boolean = false): Promise<boolean> {
@@ -627,9 +635,13 @@ export interface ISignalRejectData {
    */
   headers: Headers;
   /**
-   * Optional reason for rejection.
+   * Body for response.
    */
-  reason?: string;
+  body: Readable;
+  /**
+   * Reason for rejection.
+   */
+  reason: string;
 }
 
 const ValidServiceNames = new Set(['receive-pack', 'upload-pack']);

@@ -19,29 +19,25 @@ export enum RequestType {
    */
   Advertise = 1,
   /**
-   * Requests for advertisement through upload-pack service.
-   */
-  AdvertiseUploadPack = 3,
-  /**
-   * Requests for advertisement through receive-pack service.
-   */
-  AdvertiseReceivePack = 5,
-  /**
-   * Indicate a pull request.
-   */
-  Pull = 2,
-  /**
    * Requests use of git upload-pack service.
    */
   UploadPack = 2,
   /**
-   * Indicate a push request.
+   * Requests for advertisement through upload-pack service.
+   *
+   * Combination of flags Advertise and UploadPack. (1 | 2 -> 3)
    */
-  Push = 4,
+  AdvertiseUploadPack = 3,
   /**
    * Requests use of git receive-pack service
    */
   ReceivePack = 4,
+  /**
+   * Requests for advertisement through receive-pack service.
+   *
+   * Combination of flags Advertise and ReceivePack. (1 | 4 -> 5)
+   */
+  AdvertiseReceivePack = 5,
 }
 
 /**
@@ -51,19 +47,21 @@ export enum RequestStatus {
   /**
    * Indicate the service is still pending.
    */
-  Pending,
+  Pending = 0,
   /**
    * Indicate the service was accepted.
    */
-  Accepted,
+  Accepted = 1,
   /**
    * Indocate the service was rejected.
    */
-  Rejected,
+  Rejected = 2,
   /**
-   * Indicate the service was accepted, but result contained a rejection code and was thus rejected.
+   * Indicate the service was initially accepted, but failed to fetch result for service.
+   *
+   * Combination of flags Accepted and Rejected. (1 | 2 -> 3)
    */
-  AcceptedButRejected,
+  Failure = 3,
 }
 
 /**
@@ -76,11 +74,10 @@ export enum RequestStatus {
 export async function defaultBusinessLogic(
   service: IService,
   initNonexistant: boolean = false,
-): Promise<ISignalAcceptData | ISignalRejectData> {
-  const promise = new Promise<ISignalAcceptData | ISignalRejectData>((resolve, reject) => {
+): Promise<IResponseData> {
+  const promise = new Promise<IResponseData>((resolve, reject) => {
     service.onError.addOnce(reject);
-    service.onAccept.addOnce(resolve);
-    service.onReject.addOnce(resolve);
+    service.onResponse.addOnce(resolve);
   });
   // don't exist? -> Not found
   if (! await service.exists()) {
@@ -112,7 +109,7 @@ export async function defaultBusinessLogic(
  * Checks if candidateDriver is a valid driver.
  * @param candidateDriver Driver candidate
  */
-export function checkIfValidServiceDriver(candidateDriver: any): boolean {
+export function checkIfValidServiceDriver(candidateDriver: any): candidateDriver is IServiceDriver {
   return typeof candidateDriver === 'object' &&
     'access' in candidateDriver && typeof candidateDriver.access === 'function' &&
     'enabled' in candidateDriver && typeof candidateDriver.enabled === 'function' &&
@@ -123,7 +120,7 @@ export function checkIfValidServiceDriver(candidateDriver: any): boolean {
 }
 
 /**
- * Implemented high-level git service.
+ * High-level git service class reference implementing interface IService.
  */
 export class Service implements IService {
   public readonly awaitReady: Promise<void>;
@@ -131,10 +128,9 @@ export class Service implements IService {
   public readonly capabilities: Map<string, string>;
   public readonly driver: IServiceDriver;
   public readonly etag: string | false;
-  public readonly metadata: Array<IRequestPullData | IRequestPushData>;
-  public readonly onAccept: Signal<ISignalAcceptData>;
-  public readonly onReject: Signal<ISignalRejectData>;
+  public readonly metadata: Array<IUploadPackData | IReceivePackData>;
   public readonly onError: Signal<any>;
+  public readonly onResponse: Signal<IResponseData>;
   public readonly ready: boolean;
   public readonly status: RequestStatus;
   public readonly type: RequestType;
@@ -356,40 +352,38 @@ export class Service implements IService {
     try {
       const output = await this.driver.get(this, this.__headers, this.__messages);
 
-      if (output.status >= 400) {
-        this.__status = RequestStatus.AcceptedButRejected;
-        this.onReject.dispatch({...output, reason: 'Accepted, but rejected'});
-      } else {
-        this.onAccept.dispatch(output);
+      if (output.statusCode >= 400) {
+        this.__status = RequestStatus.Failure;
       }
+      this.onResponse.dispatch(output);
     } catch (err) {
       this.onError.dispatch(err);
     }
   }
 
-  public async reject(status?: number, reason?: string): Promise<void> {
+  public async reject(statusCode?: number, statusMessage?: string): Promise<void> {
     if (this.__status !== RequestStatus.Pending) {
       return;
     }
 
     this.__status = RequestStatus.Rejected;
 
-    if (!(status < 600 && status >= 400)) {
-      status = 403;
+    if (!(statusCode < 600 && statusCode >= 400)) {
+      statusCode = 403;
     }
 
-    if (!(reason && typeof reason === 'string')) {
-      reason = STATUS_CODES[status] || 'Unknown reason';
+    if (!(statusMessage && typeof statusMessage === 'string')) {
+      statusMessage = STATUS_CODES[statusCode] || '';
     }
 
-    const buffer = Buffer.from(reason);
+    const buffer = Buffer.from(statusMessage);
     const body = createPacketReadableStream([buffer]);
     const headers = new Headers();
 
     headers.set('Content-Type', 'text/plain');
     headers.set('Content-Length', buffer.length.toString());
 
-    this.onReject.dispatch({reason, status, headers, body});
+    this.onResponse.dispatch({statusCode, statusMessage, headers, body});
   }
 
   public async exists(): Promise<boolean> {
@@ -446,13 +440,13 @@ export class Service implements IService {
 }
 
 /**
- * Contains data of what client wants from this pull request.
+ * Contains information of what client want to retrive from this upload-pack service request.
  */
-export interface IRequestPullData {
+export interface IUploadPackData {
   /**
-   * Request type.
+   * Upload-pack command type.
    */
-  type: 'want' | 'have';
+  kind: 'want' | 'have';
   /**
    * Commit. In plural form for compatibility with IRequestPushData.
    */
@@ -460,21 +454,21 @@ export interface IRequestPullData {
 }
 
 /**
- * Contains data of what client want to do in this push request.
+ * Contains information of what client want to upload in current receive-pack service request.
  */
-export interface IRequestPushData {
+export interface IReceivePackData {
   /**
-   * Push type, can be one of create, update or delete.
+   * Receive-pack command type.
    */
-  type: 'create' | 'update' | 'delete';
+  kind: 'create' | 'update' | 'delete';
   /**
-   * Commits. In order of old commit, new commit.
+   * First and last commit for refname.
    */
   commits: [string, string];
   /**
-   * Reference name
+   * Reference path to store. Can be any path, but usually segmented and starting with either 'heads' or 'tags'.
    */
-  refname: string;
+  reference: string;
 }
 
 /**
@@ -507,7 +501,7 @@ export interface IServiceDriver {
    * @param headers HTTP headers received with request
    * @param messages Buffered messages to inform client
    */
-  get(service: IService, headers: Headers, messages: Buffer[]): Promise<ISignalAcceptData>;
+  get(service: IService, headers: Headers, messages: Buffer[]): Promise<IResponseData>;
   /**
    * Creates and initialise a bare repository at origin, but only if repository does not exist.
    * @param service IService object with related information
@@ -516,7 +510,7 @@ export interface IServiceDriver {
 }
 
 /**
- * High-level git service.
+ * High-level git service interface.
  */
 export interface IService {
   /**
@@ -542,19 +536,15 @@ export interface IService {
   /**
    * Request metadata, such as ref or commit info.
    */
-  readonly metadata: Array<IRequestPullData | IRequestPushData>;
-  /**
-   * Dispatched if request is accepted.
-   */
-  readonly onAccept: ISignal<ISignalAcceptData>;
-  /**
-   * Dispatched if request is rejected.
-   */
-  readonly onReject: ISignal<ISignalRejectData>;
+  readonly metadata: Array<IUploadPackData | IReceivePackData>;
   /**
    * Dispatched when any error ocurr. Dispatched payload may be anything.
    */
   readonly onError: ISignal<any>;
+  /**
+   * Dispatched when response is ready.
+   */
+  readonly onResponse: ISignal<IResponseData>;
   /**
    * Determine if all metadata is parsed and ready for use.
    */
@@ -620,64 +610,46 @@ export interface IServiceOptions {
 export interface ISignal<T> {
   /**
    * Adds a listener that listens till removed.
-   * @param listener
+   * @param listener Listener to add
    */
   add(listener: (payload: T) => any): void;
   /**
    * Adds a listener that only listens once.
-   * @param listener
+   * @param listener Listener to add
    */
   addOnce(listener: (payload: T) => any): void;
   /**
    * Dispatches payload to all listeners.
-   * @param payload
+   * @param payload Payload to dispatch
    */
   dispatch(payload: T): void;
   /**
    * Removes a listener.
-   * @param listener
+   * @param listener Listener to remote
    */
   remove(listener: (payload: T) => any): void;
 }
 
 /**
- * Contains data needed to fufill request.
+ * Contains response data needed to fufill or reject request.
  */
-export interface ISignalAcceptData {
+export interface IResponseData {
   /**
-   * Status code for response. Either a `2xx` or `3xx` code.
-   */
-  status: number;
-  /**
-   * Headers for response.
-   */
-  headers: Headers;
-  /**
-   * Body for response.
-   */
-  body: Readable;
-}
-
-/**
- * Contains data needed to reject request.
- */
-export interface ISignalRejectData {
-  /**
-   * Status code for response. Either a `4xx` or `5xx` code.
-   */
-  status: number;
-  /**
-   * Headers for response.
-   */
-  headers: Headers;
-  /**
-   * Body for response.
+   * Response body.
    */
   body: Readable;
   /**
-   * Reason for rejection.
+   * Response headers.
    */
-  reason: string;
+  headers: Headers;
+  /**
+   * Response status code.
+   */
+  statusCode: number;
+  /**
+   * Response status message.
+   */
+  statusMessage: string;
 }
 
 const ServiceMap: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
@@ -697,18 +669,18 @@ const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) 
         const value = buffer.toString('utf8');
         const results = regex.exec(value);
         if (results) {
-          let type: 'create' | 'delete' | 'update';
+          let kind: 'create' | 'delete' | 'update';
           if ('0000000000000000000000000000000000000000' === results[1]) {
-            type = 'create';
+            kind = 'create';
           } else if ('0000000000000000000000000000000000000000' === results[2]) {
-            type = 'delete';
+            kind = 'delete';
           } else {
-            type = 'update';
+            kind = 'update';
           }
-          const metadata: IRequestPushData = {
+          const metadata: IReceivePackData = {
             commits: [results[1], results[2]],
-            refname: results[3],
-            type,
+            kind,
+            reference: results[3],
           };
           service.metadata.push(metadata);
           if (results[4]) {
@@ -733,9 +705,9 @@ const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) 
         const value = buffer.toString('utf8');
         const results = regex.exec(value);
         if (results) {
-          const metadata: IRequestPullData = {
+          const metadata: IUploadPackData = {
             commits: [results[2]],
-            type: results[1] as ('want' | 'have'),
+            kind: results[1] as ('want' | 'have'),
           };
           service.metadata.push(metadata);
           if (results[3]) {
@@ -754,7 +726,7 @@ const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) 
   ],
 ]);
 
-function sortMetadata(a: IRequestPullData | IRequestPushData, b: IRequestPullData | IRequestPushData): number {
+function sortMetadata(a: IUploadPackData | IReceivePackData , b: IUploadPackData | IReceivePackData): number {
   // TODO: Make a predictable sort for metadata
   return 0;
 }

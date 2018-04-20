@@ -23,7 +23,7 @@ export enum RequestType {
    */
   UploadPack = 2,
   /**
-   * Requests for advertisement through upload-pack service.
+   * Requests for advertisement through the upload-pack service.
    *
    * Combination of flags Advertise and UploadPack. (1 | 2 -> 3)
    */
@@ -33,7 +33,7 @@ export enum RequestType {
    */
   ReceivePack = 4,
   /**
-   * Requests for advertisement through receive-pack service.
+   * Requests for advertisement through the receive-pack service.
    *
    * Combination of flags Advertise and ReceivePack. (1 | 4 -> 5)
    */
@@ -165,15 +165,12 @@ export class Service implements IService {
     if (!checkIfValidServiceDriver(driver)) {
       throw new TypeError('argument `driver` must be a valid service driver interface');
     }
-
     if (typeof method !== 'string' || !method) {
       throw new TypeError('argument `method` must be a valid string');
     }
-
     if (typeof url_fragment !== 'string' || !url_fragment) {
       throw new TypeError('argument `url_fragment` must be a valid string');
     }
-
     if (!(
       headers instanceof Headers ||
       headers instanceof Array && headers.length !== 0 ||
@@ -181,11 +178,9 @@ export class Service implements IService {
     )) {
       throw new TypeError('argument `in_headers` must be either a Headers object, a string array or headers object');
     }
-
     if (!(input instanceof Readable)) {
       throw new TypeError('argument `input` must be s sub-instance of stream.Readable');
     }
-
     // Workaround for string array headers
     const multi_headers: Array<[string, string[]]> = [];
     if (!(headers instanceof Headers || headers instanceof Array)) {
@@ -245,7 +240,6 @@ export class Service implements IService {
         get() { return this.__status; },
       },
     });
-
     for (const [service, expected_method, regex, expected_content_type] of ServiceMap) {
       const results = regex.exec(url_fragment);
       if (results) {
@@ -255,7 +249,6 @@ export class Service implements IService {
           );
           break;
         }
-
         if (expected_content_type) {
           // Only check content type for post requests
           const content_type = this.__headers.get('Content-Type');
@@ -266,26 +259,21 @@ export class Service implements IService {
             break;
           }
         }
-
         this.repository = results[1];
         Object.defineProperty(this, 'type', {
           value: service,
           writable: false,
         });
-
         break;
       }
     }
-
     if ('type' in this && this.type !== RequestType.Advertise) {
       const disposables: Array<() => void> = [];
       const onError = (ee, cb) => { ee.on('error', cb); disposables.push(() => ee.removeListener('error', cb)); };
       onError(input, (err) => this.onError.dispatch(err));
-
       const middleware = MetadataMap.get(this.type);
       const [parser, awaitReady] = createPacketInspectStream(middleware(this));
       onError(parser, (err) => this.onError.dispatch(err));
-
       Object.defineProperties(this, {
         awaitReady: {
           value: awaitReady.then(() => {
@@ -342,13 +330,10 @@ export class Service implements IService {
     if (this.__status !== RequestStatus.Pending) {
       return;
     }
-
     this.__status = RequestStatus.Accepted;
-
     if (this.type === RequestType.Unknown) {
       return;
     }
-
     try {
       const output = await this.driver.get(this, this.__headers, this.__messages);
 
@@ -360,29 +345,22 @@ export class Service implements IService {
       this.onError.dispatch(err);
     }
   }
-
   public async reject(statusCode?: number, statusMessage?: string): Promise<void> {
     if (this.__status !== RequestStatus.Pending) {
       return;
     }
-
     this.__status = RequestStatus.Rejected;
-
     if (!(statusCode < 600 && statusCode >= 400)) {
       statusCode = 403;
     }
-
     if (!(statusMessage && typeof statusMessage === 'string')) {
       statusMessage = STATUS_CODES[statusCode] || '';
     }
-
     const buffer = Buffer.from(statusMessage);
     const body = createPacketReadableStream([buffer]);
     const headers = new Headers();
-
     headers.set('Content-Type', 'text/plain');
     headers.set('Content-Length', buffer.length.toString());
-
     this.onResponse.dispatch({statusCode, statusMessage, headers, body});
   }
 
@@ -391,7 +369,6 @@ export class Service implements IService {
       return await this.driver.exists(this);
     } catch (err) {
       this.onError.dispatch(err);
-
       return false;
     }
   }
@@ -400,12 +377,10 @@ export class Service implements IService {
     if (this.type === RequestType.Unknown) {
       return false;
     }
-
     try {
       return await this.driver.enabled(this);
     } catch (err) {
       this.onError.dispatch(err);
-
       return false;
     }
   }
@@ -414,12 +389,10 @@ export class Service implements IService {
     if (this.type === RequestType.Unknown) {
       return false;
     }
-
     try {
       return await this.driver.access(this, this.__headers);
     } catch (err) {
       this.onError.dispatch(err);
-
       return false;
     }
   }
@@ -429,7 +402,6 @@ export class Service implements IService {
       return await this.driver.create(this);
     } catch (err) {
       this.onError.dispatch(err);
-
       return false;
     }
   }

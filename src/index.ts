@@ -11,33 +11,13 @@ import { Readable, Transform } from 'stream';
  */
 export enum RequestType {
   /**
-   * Unknown request type.
+   * Request the use of upload-pack service.
    */
-  Unknown = 0,
+  UploadPack = "UploadPack",
   /**
-   * Requests for advertisement of references.
+   * Request the use of receive-pack service.
    */
-  Advertise = 1,
-  /**
-   * Requests use of git upload-pack service.
-   */
-  UploadPack = 2,
-  /**
-   * Requests for advertisement through the upload-pack service.
-   *
-   * Combination of flags Advertise and UploadPack. (1 | 2 -> 3)
-   */
-  AdvertiseUploadPack = 3,
-  /**
-   * Requests use of git receive-pack service
-   */
-  ReceivePack = 4,
-  /**
-   * Requests for advertisement through the receive-pack service.
-   *
-   * Combination of flags Advertise and ReceivePack. (1 | 4 -> 5)
-   */
-  AdvertiseReceivePack = 5,
+  ReceivePack = "ReceivePack",
 }
 
 /**
@@ -65,81 +45,73 @@ export enum RequestStatus {
 }
 
 /**
- * Default business logic following the spec. as defined in the the technical documentation.
+ * Reference business logic following the spec. as defined in the the technical documentation.
  *
  * See https://github.com/git/git/blob/master/Documentation/technical/http-protocol.txt for more info.
  * @param service Service instance
  * @param initNonexistant Create and initialise repository when it does not exist
  */
-export async function defaultBusinessLogic(
+export async function referenceBusinessLogic(
   service: IService,
   initNonexistant: boolean = false,
 ): Promise<IResponseData> {
-  const promise = new Promise<IResponseData>((resolve, reject) => {
-    service.onError.addOnce(reject);
-    service.onResponse.addOnce(resolve);
-  });
-  // don't exist? -> Not found
-  if (! await service.exists()) {
+  if (! await service.checkIfExists()) {
     // should we skip creation of resource?
     if (!initNonexistant) {
-      service.reject(404);
-      return promise;
+      service.reject(404); // 404 Not Found
+      return service.awaitResponseReady;
     }
-    if (! await service.create()) {
-      // could not create resource
+    if (! await service.createAndInitRepository()) {
       service.reject(500, "Could not initialize new repository");
-      return promise;
+      return service.awaitResponseReady;
     }
   }
-  // no access? -> Unauthorized
-  if (! await service.access()) {
-    service.reject(401);
-    // not enabled? -> Forbidden
-  } else if (! await service.enabled()) {
-    service.reject(403);
-    // accept or reject request
+  if (! await service.checkForAccess()) {
+    service.reject(401); // 401 Unauthorized
+  } else if (! await service.checkIfEnabled()) {
+    service.reject(403); // 403 Forbidden
   } else {
     service.accept();
   }
-  return promise;
+  return service.awaitResponseReady;
 }
 
 /**
- * Checks if candidateDriver is a valid driver.
+ * Checks if candidateDriver is a valid service driver.
  * @param candidateDriver Driver candidate
  */
 export function checkIfValidServiceDriver(candidateDriver: any): candidateDriver is IServiceDriver {
   return typeof candidateDriver === 'object' &&
-    'access' in candidateDriver && typeof candidateDriver.access === 'function' &&
-    'enabled' in candidateDriver && typeof candidateDriver.enabled === 'function' &&
-    'exists' in candidateDriver && typeof candidateDriver.exists === 'function' &&
-    'get' in candidateDriver && typeof candidateDriver.get === 'function' &&
-    'init' in candidateDriver && typeof candidateDriver.init === 'function' &&
-    'origin' in candidateDriver && typeof candidateDriver.origin === 'string';
+    'checkForAccess' in candidateDriver && typeof candidateDriver.checkForAccess === 'function' &&
+    'checkIfEnabled' in candidateDriver && typeof candidateDriver.checkIfEnabled === 'function' &&
+    'checkIfExists' in candidateDriver && typeof candidateDriver.checkIfExists === 'function' &&
+    'getResponse' in candidateDriver && typeof candidateDriver.getResponse === 'function' &&
+    'createAndInitRepository' in candidateDriver && typeof candidateDriver.createAndInitRepository === 'function';
 }
 
 /**
  * High-level git service class reference implementing interface IService.
  */
 export class Service implements IService {
-  public readonly awaitReady: Promise<void>;
-  public readonly body: Readable;
-  public readonly capabilities: Map<string, string>;
   public readonly driver: IServiceDriver;
-  public readonly etag: string | false;
-  public readonly metadata: Array<IUploadPackData | IReceivePackData>;
+  public readonly awaitRequestReady: Promise<void>;
+  public readonly awaitResponseReady: Promise<IResponseData>;
+  public readonly isAdvertisement: boolean;
+  public readonly isRequestReady: boolean;
+  public readonly isResponseReady: boolean;
   public readonly onError: Signal<any>;
   public readonly onResponse: Signal<IResponseData>;
-  public readonly ready: boolean;
+  public readonly requestBody: Readable;
+  public readonly requestCapabilities: Map<string, string>;
+  public readonly requestData: Array<IUploadPackData | IReceivePackData>;
   public readonly status: RequestStatus;
   public readonly type: RequestType;
   public repository: string;
-  private __etag: string | false;
   private __headers: Headers;
   private __messages: Buffer[];
   private __status: RequestStatus;
-  private __ready: boolean;
+  private __readyRequest: boolean;
+  private __readyResponse: boolean;
 
   /**
    * Accepts 5 arguments and will throw if it is supplied the wrong type or to few arguments.
@@ -160,7 +132,6 @@ export class Service implements IService {
     url_fragment: string,
     headers: Headers | Array<[string, string]> | {[index: string]: string | string[]},
     input: Readable,
-    options: IServiceOptions = {},
   ) {
     if (!checkIfValidServiceDriver(driver)) {
       throw new TypeError('argument `driver` must be a valid service driver interface');
@@ -201,10 +172,10 @@ export class Service implements IService {
         }
       }
     }
-    this.__etag = !options.useEtag ? false : undefined;
     this.__messages = [];
     this.__status = RequestStatus.Pending;
-    this.__ready = false;
+    this.__readyRequest = false;
+    this.__readyResponse = false;
     Object.defineProperties(this, {
       capabilities: {
         value: new Map(),
@@ -240,9 +211,20 @@ export class Service implements IService {
         get() { return this.__status; },
       },
     });
+    this.onResponse.addOnce(() => this.__readyResponse = true);
+    Object.defineProperties(this, {
+      awaitResponse: {
+        value: new Promise<IResponseData>((resolve, reject) => {
+          this.onError.addOnce(reject);
+          this.onResponse.addOnce(resolve);
+        }),
+        writable: false,
+      },
+    });
     for (const [service, expected_method, regex, expected_content_type] of ServiceMap) {
       const results = regex.exec(url_fragment);
       if (results) {
+        const advertisement = !expected_content_type;
         if (method !== expected_method) {
           this.onError.dispatch(
             new TypeError(`Unexpected HTTP ${method} request, expected a HTTP ${expected_method}) request`),
@@ -260,14 +242,36 @@ export class Service implements IService {
           }
         }
         this.repository = results[1];
-        Object.defineProperty(this, 'type', {
-          value: service,
-          writable: false,
+        Object.defineProperties(this, {
+          advertisement: {
+            enumerable: true,
+            value: advertisement,
+            writable: false,
+          },
+          type: {
+            enumerable: true,
+            value: service,
+            writable: false,
+          },
         });
         break;
       }
     }
-    if ('type' in this && this.type !== RequestType.Advertise) {
+    if (!('type' in this)) {
+      Object.defineProperties(this, {
+        advertisement: {
+          enumerable: true,
+          value: false,
+          writable: false,
+        },
+        type: {
+          enumerable: true,
+          value: undefined,
+          writable: false,
+        },
+      });
+    }
+    if ("isAdvertisement" in this && !this.isAdvertisement) {
       const disposables: Array<() => void> = [];
       const onError = (ee, cb) => { ee.on('error', cb); disposables.push(() => ee.removeListener('error', cb)); };
       onError(input, (err) => this.onError.dispatch(err));
@@ -277,17 +281,7 @@ export class Service implements IService {
       Object.defineProperties(this, {
         awaitReady: {
           value: awaitReady.then(() => {
-            this.__ready = true;
-            if (options.useEtag) {
-              const etag = createHash("sha256");
-              etag.update(this.repository);
-              etag.update(this.type.toString());
-              const metadata = this.metadata.slice().sort(sortMetadata).map((m) => JSON.stringify(m));
-              etag.update(metadata.join(","));
-              const capabilities = Array.from(this.capabilities).sort().filter((a) => a[0] !== "agent");
-              etag.update(capabilities.map((a) => a.join("=")).join(","));
-              this.__etag = etag.digest("hex");
-            }
+            this.__readyRequest = true;
             disposables.forEach((d) => d());
             disposables.length = 0;
           }),
@@ -300,19 +294,7 @@ export class Service implements IService {
       });
       input.pipe(parser);
     } else {
-      if (!('type' in this)) {
-        Object.defineProperty(this, 'type', {
-          value: RequestType.Unknown,
-          writable: false,
-        });
-      }
-      this.__ready = true;
-      if (options.useEtag) {
-        const etag = createHash("sha256");
-        etag.update(this.repository);
-        etag.update(this.type.toString());
-        this.__etag = etag.digest("hex");
-      }
+      this.__readyRequest = true;
       Object.defineProperties(this, {
         awaitReady: {
           value: Promise.resolve(),
@@ -331,20 +313,21 @@ export class Service implements IService {
       return;
     }
     this.__status = RequestStatus.Accepted;
-    if (this.type === RequestType.Unknown) {
+    if (!this.type) {
       return;
     }
     try {
-      const output = await this.driver.get(this, this.__headers, this.__messages);
-
+      const output = await this.driver.createResponse(this, this.__headers, this.__messages);
       if (output.statusCode >= 400) {
         this.__status = RequestStatus.Failure;
       }
-      this.onResponse.dispatch(output);
+      // Schedule dispatch for next loop
+      this.dispatchResponse(output);
     } catch (err) {
       this.onError.dispatch(err);
     }
   }
+
   public async reject(statusCode?: number, statusMessage?: string): Promise<void> {
     if (this.__status !== RequestStatus.Pending) {
       return;
@@ -361,53 +344,79 @@ export class Service implements IService {
     const headers = new Headers();
     headers.set('Content-Type', 'text/plain');
     headers.set('Content-Length', buffer.length.toString());
-    this.onResponse.dispatch({statusCode, statusMessage, headers, body});
+    this.dispatchResponse({statusCode, statusMessage, headers, body});
   }
 
-  public async exists(): Promise<boolean> {
+  /**
+   * Schedule payload dispatchment for next event loop.
+   * @param payload Payload to dispatch
+   */
+  private dispatchResponse(payload: IResponseData) {
+    setImmediate(() => { try { this.onResponse.dispatch(payload); } catch (err) { this.onError.dispatch(err); } });
+  }
+
+  public async checkIfExists(): Promise<boolean> {
     try {
-      return await this.driver.exists(this);
+      return await this.driver.checkIfExists(this);
     } catch (err) {
       this.onError.dispatch(err);
       return false;
     }
   }
 
-  public async enabled(): Promise<boolean> {
-    if (this.type === RequestType.Unknown) {
+  public async checkIfEnabled(): Promise<boolean> {
+    if (!this.type) {
       return false;
     }
     try {
-      return await this.driver.enabled(this);
+      return await this.driver.checkIfEnabled(this);
     } catch (err) {
       this.onError.dispatch(err);
       return false;
     }
   }
 
-  public async access(): Promise<boolean> {
-    if (this.type === RequestType.Unknown) {
+  public async checkForAccess(): Promise<boolean> {
+    if (!this.type) {
       return false;
     }
     try {
-      return await this.driver.access(this, this.__headers);
+      return await this.driver.checkForAccess(this, this.__headers);
     } catch (err) {
       this.onError.dispatch(err);
       return false;
     }
   }
 
-  public async create(): Promise<boolean> {
+  public async createAndInitRepository(): Promise<boolean> {
     try {
-      return await this.driver.create(this);
+      return await this.driver.createAndInitRespository(this);
     } catch (err) {
       this.onError.dispatch(err);
       return false;
     }
   }
 
-  public inform(message: string | Buffer): void {
+  public async createRequestSignature(): Promise<string> {
+    if (!this.type) {
+      return undefined;
+    }
+    if (!this.isAdvertisement) {
+      await this.awaitRequestReady;
+    }
+    const hash = createHash("sha256");
+    hash.update(this.repository);
+    hash.update(this.type);
+    const metadata = this.requestData.slice().sort(sortMetadata).map((m) => JSON.stringify(m));
+    hash.update(metadata.join(","));
+    const capabilities = Array.from(this.requestCapabilities).sort().map((a) => a.join("="));
+    hash.update(capabilities.join(","));
+    return hash.digest("hex");
+  }
+
+  public informClient(message: string | Buffer) {
     this.__messages.push(encode(message));
+    return this;
   }
 }
 
@@ -448,37 +457,37 @@ export interface IReceivePackData {
  */
 export interface IServiceDriver {
   /**
-   * Repositories origin.
+   * Repositories origin location for reference only. Dependent of driver implementation.
    */
-  readonly origin: string;
+  readonly origin?: string;
   /**
    * Checks access to service indicated by hint authenticated with headers for repository at origin.
    * @param service IService object with related information to check
    * @param headers Headers to check for access rights
    */
-  access(service: IService, headers: Headers): Promise<boolean>;
+  checkForAccess(service: IService, headers: Headers): Promise<boolean>;
   /**
    * Checks if service is enabled.
    * @param service IService object with related information to check
    */
-  enabled(service: IService): Promise<boolean>;
+  checkIfEnabled(service: IService): Promise<boolean>;
   /**
    * Check if repository exists at origin. Can optionaly ignore empty repositories.
    * @param service IService object with related information to check
    */
-  exists(service: IService): Promise<boolean>;
+  checkIfExists(service: IService): Promise<boolean>;
   /**
    * Process service indicated by hint, and return data from git.
    * @param service IService object with related information
    * @param headers HTTP headers received with request
    * @param messages Buffered messages to inform client
    */
-  get(service: IService, headers: Headers, messages: Buffer[]): Promise<IResponseData>;
+  createResponse(service: IService, headers: Headers, messages: Buffer[]): Promise<IResponseData>;
   /**
    * Creates and initialise a bare repository at origin, but only if repository does not exist.
    * @param service IService object with related information
    */
-  create(service: IService): Promise<boolean>;
+  createAndInitRespository(service: IService): Promise<boolean>;
 }
 
 /**
@@ -486,94 +495,102 @@ export interface IServiceDriver {
  */
 export interface IService {
   /**
-   * Resolves when metadata is ready.
-   */
-  readonly awaitReady: Promise<void>;
-  /**
-   * Request body from client.
-   */
-  readonly body: Readable;
-  /**
-   * Requested capebilities client support/want.
-   */
-  readonly capabilities: Map<string, string>;
-  /**
-   * Low-level service driver
+   * Service driver - doing the heavy-lifting for us.
    */
   readonly driver: IServiceDriver;
+
   /**
-   * Represents digest of generic uniform request.
+   * Resolves when request body has been read.
    */
-  readonly etag: string | false;
+  readonly awaitRequestReady: Promise<void>;
   /**
-   * Request metadata, such as ref or commit info.
+   * Resolves when response is ready for request. If any errors occurred it will throw the first error.
    */
-  readonly metadata: Array<IUploadPackData | IReceivePackData>;
+  readonly awaitResponseReady: Promise<IResponseData>;
+
+  /**
+   * Check if client only want advertisement from service.
+   */
+  readonly isAdvertisement: boolean;
+  /**
+   * Check if request data has been read and is ready for use.
+   */
+  readonly isRequestReady: boolean;
+  /**
+   * Check if response is ready.
+   */
+  readonly isResponseReady: boolean;
+
+  /**
+   * Check if repository exists. Can optionaly ignore empty repositories.
+   */
+  checkIfExists(): Promise<boolean>;
+  /**
+   * Check if service is enabled. (can still atempt a forcefull use of service)
+   */
+  checkIfEnabled(): Promise<boolean>;
+  /**
+   * Checks access to service as indicated by driver.
+   */
+  checkForAccess(): Promise<boolean>;
+
+  /**
+   * Creates a uniform uniform request signature independent of agent used.
+   */
+  createRequestSignature(): Promise<string>;
+  /**
+   * Creates and initialises a new repository, but only if nonexistant. Return value indicate a new repo.
+   */
+  createAndInitRepository(): Promise<boolean>;
+
   /**
    * Dispatched when any error ocurr. Dispatched payload may be anything.
    */
   readonly onError: ISignal<any>;
   /**
-   * Dispatched when response is ready.
+   * Dispatched with response data when ready.
    */
   readonly onResponse: ISignal<IResponseData>;
+
   /**
-   * Determine if all metadata is parsed and ready for use.
+   * Requested capebilities client support and/or want.
    */
-  readonly ready: boolean;
+  readonly requestCapabilities: Map<string, string>;
   /**
-   * Request status.
+   * Request data for service.
    */
-  readonly status: RequestStatus;
+  readonly requestData: Array<IUploadPackData | IReceivePackData>;
+  /**
+   * Raw request body. May have been altered before it was given to service.
+   */
+  readonly requestBody: Readable;
   /**
    * Requested service type.
    */
   readonly type: RequestType;
   /**
-   * Repository path to use.
+   * Response status.
+   */
+  readonly status: RequestStatus;
+  /**
+   * Repository path requested.
    */
   repository: string;
   /**
-   * Accepts and process request for service.
+   * Accepts request and asks the underlying driver for an appropriate response.
    */
   accept(): Promise<void>;
   /**
-   * Rejects service with status code and an optional reason. Only accepts codes above or equal 400.
-   * @param status 4xx or 5xx http status code with rejection. Defaults to `403`.
-   * @param reason Reason for rejection
+   * Rejects request with status code and an optional status message. Only works with status error codes.
+   * @param statusCode 4xx or 5xx http status code for rejection. Defaults to `403`.
+   * @param statusMessage Optional reason for rejection. Defaults to status message for status code.
    */
-  reject(status?: number, reason?: string): Promise<void>;
-  /**
-   * Check if repository exists. Can optionaly ignore empty repositories.
-   * @param ignoreEmpty Should treat empty repositories as nonexistant.
-   */
-  exists(ignoreEmpty?: boolean): Promise<boolean>;
-  /**
-   * Check if service is enabled. (can still atempt a forcefull use of service)
-   */
-  enabled(): Promise<boolean>;
-  /**
-   * Checks access to service as indicated by driver.
-   */
-  access(): Promise<boolean>;
-  /**
-   * Creates and initialises a new repository, but only if nonexistant. Return value indicate a new repo.
-   */
-  create(): Promise<boolean>;
+  reject(statusCode?: number, statusMessage?: string): Promise<void>;
   /**
    * Inform client of message, but only if service is accepted.
-   * @param message Messages to inform
+   * @param message Message to inform client
    */
-  inform(message: string | Buffer): void;
-}
-
-export interface IServiceOptions {
-  /**
-   * Digests etag for each request. Off by default.
-   *
-   * If you don't use etags, you can turn this off, witch in turn spares resources.
-   */
-  useEtag?: boolean;
+  informClient(message: string | Buffer): this;
 }
 
 /**
@@ -625,8 +642,8 @@ export interface IResponseData {
 }
 
 const ServiceMap: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
-  [RequestType.AdvertiseUploadPack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
-  [RequestType.AdvertiseReceivePack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
+  [RequestType.UploadPack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
+  [RequestType.ReceivePack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
   [RequestType.UploadPack, 'POST',  /^\/?(.*?)\/git-upload-pack$/, 'application/x-git-upload-pack-request'],
   [RequestType.ReceivePack, 'POST',  /^\/?(.*?)\/git-receive-pack$/, 'application/x-git-receive-pack-request'],
 ];
@@ -654,14 +671,14 @@ const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) 
             kind,
             reference: results[3],
           };
-          service.metadata.push(metadata);
+          service.requestData.push(metadata);
           if (results[4]) {
             for (const c of results[4].trim().split(' ')) {
               if (/=/.test(c)) {
                 const [k, v] = c.split('=');
-                service.capabilities.set(k, v);
+                service.requestCapabilities.set(k, v);
               } else {
-                service.capabilities.set(c, undefined);
+                service.requestCapabilities.set(c, undefined);
               }
             }
           }
@@ -681,14 +698,14 @@ const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) 
             commits: [results[2]],
             kind: results[1] as ('want' | 'have'),
           };
-          service.metadata.push(metadata);
+          service.requestData.push(metadata);
           if (results[3]) {
             for (const c of results[3].trim().split(' ')) {
               if (/=/.test(c)) {
                 const [k, v] = c.split('=');
-                service.capabilities.set(k, v);
+                service.requestCapabilities.set(k, v);
               } else {
-                service.capabilities.set(c, undefined);
+                service.requestCapabilities.set(c, undefined);
               }
             }
           }

@@ -3,22 +3,18 @@
 Serve git over http(s).
 
 ## Install
+This is a [Node.js](https://nodejs.org/en/) module available through the
+[npm registry](https://www.npmjs.com/).
+
+Before installing, [download and install Node.js](https://nodejs.org/en/download/).
+Node.js 8 or higher is required.
+
+Installation is done using the
+[`npm install` command](https://docs.npmjs.com/getting-started/installing-npm-packages-locally):
 
 ```sh
-npm install --save git-service
+$ npm install --save git-service
 ```
-
-## What is this?
-
-This is a framework independent library for serving git over http(s). It exports an
-abstract service which can either be used standalone or extended to your needs.
-
-I am not a fan of events used in a middleware-driven workflow, as it breaks the pattern,
-so I made this library which, in my eyes, is better suited for such uses. It's a side-project,
-so expect irregular updates, if any, in case you want to use it. Below you can find some simular
-projects which helped me greatly when creating this package. Also a great help was the technical
-documentation for git, which can be found
-[at github](https://github.com/git/git/blob/master/Documentation/technical).
 
 ## Why start at version 2?
 
@@ -26,17 +22,27 @@ Because this is actually a rewrite of another package. But since the main reason
 package changed, so did the name. If you're interested, the other package can be found
 [here](.).
 
-## Features
+## What is this?
 
-- [x] simple high-level logic
-- [x] support different backends (through drivers)
-  - [x] serve from local file system
-  - [x] forward to http(s) server
-  - [ ] forward to ssh server (planned)
-  - [ ] forward to git (protocol) server (planned)
-- [x] support the http smart protocol
-- [x] can inform client (inform client)
-- [ ] check access per service per repository (planned)
+This package is a framework independent library for serving git over http(s).
+The main export are the interfaces `IService` and `IServiceDriver`, tougether
+creating a commonground for serving git trough node.
+In addition to these interfaces does this package also contain;
+a reference class `Service` implementing `IService`, the two functions `serveRequest` and `checkIfValidServiceDriver`, and some more interfaces you can find in the [full documentation](.).
+
+**Note:** An implementation of `IServiceDriver` is **not** so you can use any compatible driver that passes the checks in `checkIfValidServiceDriver`. For the reference driver implementation see package [git-service-driver](.). Though it is a reference implementation, it does
+
+### Motivation for this package
+
+I am not a fan of events used in a middleware-driven workflow, as it breaks the
+middleware-pattern, so I made this library which, in my eyes, is better suited for such
+uses. I also made it framework independent so it can be fit for any framework you want to
+use.
+
+It's a side-project, so expect irregular updates, if any, in case you want to use it.
+Below you can find some simular projects which helped me greatly when creating this
+package. Also a great help was the technical documentation for git, which can be found
+[at github](https://github.com/git/git/blob/master/Documentation/technical).
 
 ## Related packages
 
@@ -47,14 +53,18 @@ package changed, so did the name. If you're interested, the other package can be
 
 ## Simular projects
 
-- [pushover](https://github.com/substack/pushover) ([npm](.))
-- [git-http-backend](https://github.com/substack/git-http-backend) ([npm](.))
-- [git-server](.) ([npm](.))
-- [grack](.) (ruby on rails)
+- [pushover](https://github.com/substack/pushover)
+- [git-http-backend](https://github.com/substack/git-http-backend)
+- [git-server](.)
+- [grack](.)
+
+## Documentation
+
+THe full documentation can be found at [Github Pages](.).
 
 ## Usage
 
-**Note:** It is recommended to use a function or class from a sub-package.
+**Note:** It is recommended to use a function or class from a sub-package found above.
 
 ```js
 "use strict";
@@ -64,7 +74,6 @@ import HttpStatus from "http-status";
 import { RequestType, Service } from "git-service";
 import { createDriver, createDriverCache } from "git-service-basic-drivers";
 
-let counter = 0;
 const { ORIGIN_ENV: origin = "./repos", PORT } = process.env;
 const port = safeParseInt(PORT, 3000);
 const cache = createDriverCache();
@@ -74,22 +83,13 @@ const server = http.createServer(async function(request, response) {
     response.statusCode = 404;
     return response.end();
   }
-
-  const id = counter++;
-  console.log(`${id} - REQUEST - ${request.method} - ${request.url}`);
-  response.on("finish", () => console.log(`${id} - RESPONSE - ${response.statusCode}`));
-
+  console.log("HTTP %s - %s", request.method, request.url);
   const service = new Service(driver, request.method, request.url, request.headers, request);
-
-  service.onAccept.addOnce(function ({status, headers, body}) {
+  service.onResponse.addOnce(function ({body, headers, statuscode, statusMessage}) {
     headers.forEach(function (value, header) { response.setHeader(header, value); });
-    response.statusCode = status;
+    response.statusCode = statusCode;
+    response.statusMessage = statusMessage;
     body.pipe(response, {end: true});
-  });
-  service.onReject.addOnce(function ({status, headers, reason}) {
-    headers.forEach(function (value, header) { response.setHeader(header, value); });
-    response.statusCode = status;
-    response.end(reason || HttpStatus[status], "utf8");
   });
   service.onError.addOnce(function (err) {
     if (!response.headersSent) {
@@ -100,21 +100,9 @@ const server = http.createServer(async function(request, response) {
       response.end();
     }
   });
-  service.onError.add(function (err) {
-    console.error(err, id);
-  });
-
-  console.log(`${id} - SERVICE - ${RequestType[service.type]} - ${service.repository}`)
-
-  service.inform("Served from package 'git-service' found at npmjs.com");
-
-  if (!await service.exists()) {
-    await service.reject(404);
-  } else if (!await service.access()) {
-    await service.reject(403);
-  } else {
-    await service.accept();
-  }
+  service.onError.add(function (err) { console.error(err, id); });
+  service.informClient("Served from package 'git-service' found at npmjs.com");
+  await serveRequest(service);
 });
 
 process.on("SIGTERM", () => server.close());
@@ -125,303 +113,6 @@ function safeParseInt(source, default_value) {
   return Number.isNaN(value) ? default_value : value;
 }
 ```
-
-## Public API
-
-**List of related apis** (grouped by type):
-
-- `class`
-  - [Header](.) ([node-fetch](https://www.npmjs.com/package/node-fetch))
-
-**List of exports** (grouped by type):
-
-- `class`
-  - [Service](.)
-  - [ServiceError](.)
-- `function`
-  - [checkIfValidServiceDriver](.)
-- `enum`
-  - [RequestType](.)
-  - [ServiceErrorCode](.)
-  - [RequestStatus](.)
-- `interface`
-  - [IRequestPullData](.)
-  - [IRequestPushData](.)
-  - [IServiceDriver](.)
-  - [ISignalAcceptData](.)
-  - [ISignalRejectData](.)
-
-### Flags
-
-In the api reference you will find some arguments/properties/methods are marked with one or more flags. Below is a list explaining what those flags mean.
-
-- *[optional]* - Any argument/property marked with this flag can be omitted.
-
-- *[read-only]* - Any property marked with this flag can only be read, and not written to.
-
-### **Service** (class)
-
-High-level git service.
-
-#### Constructor
-
-Accepts 5 arguments and will throw if it is supplied the wrong type or to few
-arguments.
-
-- `driver`
-  \<[IServiceDriver](.)>
-  Service driver to use. See [createDriver](.) for how to create a driver.
-- `method`
-  \<[String](.)>
-  Upper-cased HTTP method for request.
-- `url_fragment`
-  \<[String](.)>
-  A fragement of or the full url. Will extract repository from here if possible.
-- `headers`
-  \<[Headers](.)
-  | [Array](.)
-  | [Object](.)>
-  Request headers supplied as: 1) an instance of [Headers](.),
-  2) a key-value array, or 3) a plain object with headers as keys.
-- `input`
-  \<[Readable](.)>
-  Input (normally the request itself)
-
-#### Properties
-
-- `awaitReady`
-  *[read-only]*
-  \<[Promise](.)\<[void](.)>>
-  Resolves when input is parsed.
-- `capebilities`
-  *[read-only]*
-  \<[Map](.)\<[String](.), `true`
-  | [String](.)>>
-  Capebilities of client.
-- `driver`
-  *[read-only]*
-  \<[IServiceDriver](.)>
-  Service driver.
-- `type`
-  *[read-only]*
-  \<[RequestType](.)>
-  Requested service. Defaults to [`RequestType.Unknown`](.).
-- `metadata`
-  *[read-only]*
-  \<[Array](.)\<[IRequestPullData](.)
-  | [IRequestPushData](.)>>
-  An array containing request pull/push data depending on `Service.type`.
-- `ready`
-  *[read-only]*
-  \<[Boolean](.)>
-  Indicates input is parsed.
-- `status`
-  *[read-only]*
-  \<[RequestStatus](.)>
-  Request status, incdicates if service was accepted, rejected or is still pending.
-- `repository`
-  \<[string](.)>
-  Repository to use.
-
-#### Methods
-
-- `accept`
-  \<[Promise](.)\<[void](.)>>
-  Accept service. Result may be rejected if driver returns a status of `4xx` or `5xx`. Will only show results once.
-- `reject`
-  \<[Promise](.)\<[void](.)>>
-  Reject service. Will only show results once.
-  - `status`
-    *[optional]*
-    \<[Number](.)>
-    Status code to reject with. Either a `4xx` or `5xx` code.
-  - `reason`
-    *[optional]*
-    \<[String](.)>
-    Reason for rejection. Defaults to status message.
-- `empty`
-  \<[Promise](.)\<[Boolean](.)>>
-  Check if repository exists and is empty.
-- `exists`
-  \<[Promise](.)\<[Boolean](.)>>
-  Check if repository exists.
-- `access`
-  \<[Promise](.)\<[Boolean](.)>>
-  Check if current service is available for use. (Service may still be forced).
-- `init`
-  \<[Promise](.)\<[Boolean](.)>>
-  Initialises repository, but only if non-existant.
-- `inform`
-  \<[Promise](.)\<[void](.)>>
-  Informs client of messages.
-  - `...messages`
-  \<[Array](.)\<[String](.)>
-    | [Buffer](.)>
-    Messages to inform client.
-
-#### Signals
-
-- `onAccept`
-  \<[Signal](https://www.npmjs.com/package/micro-signals#signal)\<[ISignalAcceptData](.)>>
-  Dispatched when request is accepted.
-
-- `onReject`
-  \<[Signal](https://www.npmjs.com/package/micro-signals#signal)\<[ISignalRejectData](.)>>
-  Dispatched when request is rejected.
-
-- `onError`
-  \<[Signal](https://www.npmjs.com/package/micro-signals#signal)\<[Error](.)>>
-  Dispatched when anything internal goes wrong with thrown error.
-
-### **RequestType** (enum)
-
-#### Values
-
-- `Unknown` = 0
-- `Advertise` = 1
-- `Pull` = 2
-- `Push` = 3
-
-### **RequestStatus** (enum)
-
-#### Values
-
-- `Pending` = 0
-- `Accepted` = 1
-- `Rejected` = 2
-- `AcceptedButRejected` = 3
-
-### **IRequestPullData** (interface)
-
-Contains data of what client wants from this pull request.
-
-#### Properties
-
-- `commits`
-  \<[Array](.)\<[String](.)>>
-  Commit. In plural form for compatibility with IRequestPushData.
-- `type`
-  \<`"have"`
-  | `"want"`>
-  Pull type, can be either have or want.
-
-### **IRequestPushData** (interface)
-
-Contains data of what client want to do in this push request.
-
-#### Properties
-
-- `commits`
-  \<[Array](.)\<[String](.)>>
-  Commits. In order of old commit, new commit.
-- `type`
-  \<`"create"`
-  | `"delete"`
-  | `"update"`>
-  Push type, can be one of create, delete or update.
-- `refname`
-  \<[String](.)>
-  Reference to work with.
-
-### **IServiceDriver** (interface)
-
-Abstract driver to work with git.
-
-#### Properties
-
-- `origin`
-  *[read-only]*
-  \<[String](.)>
-  Either an URL or absolute path leading to repositories.
-
-#### Methods
-
-- `access`
-  \<[Promise](.)\<[Boolean](.)>>
-  Checks access to service indicated by hint for repository at origin.
-  - `repository`
-    \<[String](.)>
-    Repository to check.
-  - `hint`
-    \<[String](.)>
-    Hint indicating service to check.
-- `empty`
-  \<[Promise](.)\<[Promise](.)>>
-  Check if repository exists and is empty at origin.
-  - `repository`
-    \<[String](.)>
-    Repository to check.
-- `exists`
-  \<[Promise](.)\<[Promise](.)>>
-  Check if repository exists at origin.
-  - `repository`
-    \<[String](.)>
-    Repository to check.
-- `get`
-  \<[Promise](.)\<[ISignalAcceptData](.)>>
-  Process service indicated by hint, and return data from git.
-  - `repository`
-    \<[String](.)>
-    Repository to work with.
-  - `hint`
-    \<[String](.)>
-    Hint indicating service to check.
-  - `headers`
-    \<[Headers](.)>
-    Http headers to append if sent over http(s).
-  - `input`
-    *[optional]*
-    \<[Readable](.)>
-    Input (processed request body)
-  - `messages`
-    *[optional]*
-  \<[Array](.)\<[Buffer](.)>>
-    Buffered messages to client.
-- `hint`
-  \<[String](.)>
-  Get hint used by driver to determine service. Return value must be chosen hint.
-  - `...hints`
-  \<[Array](.)\<[String](.)>>
-    An array contaings hints to choose from. Currently only 2 hints available.
-- `init`
-  \<[Promise](.)\<[Boolean](.)>>
-  Initialise a bare repository at origin, but only if repository does not exist.
-  - `repository`
-    \<[String](.)>
-    Repository to init.
-
-### **ISignalAcceptData** (interface)
-
-Contains data needed to fufill request.
-
-#### Properties
-
-- `status`
-  \<[Number](.)>
-  Status code for response. Either a `2xx` or `3xx` code.
-- `headers`
-  \<[Headers](.)>
-  Headers for response.
-- `body`
-  \<[Readable](.)>
-  Body for response.
-
-### **ISignalRejectData** (interface)
-
-Contains data needed to reject request.
-
-#### Properties
-
-- `status`
-  \<[Number](.)>
-  Status code for response. Either a `4xx` or `5xx` code.
-- `headers`
-  \<[Headers](.)>
-  Headers for response.
-- `reason`
-  *[optional]*
-  \<[String](.)>
-  Optional reason for rejection.
 
 ## Typescript
 

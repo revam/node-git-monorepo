@@ -1,3 +1,9 @@
+/**
+ * git-service package
+ * Copyright (c) 2018 Mikal Stordal <mikalstordal@gmail.com>
+ *
+ * @module git-service
+ */
 import { createHash } from 'crypto';
 import { createPacketInspectStream, createPacketReadableStream } from 'git-packet-streams';
 import * as encode from 'git-side-band-message';
@@ -641,6 +647,9 @@ export interface IResponseData {
   statusMessage: string;
 }
 
+/**
+ * Maps request url to vaild services.
+ */
 const ServiceMap: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
   [RequestType.UploadPack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
   [RequestType.ReceivePack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
@@ -648,6 +657,9 @@ const ServiceMap: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
   [RequestType.ReceivePack, 'POST',  /^\/?(.*?)\/git-receive-pack$/, 'application/x-git-receive-pack-request'],
 ];
 
+/**
+ * Maps RequestType to a valid packet reader for request body.
+ */
 const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) => any>([
   [
     RequestType.ReceivePack,
@@ -715,6 +727,12 @@ const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) 
   ],
 ]);
 
+/**
+ * Sort metadata in uniform order.
+ *
+ * @param a Data pack A
+ * @param b Data pack B
+ */
 function sortMetadata(a: IUploadPackData | IReceivePackData , b: IUploadPackData | IReceivePackData): number {
   // TODO: Make a predictable sort for metadata
   return 0;

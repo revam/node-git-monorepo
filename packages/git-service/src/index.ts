@@ -13,92 +13,9 @@ import { Headers } from 'node-fetch';
 import { Readable, Transform } from 'stream';
 
 /**
- * Request service type.
+ * Reference IService implementation.
  */
-export enum RequestType {
-  /**
-   * Request the use of upload-pack service.
-   */
-  UploadPack = "UploadPack",
-  /**
-   * Request the use of receive-pack service.
-   */
-  ReceivePack = "ReceivePack",
-}
-
-/**
- * Request service status.
- */
-export enum RequestStatus {
-  /**
-   * Indicate the service is still pending.
-   */
-  Pending = 0,
-  /**
-   * Indicate the service was accepted.
-   */
-  Accepted = 1,
-  /**
-   * Indocate the service was rejected.
-   */
-  Rejected = 2,
-  /**
-   * Indicate the service was initially accepted, but failed to fetch result for service.
-   *
-   * Combination of flags Accepted and Rejected. (1 | 2 -> 3)
-   */
-  Failure = 3,
-}
-
-/**
- * Reference business logic following the spec. as defined in the the technical documentation.
- *
- * See https://github.com/git/git/blob/master/Documentation/technical/http-protocol.txt for more info.
- * @param service Service instance
- * @param initNonexistant Create and initialise repository when it does not exist
- */
-export async function referenceBusinessLogic(
-  service: IService,
-  initNonexistant: boolean = false,
-): Promise<IResponseData> {
-  if (! await service.checkIfExists()) {
-    // should we skip creation of resource?
-    if (!initNonexistant) {
-      service.reject(404); // 404 Not Found
-      return service.awaitResponseReady;
-    }
-    if (! await service.createAndInitRepository()) {
-      service.reject(500, "Could not initialize new repository");
-      return service.awaitResponseReady;
-    }
-  }
-  if (! await service.checkForAccess()) {
-    service.reject(401); // 401 Unauthorized
-  } else if (! await service.checkIfEnabled()) {
-    service.reject(403); // 403 Forbidden
-  } else {
-    service.accept();
-  }
-  return service.awaitResponseReady;
-}
-
-/**
- * Checks if candidateDriver is a valid service driver.
- * @param candidateDriver Driver candidate
- */
-export function checkIfValidServiceDriver(candidateDriver: any): candidateDriver is IServiceDriver {
-  return typeof candidateDriver === 'object' &&
-    'checkForAccess' in candidateDriver && typeof candidateDriver.checkForAccess === 'function' &&
-    'checkIfEnabled' in candidateDriver && typeof candidateDriver.checkIfEnabled === 'function' &&
-    'checkIfExists' in candidateDriver && typeof candidateDriver.checkIfExists === 'function' &&
-    'getResponse' in candidateDriver && typeof candidateDriver.getResponse === 'function' &&
-    'createAndInitRepository' in candidateDriver && typeof candidateDriver.createAndInitRepository === 'function';
-}
-
-/**
- * High-level git service class reference implementing interface IService.
- */
-export class Service implements IService {
+export default class implements IService {
   public readonly driver: IServiceDriver;
   public readonly awaitRequestReady: Promise<void>;
   public readonly awaitResponseReady: Promise<IResponseData>;
@@ -124,28 +41,27 @@ export class Service implements IService {
    *
    * @param driver Service driver to use.
    * @param method Upper-case HTTP method for request.
-   * @param url_fragment The full URL or tail of the url. Will extract repository from here if possible.
+   * @param url Incoming URL or tail snippet. Will extract repository from here when possible.
    * @param headers Request headers supplied as: 1) an instance of [Headers](.),
    *                2) a key-value array, or 3) a plain object with headers as keys.
-   * @param input Input (normally the request itself)
-   * @param options Service options
+   * @param body Input (normally the request itself)
    *
    * @throws {TypeError}
    */
   constructor(
     driver: IServiceDriver,
     method: string,
-    url_fragment: string,
+    url: string,
     headers: Headers | Array<[string, string]> | {[index: string]: string | string[]},
-    input: Readable,
+    body: Readable,
   ) {
-    if (!checkIfValidServiceDriver(driver)) {
+    if (!checkServiceDriver(driver)) {
       throw new TypeError('argument `driver` must be a valid service driver interface');
     }
     if (typeof method !== 'string' || !method) {
       throw new TypeError('argument `method` must be a valid string');
     }
-    if (typeof url_fragment !== 'string' || !url_fragment) {
+    if (typeof url !== 'string' || !url) {
       throw new TypeError('argument `url_fragment` must be a valid string');
     }
     if (!(
@@ -155,7 +71,7 @@ export class Service implements IService {
     )) {
       throw new TypeError('argument `in_headers` must be either a Headers object, a string array or headers object');
     }
-    if (!(input instanceof Readable)) {
+    if (!(body instanceof Readable)) {
       throw new TypeError('argument `input` must be s sub-instance of stream.Readable');
     }
     // Workaround for string array headers
@@ -183,52 +99,48 @@ export class Service implements IService {
     this.__readyRequest = false;
     this.__readyResponse = false;
     Object.defineProperties(this, {
-      capabilities: {
-        value: new Map(),
-        writable: false,
-      },
       driver: {
         value: driver,
         writable: false,
       },
-      etag: {
-        get() { return this.__etag; },
+      isRequestReady: {
+        get() { return this.__readyRequest; },
       },
-      metadata: {
-        value: [],
-        writable: false,
-      },
-      onAccept: {
-        value: new Signal(),
-        writable: false,
+      isResponseReady: {
+        get() { return this.__readyResponse; },
       },
       onError: {
         value: new Signal(),
         writable: false,
       },
-      onReject: {
+      onResponse: {
         value: new Signal(),
         writable: false,
       },
-      ready: {
-        get() { return this.__ready; },
+      requestCapabilities: {
+        value: new Map(),
+        writable: false,
+      },
+      requestData: {
+        value: [],
+        writable: false,
       },
       status: {
         get() { return this.__status; },
       },
     });
-    this.onResponse.addOnce(() => this.__readyResponse = true);
     Object.defineProperties(this, {
-      awaitResponse: {
+      awaitResponseReady: {
         value: new Promise<IResponseData>((resolve, reject) => {
           this.onError.addOnce(reject);
+          this.onResponse.addOnce(() => this.__readyResponse = true);
           this.onResponse.addOnce(resolve);
         }),
         writable: false,
       },
     });
-    for (const [service, expected_method, regex, expected_content_type] of ServiceMap) {
-      const results = regex.exec(url_fragment);
+    for (const [service, expected_method, regex, expected_content_type] of Services) {
+      const results = regex.exec(url);
       if (results) {
         const advertisement = !expected_content_type;
         if (method !== expected_method) {
@@ -249,7 +161,7 @@ export class Service implements IService {
         }
         this.repository = results[1];
         Object.defineProperties(this, {
-          advertisement: {
+          isAdvertisement: {
             enumerable: true,
             value: advertisement,
             writable: false,
@@ -265,7 +177,7 @@ export class Service implements IService {
     }
     if (!('type' in this)) {
       Object.defineProperties(this, {
-        advertisement: {
+        isAdvertisement: {
           enumerable: true,
           value: false,
           writable: false,
@@ -280,12 +192,12 @@ export class Service implements IService {
     if ("isAdvertisement" in this && !this.isAdvertisement) {
       const disposables: Array<() => void> = [];
       const onError = (ee, cb) => { ee.on('error', cb); disposables.push(() => ee.removeListener('error', cb)); };
-      onError(input, (err) => this.onError.dispatch(err));
-      const middleware = MetadataMap.get(this.type);
+      onError(body, (err) => this.onError.dispatch(err));
+      const middleware = PacketMapper.get(this.type);
       const [parser, awaitReady] = createPacketInspectStream(middleware(this));
       onError(parser, (err) => this.onError.dispatch(err));
       Object.defineProperties(this, {
-        awaitReady: {
+        awaitRequestReady: {
           value: awaitReady.then(() => {
             this.__readyRequest = true;
             disposables.forEach((d) => d());
@@ -293,21 +205,21 @@ export class Service implements IService {
           }),
           writable: false,
         },
-        body: {
+        requestBody: {
           value: parser,
           writable: false,
         },
       });
-      input.pipe(parser);
+      body.pipe(parser);
     } else {
       this.__readyRequest = true;
       Object.defineProperties(this, {
-        awaitReady: {
+        awaitRequestReady: {
           value: Promise.resolve(),
           writable: false,
         },
-        body: {
-          value: input,
+        requestBody: {
+          value: body,
           writable: false,
         },
       });
@@ -427,6 +339,87 @@ export class Service implements IService {
 }
 
 /**
+ * Request service type.
+ */
+export enum RequestType {
+  /**
+   * Request the use of upload-pack service.
+   */
+  UploadPack = "UploadPack",
+  /**
+   * Request the use of receive-pack service.
+   */
+  ReceivePack = "ReceivePack",
+}
+
+/**
+ * Request service status.
+ */
+export enum RequestStatus {
+  /**
+   * Indicate the service is still pending.
+   */
+  Pending = 0,
+  /**
+   * Indicate the service was accepted.
+   */
+  Accepted = 1,
+  /**
+   * Indocate the service was rejected.
+   */
+  Rejected = 2,
+  /**
+   * Indicate the service was initially accepted, but failed to fetch result for service.
+   *
+   * Combination of flags Accepted and Rejected. (1 | 2 -> 3)
+   */
+  Failure = 3,
+}
+
+/**
+ * Reference business logic in line with the spec. as defined in the the technical documentation.
+ *
+ * See https://github.com/git/git/blob/master/Documentation/technical/http-protocol.txt for more info.
+ */
+export async function serveRequest(
+  service: IService,
+  createAndInitNonexistant: boolean = false,
+): Promise<IResponseData> {
+  if (! await service.checkIfExists()) {
+    // should we skip creation of resource?
+    if (!createAndInitNonexistant) {
+      service.reject(404); // 404 Not Found
+      return service.awaitResponseReady;
+    }
+    if (! await service.createAndInitRepository()) {
+      service.reject(500, "Could not initialize new repository");
+      return service.awaitResponseReady;
+    }
+  }
+  if (! await service.checkForAccess()) {
+    service.reject(401); // 401 Unauthorized
+  } else if (! await service.checkIfEnabled()) {
+    service.reject(403); // 403 Forbidden
+  } else {
+    service.accept();
+  }
+  return service.awaitResponseReady;
+}
+
+/**
+ * Checks if candidateDriver is a valid service driver.
+ * @param candidateDriver Driver candidate
+ */
+export function checkServiceDriver(candidateDriver: any): candidateDriver is IServiceDriver {
+  return typeof candidateDriver === 'object' &&
+    'checkForAccess' in candidateDriver && typeof candidateDriver.checkForAccess === 'function' &&
+    'checkIfEnabled' in candidateDriver && typeof candidateDriver.checkIfEnabled === 'function' &&
+    'checkIfExists' in candidateDriver && typeof candidateDriver.checkIfExists === 'function' &&
+    'getResponse' in candidateDriver && typeof candidateDriver.getResponse === 'function' &&
+    'createAndInitRepository' in candidateDriver && typeof candidateDriver.createAndInitRepository === 'function';
+}
+
+/**
  * Contains information of what client want to retrive from this upload-pack service request.
  */
 export interface IUploadPackData {
@@ -441,7 +434,7 @@ export interface IUploadPackData {
 }
 
 /**
- * Contains information of what client want to upload in current receive-pack service request.
+ * Contains information of what client want to upload in a receive-pack request.
  */
 export interface IReceivePackData {
   /**
@@ -449,21 +442,21 @@ export interface IReceivePackData {
    */
   kind: 'create' | 'update' | 'delete';
   /**
-   * First and last commit for refname.
+   * First child is old commit sha-hash, second is new commit sha-hash.
    */
   commits: [string, string];
   /**
-   * Reference path to store. Can be any path, but usually segmented and starting with either 'heads' or 'tags'.
+   * Reference path. Can be any segmented path, but usually starting with either 'heads' or 'tags'.
    */
   reference: string;
 }
 
 /**
- * Lov-level service driver for working with git.
+ * Low-level service driver for working with git.
  */
 export interface IServiceDriver {
   /**
-   * Repositories origin location for reference only. Dependent of driver implementation.
+   * Repositories origin location - for reference only. Dependent of driver implementation.
    */
   readonly origin?: string;
   /**
@@ -473,17 +466,17 @@ export interface IServiceDriver {
    */
   checkForAccess(service: IService, headers: Headers): Promise<boolean>;
   /**
-   * Checks if service is enabled.
+   * Checks if service is enabled for repository.
    * @param service IService object with related information to check
    */
   checkIfEnabled(service: IService): Promise<boolean>;
   /**
-   * Check if repository exists at origin. Can optionaly ignore empty repositories.
+   * Checks if repository exists at origin.
    * @param service IService object with related information to check
    */
   checkIfExists(service: IService): Promise<boolean>;
   /**
-   * Process service indicated by hint, and return data from git.
+   * Create a response for service request.
    * @param service IService object with related information
    * @param headers HTTP headers received with request
    * @param messages Buffered messages to inform client
@@ -528,11 +521,11 @@ export interface IService {
   readonly isResponseReady: boolean;
 
   /**
-   * Check if repository exists. Can optionaly ignore empty repositories.
+   * Checks if repository exists.
    */
   checkIfExists(): Promise<boolean>;
   /**
-   * Check if service is enabled. (can still atempt a forcefull use of service)
+   * Checks if service is enabled. (we can still atempt a forcefull use of service)
    */
   checkIfEnabled(): Promise<boolean>;
   /**
@@ -626,7 +619,7 @@ export interface ISignal<T> {
 }
 
 /**
- * Contains response data needed to fufill or reject request.
+ * Simplifid response data needed to resolve or reject request.
  */
 export interface IResponseData {
   /**
@@ -650,7 +643,7 @@ export interface IResponseData {
 /**
  * Maps request url to vaild services.
  */
-const ServiceMap: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
+const Services: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
   [RequestType.UploadPack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
   [RequestType.ReceivePack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
   [RequestType.UploadPack, 'POST',  /^\/?(.*?)\/git-upload-pack$/, 'application/x-git-upload-pack-request'],
@@ -660,7 +653,7 @@ const ServiceMap: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
 /**
  * Maps RequestType to a valid packet reader for request body.
  */
-const MetadataMap = new Map<RequestType, (service: Service) => (buffer: Buffer) => any>([
+const PacketMapper = new Map<RequestType, (service: IService) => (buffer: Buffer) => any>([
   [
     RequestType.ReceivePack,
     (service) => {

@@ -3,6 +3,7 @@
 Serve git over http(s).
 
 ## Install
+
 This is a [Node.js](https://nodejs.org/en/) module available through the
 [npm registry](https://www.npmjs.com/).
 
@@ -24,13 +25,13 @@ package changed, so did the name. If you're interested, the other package can be
 
 ## What is this?
 
-This package is a framework independent library for serving git over http(s).
-The main export are the interfaces `IService` and `IServiceDriver`, tougether
-creating a commonground for serving git trough node.
-In addition to these interfaces does this package also contain;
-a reference class `Service` implementing `IService`, the two functions `serveRequest` and `checkIfValidServiceDriver`, and some more interfaces you can find in the [full documentation](.).
+This packages main focus is defining interfaces for a high-level git service. It also
+includes a reference implementation of the main interface, `IService`, as default export.
+All the git-heavy work is done by a driver implementing the `IServiceDriver` interface,
+and the reference implementation can be found in the seperate
+[`git-service-driver` package](.).
 
-**Note:** An implementation of `IServiceDriver` is **not** so you can use any compatible driver that passes the checks in `checkIfValidServiceDriver`. For the reference driver implementation see package [git-service-driver](.). Though it is a reference implementation, it does
+See the documentation for a full list of exported interfaces.
 
 ### Motivation for this package
 
@@ -43,6 +44,10 @@ It's a side-project, so expect irregular updates, if any, in case you want to us
 Below you can find some simular projects which helped me greatly when creating this
 package. Also a great help was the technical documentation for git, which can be found
 [at github](https://github.com/git/git/blob/master/Documentation/technical).
+
+## Documentation
+
+The full documentation can be  found at [github](.).
 
 ## Related packages
 
@@ -58,10 +63,6 @@ package. Also a great help was the technical documentation for git, which can be
 - [git-server](.)
 - [grack](.)
 
-## Documentation
-
-THe full documentation can be found at [Github Pages](.).
-
 ## Usage
 
 **Note:** It is recommended to use a function or class from a sub-package found above.
@@ -71,7 +72,7 @@ THe full documentation can be found at [Github Pages](.).
 
 import http from "http";
 import HttpStatus from "http-status";
-import { RequestType, Service } from "git-service";
+import { RequestType, serveResponse, Service } from "git-service";
 import { createDriver, createDriverCache } from "git-service-basic-drivers";
 
 const { ORIGIN_ENV: origin = "./repos", PORT } = process.env;
@@ -107,11 +108,6 @@ const server = http.createServer(async function(request, response) {
 
 process.on("SIGTERM", () => server.close());
 server.listen(port, () => console.log(`server is listening on port ${port}`));
-
-function safeParseInt(source, default_value) {
-  const value = parseInt(source);
-  return Number.isNaN(value) ? default_value : value;
-}
 ```
 
 ## Typescript

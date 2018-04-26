@@ -35,14 +35,13 @@
   "homepage": "https://github.com/revam/node-git-service#readme",
   "devDependencies": {
     "del-cli": "^1.1.0",
-    "git-service-driver": "^1.0.0",
     "jest": "^22.0.4",
     "ts-jest": "^22.0.0",
     "tslint": "^5.8.0",
     "typescript": "^2.7.2"
   },
   "dependencies": {
-    "git-service": "^2.0.0"
+    "git-service": "^1.0.0"
   },
   "jest": {
     "transform": {

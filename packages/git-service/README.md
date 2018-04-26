@@ -17,12 +17,6 @@ Installation is done using the
 $ npm install --save git-service
 ```
 
-## Why start at version 2?
-
-Because this is actually a rewrite of another package. But since the main reason for the
-package changed, so did the name. If you're interested, the other package can be found
-[here](.).
-
 ## What is this?
 
 This packages main focus is defining interfaces for a high-level git service. It also

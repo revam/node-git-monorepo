@@ -1,6 +1,6 @@
 {
   "name": "git-service",
-  "version": "2.0.0",
+  "version": "1.0.0",
   "description": "Serve git over http(s)",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

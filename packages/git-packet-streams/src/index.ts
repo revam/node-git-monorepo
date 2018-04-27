@@ -66,7 +66,7 @@ export function createPacketInspectStream(forEach: (packet: Buffer) => any): [Tr
 }
 
 export function createPacketReadableStream(buffers: Buffer[], pauseBufferIndex: number = -1): Readable {
-  const iterator = iteratePacketsInBuffers(buffers, pauseBufferIndex);
+  const iterator = createPacketIterator(buffers, pauseBufferIndex);
   return new Readable({
     read(this: Readable, size: number) {
       try {
@@ -103,13 +103,13 @@ function parsePacketLength(buffer: Buffer, offset: number = 0) {
 /**
  * Creates an iterator yielding packets from multiple buffers.
  * @param buffers Buffers to read
- * @param index Pauseable buffer index
+ * @param pauseBufferIndex Pauseable buffer index
  */
-function *iteratePacketsInBuffers(buffers: Buffer[], index: number = 0): IterableIterator<Buffer> {
+export function *createPacketIterator(buffers: Buffer[], pauseBufferIndex: number = -1): IterableIterator<Buffer> {
   let counter = 0;
   let paused: Buffer;
   for (const buffer of buffers) {
-    if (index === counter) {
+    if (pauseBufferIndex === counter) {
       paused = yield* iteratePacketsInBuffer(buffer, true);
     } else {
       yield* iteratePacketsInBuffer(buffer);

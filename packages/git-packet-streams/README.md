@@ -37,6 +37,7 @@ promise.then(() => console.log("done inspecting"));
 
 - [createPacketInspectStream](.)
 - [createPacketReadableStream](.)
+- [createPacketIterator](.)
 
 ### **createPacketInspectStream** (function)
 
@@ -46,7 +47,7 @@ inspected.
 
 **Note:** The stream will throw erros if it receives incomplete packets.
 
-#### Constructor
+#### Arguments
 
 - `forEach`
   \<[Function](.)>
@@ -63,12 +64,25 @@ Creates a readable stream consistent of all packets provided as part of `buffers
 
 **Note:** The stream will throw erros if it receives incomplete packets.
 
-#### Constructor
+#### Arguments
 
 - `buffers`
   \<[Array](.)\<[Buffer](.)>>
   Packet buffers. Packets may be chunked over multiple buffers.
-- `index`
+- `pauseBufferIndex`
+  \<[Number](.)>
+  Optional index to break at, and resume when rest of buffers are consumed.
+
+### **createPacketIterator** (function)
+
+Creates an iterator yielding packets from multiple buffers.
+
+#### Arguments
+
+- `buffers`
+  \<[Array](.)\<[Buffer](.)>>
+  Packet buffers. Packets may be chunked over multiple buffers.
+- `pauseBufferIndex`
   \<[Number](.)>
   Optional index to break at, and resume when rest of buffers are consumed.
 

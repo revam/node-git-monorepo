@@ -8,15 +8,12 @@
     "test": "test"
   },
   "scripts": {
-    "lint": "tsc --noEmit -p . && tslint src/**/*.ts",
-    "test": "jest",
-    "build:release": "tsc -p .",
-    "build:docs": "typedoc --out ./docs/ --mode modules --excludePrivate --excludeProtected --readme DOCS.md --tsconfig ./tsconfig.json",
-    "pretest": "npm run lint",
-    "prebuild:release": "npm run test",
-    "prebuild:docs": "del-cli docs",
-    "prepublish": "npm run build:release",
-    "postpublish": "del-cli lib"
+    "copy": "node -e \"const args=process.argv.slice(1);if(args.length%2===0){const j=args.length/2;for(let i=0;i<j;i++){fs=require('fs');fs.createReadStream(args[i*2]).pipe(fs.createWriteStream(args[i*2+1]));}}else{throw new Error('Invalid number of arguments');}\"",
+    "docs": "typedoc --out ./docs/ --mode file --theme minimal --excludePrivate --excludeProtected --readme DOCS.md --tsconfig ./tsconfig.json",
+    "test": "tslint test/**/*.ts && jest",
+    "build": "tsc --noEmit -p . && tslint src/**/*.ts && tsc -p .",
+    "prepublish": "npm run test && npm run copy ../../LICENSE LICENSE ../../.npmignore .npmignore && npm run build",
+    "postpublish": "del-cli lib LICENSE .npmignore"
   },
   "repository": {
     "type": "git",
@@ -36,25 +33,15 @@
   },
   "homepage": "https://github.com/revam/node-git-service#readme",
   "devDependencies": {
-    "@types/http-status": "^0.2.30",
-    "@types/jest": "^22.0.0",
-    "@types/node": "^8.5.2",
-    "@types/node-fetch": "^1.6.7",
-    "@types/through": "0.0.29",
     "del-cli": "^1.1.0",
-    "dotenv": "^5.0.1",
-    "http-status": "^1.0.1",
-    "into-stream": "^3.1.0",
     "jest": "^22.0.4",
-    "tempy": "^0.2.1",
-    "through": "^2.3.8",
     "ts-jest": "^22.0.0",
     "tslint": "^5.8.0",
-    "typedoc": "^0.11.1",
     "typescript": "^2.8.3"
   },
   "dependencies": {
-    "git-packet-streams": "^1.0.0",
+    "@types/node-fetch": "^1.6.9",
+    "git-packet-streams": "^1.1.0",
     "git-side-band-message": "0.0.3",
     "micro-signals": "^2.0.0",
     "node-fetch": "^2.0.0"
@@ -63,10 +50,6 @@
     "transform": {
       "^.+\\.tsx?$": "ts-jest"
     },
-    "testPathIgnorePatterns": [
-      "node_modules",
-      "packages"
-    ],
     "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
     "moduleFileExtensions": [
       "ts",

@@ -262,7 +262,13 @@ export default class implements IService {
     const headers = new Headers();
     headers.set('Content-Type', 'text/plain');
     headers.set('Content-Length', buffer.length.toString());
-    this.dispatchResponse({statusCode, statusMessage, headers, body});
+    this.dispatchResponse({
+      headers,
+      statusCode,
+      statusMessage,
+      async buffer() { return Buffer.from(buffer); },
+      stream() { return createPacketReadableStream([buffer]); },
+    });
   }
 
   /**
@@ -317,7 +323,7 @@ export default class implements IService {
 
   public async createRequestSignature(): Promise<string> {
     if (!this.type) {
-      return undefined;
+      return;
     }
     if (!this.isAdvertisement) {
       await this.awaitRequestReady;
@@ -327,8 +333,20 @@ export default class implements IService {
     hash.update(this.type);
     const metadata = this.requestData.slice().sort(sortMetadata).map((m) => JSON.stringify(m));
     hash.update(metadata.join(","));
-    const capabilities = Array.from(this.requestCapabilities).sort().map((a) => a.join("="));
+    const capabilities = Array.from(this.requestCapabilities).sort(sortCapabilities).map((a) => a.join("="));
     hash.update(capabilities.join(","));
+    return hash.digest("hex");
+  }
+
+  public async createResponseSignature(): Promise<string> {
+    if (!this.type) {
+      return;
+    }
+    const response = await this.awaitResponseReady;
+    const hash = createHash("sha256");
+    hash.update(response.statusCode.toString());
+    hash.update(response.statusMessage);
+    hash.update(await response.buffer());
     return hash.digest("hex");
   }
 
@@ -460,7 +478,7 @@ export interface IServiceDriver {
    */
   readonly origin?: string;
   /**
-   * Checks access to service indicated by hint authenticated with headers for repository at origin.
+   * Checks access to service authenticated by headers for repository at origin.
    * @param service IService object with related information to check
    * @param headers Headers to check for access rights
    */
@@ -534,7 +552,11 @@ export interface IService {
   checkForAccess(): Promise<boolean>;
 
   /**
-   * Creates a uniform uniform request signature independent of agent used.
+   * Creates a predictable uniform signature for response status code and body.
+   */
+  createResponseSignature(): Promise<string>;
+  /**
+   * Creates a predictable uniform signature for request data, independent of agent used.
    */
   createRequestSignature(): Promise<string>;
   /**
@@ -593,7 +615,7 @@ export interface IService {
 }
 
 /**
- * Simple signal interface, compatible with most implementions.
+ * Simple signal interface compatible with most implementions.
  */
 export interface ISignal<T> {
   /**
@@ -619,13 +641,17 @@ export interface ISignal<T> {
 }
 
 /**
- * Simplifid response data needed to resolve or reject request.
+ * Response data for request.
  */
 export interface IResponseData {
   /**
-   * Response body.
+   * Process response and return response body as a buffer when done.
    */
-  body: Readable;
+  buffer(): Promise<Buffer>;
+  /**
+   * Creates a new readable stream of response body.
+   */
+  stream(): Readable;
   /**
    * Response headers.
    */
@@ -722,11 +748,20 @@ const PacketMapper = new Map<RequestType, (service: IService) => (buffer: Buffer
 
 /**
  * Sort metadata in uniform order.
- *
  * @param a Data pack A
  * @param b Data pack B
  */
 function sortMetadata(a: IUploadPackData | IReceivePackData , b: IUploadPackData | IReceivePackData): number {
+  // TODO: Make a predictable sort for metadata
+  return 0;
+}
+
+/**
+ * Sort capabilities in uniform order.
+ * @param a Capability a
+ * @param b Capability b
+ */
+function sortCapabilities(a: [string, string], b: [string, string]): number {
   // TODO: Make a predictable sort for metadata
   return 0;
 }

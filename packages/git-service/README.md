@@ -66,7 +66,7 @@ The full documentation can be  found at [github](.).
 
 import http from "http";
 import HttpStatus from "http-status";
-import { RequestType, serveResponse, Service } from "git-service";
+import Service, { RequestType, serveResponse } from "git-service";
 import { createDriver, createDriverCache } from "git-service-basic-drivers";
 
 const { ORIGIN_ENV: origin = "./repos", PORT } = process.env;

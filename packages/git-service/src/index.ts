@@ -32,9 +32,12 @@ export default class implements IService {
   public repository: string;
   private __headers: Headers;
   private __messages: Buffer[];
-  private __status: RequestStatus;
   private __readyRequest: boolean;
   private __readyResponse: boolean;
+  private __repository?: string;
+  private __signatureRequest?: string;
+  private __signatureResponse?: string;
+  private __status: RequestStatus;
 
   /**
    * Accepts 5 arguments and will throw if it is supplied the wrong type or to few arguments.
@@ -70,16 +73,23 @@ export default class implements IService {
     this.__status = RequestStatus.Pending;
     this.__readyRequest = false;
     this.__readyResponse = false;
+    this.__repository = undefined;
+    this.__signatureRequest = undefined;
+    this.__signatureResponse = undefined;
     Object.defineProperties(this, {
       driver: {
         value: driver,
         writable: false,
       },
       isRequestReady: {
-        get() { return this.__readyRequest; },
+        get() {
+          return this.__readyRequest;
+        },
       },
       isResponseReady: {
-        get() { return this.__readyResponse; },
+        get() {
+          return this.__readyResponse;
+        },
       },
       onError: {
         value: new Signal(),
@@ -88,6 +98,17 @@ export default class implements IService {
       onResponse: {
         value: new Signal(),
         writable: false,
+      },
+      repository: {
+        get() {
+          return this.__repository;
+        },
+        set(value) {
+          if (this.__repository !== value) {
+            this.__signatureRequest = undefined;
+            this.__repository = value;
+          }
+        },
       },
       requestCapabilities: {
         value: new Map(),
@@ -98,7 +119,9 @@ export default class implements IService {
         writable: false,
       },
       status: {
-        get() { return this.__status; },
+        get() {
+          return this.__status;
+        },
       },
     });
     Object.defineProperties(this, {
@@ -131,7 +154,7 @@ export default class implements IService {
             break;
           }
         }
-        this.repository = results[1];
+        this.__repository = results[1];
         Object.defineProperties(this, {
           isAdvertisement: {
             enumerable: true,
@@ -294,6 +317,9 @@ export default class implements IService {
   }
 
   public async createRequestSignature(): Promise<string> {
+    if (this.__signatureRequest) {
+      return this.__signatureRequest;
+    }
     if (!this.type) {
       return;
     }
@@ -307,10 +333,13 @@ export default class implements IService {
     hash.update(metadata.join(","));
     const capabilities = Array.from(this.requestCapabilities).sort(sortCapabilities).map((a) => a.join("="));
     hash.update(capabilities.join(","));
-    return hash.digest("hex");
+    return this.__signatureRequest = hash.digest("hex");
   }
 
   public async createResponseSignature(): Promise<string> {
+    if (this.__signatureResponse) {
+      return this.__signatureResponse;
+    }
     if (!this.type) {
       return;
     }
@@ -319,7 +348,7 @@ export default class implements IService {
     hash.update(response.statusCode.toString());
     hash.update(response.statusMessage);
     hash.update(await response.buffer());
-    return hash.digest("hex");
+    return this.__signatureResponse = hash.digest("hex");
   }
 
   public informClient(message: string | Buffer) {

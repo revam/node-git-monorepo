@@ -62,36 +62,10 @@ export default class implements IService {
     if (typeof url !== 'string' || !url) {
       throw new TypeError('argument `url_fragment` must be a valid string');
     }
-    if (!(
-      headers instanceof Headers ||
-      headers instanceof Array && headers.length !== 0 ||
-      typeof headers === 'object' && Reflect.ownKeys(headers).length !== 0
-    )) {
-      throw new TypeError('argument `in_headers` must be either a Headers object, a string array or headers object');
-    }
     if (!(body instanceof Readable)) {
       throw new TypeError('argument `input` must be s sub-instance of stream.Readable');
     }
-    // Workaround for string array headers
-    const multi_headers: Array<[string, string[]]> = [];
-    if (!(headers instanceof Headers || headers instanceof Array)) {
-      (Reflect.ownKeys(headers) as string[]).filter((h) => {
-        if (headers[h] instanceof Array) {
-          multi_headers.push([h, headers[h] as string[]]);
-          Reflect.deleteProperty(headers, h);
-        }
-      });
-    }
-    // @ts-ignore incomplete definition file for package "node-fetch"
-    this.__headers = new Headers(headers);
-    // Workaround for string array headers
-    if (multi_headers.length) {
-      for (const [header, values] of multi_headers) {
-        for (const value of values) {
-          this.__headers.append(header, value);
-        }
-      }
-    }
+    this.__headers = createHeaders(headers);
     this.__messages = [];
     this.__status = RequestStatus.Pending;
     this.__readyRequest = false;
@@ -795,6 +769,41 @@ const PacketMapper = new Map<RequestType, (service: IService) => (buffer: Buffer
     },
   ],
 ]);
+
+/**
+ * Creates an instance of class Headers from input headers.
+ * @param headers Input headers
+ */
+function createHeaders(headers: Headers | Array<[string, string]> | {[index: string]: string | string[]}): Headers {
+  if (!(
+    headers instanceof Headers ||
+    headers instanceof Array && headers.length !== 0 ||
+    typeof headers === "object" && Reflect.ownKeys(headers).length !== 0
+  )) {
+    throw new TypeError("argument `headers` must be either an instance of Headers, a string array or headers object");
+  }
+  // Workaround for string array headers
+  const multi_headers: Array<[string, string[]]> = [];
+  if (!(headers instanceof Headers || headers instanceof Array)) {
+    (Reflect.ownKeys(headers) as string[]).filter((h) => {
+      if (headers[h] instanceof Array) {
+        multi_headers.push([h, headers[h] as string[]]);
+        Reflect.deleteProperty(headers, h);
+      }
+    });
+  }
+  // @ts-ignore incomplete definition file for package "node-fetch"
+  const output = new Headers(headers);
+  // Workaround for string array headers
+  if (multi_headers.length) {
+    for (const [header, values] of multi_headers) {
+      for (const value of values) {
+        output.append(header, value);
+      }
+    }
+  }
+  return output;
+}
 
 /**
  * Sort metadata in uniform order.

@@ -55,9 +55,7 @@ export default class implements IService {
     headers: Headers | Array<[string, string]> | {[index: string]: string | string[]},
     body: Readable,
   ) {
-    if (!checkServiceDriver(driver)) {
-      throw new TypeError('argument `driver` must be a valid service driver interface');
-    }
+    inspectServiceDriver(driver);
     if (typeof method !== 'string' || !method) {
       throw new TypeError('argument `method` must be a valid string');
     }
@@ -425,16 +423,68 @@ export async function serveRequest(
 }
 
 /**
- * Checks if candidateDriver is a valid service driver.
- * @param candidateDriver Driver candidate
+ * Symbol used to check if candidate has been checked previously.
  */
-export function checkServiceDriver(candidateDriver: any): candidateDriver is IServiceDriver {
-  return typeof candidateDriver === 'object' &&
-    'checkForAccess' in candidateDriver && typeof candidateDriver.checkForAccess === 'function' &&
-    'checkIfEnabled' in candidateDriver && typeof candidateDriver.checkIfEnabled === 'function' &&
-    'checkIfExists' in candidateDriver && typeof candidateDriver.checkIfExists === 'function' &&
-    'getResponse' in candidateDriver && typeof candidateDriver.getResponse === 'function' &&
-    'createAndInitRepository' in candidateDriver && typeof candidateDriver.createAndInitRepository === 'function';
+const SymbolChecked = Symbol("checked");
+
+/**
+ * Inspects candidate for any missing or invalid methods from `IServiceDriver`,
+ * and throws an error if found. Will only check the same candidate once if
+ * no errors was found.
+ * @param candidate Service driver candidate
+ * @throws {TypeError}
+ */
+export function inspectServiceDriver(candidate: any): candidate is IServiceDriver {
+  if (SymbolChecked in candidate) {
+    return true;
+  }
+
+  if (typeof candidate !== "object") {
+    throw new TypeError("Candidate is not an object primitive type");
+  }
+
+  if (!("checkForAccess" in candidate) || typeof candidate.checkForAccess !== "function") {
+    throw new TypeError("Candidate is missing method 'checkForAccess'");
+  }
+
+  if (candidate.checkForAccess.length !== 2) {
+    throw new TypeError("Method 'checkForAccess' on candidate has invalid call signature");
+  }
+
+  if (!("checkIfEnabled" in candidate) || typeof candidate.checkIfEnabled !== "function") {
+    throw new TypeError("Candidate is missing method 'checkIfEnabled'");
+  }
+
+  if (candidate.checkIfEnabled.length !== 1) {
+    throw new TypeError("Method 'checkIfEnabled' on candidate has invalid call signature");
+  }
+
+  if (!("checkIfExists" in candidate) || typeof candidate.checkIfExists !== "function") {
+    throw new TypeError("Candidate is missing method 'checkIfExists'");
+  }
+
+  if (candidate.checkIfExists.length !== 1) {
+    throw new TypeError("Method 'checkIfExists' on candidate has invalid call signature");
+  }
+
+  if (!("createResponse" in candidate) || typeof candidate.createResponse !== "function") {
+    throw new TypeError("Candidate driver is missing valid method 'createResponse'");
+  }
+
+  if (candidate.createResponse.length !== 3) {
+    throw new TypeError("Method 'createResponse' on candidate has invalid call signature");
+  }
+
+  if (!("createAndInitRepository" in candidate) || typeof candidate.createAndInitRepository !== "function") {
+    throw new TypeError("Candidate is missing method 'createAndInitRepository'");
+  }
+
+  if (candidate.createAndInitRepository.length !== 1) {
+    throw new TypeError("Method 'createAndInitRepository' on candidate has invalid call signature");
+  }
+
+  candidate[SymbolChecked] = undefined;
+  return true;
 }
 
 /**

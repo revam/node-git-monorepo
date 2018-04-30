@@ -40,11 +40,8 @@
     "typescript": "^2.8.3"
   },
   "dependencies": {
-    "@types/node-fetch": "^1.6.9",
     "git-packet-streams": "^1.1.0",
-    "git-side-band-message": "0.0.3",
-    "micro-signals": "^2.0.0",
-    "node-fetch": "^2.0.0"
+    "git-side-band-message": "0.0.3"
   },
   "jest": {
     "transform": {

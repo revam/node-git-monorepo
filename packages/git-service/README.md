@@ -41,7 +41,7 @@ package. Also a great help was the technical documentation for git, which can be
 
 ## Documentation
 
-The full documentation can be  found at [github](.).
+The documentation can be  found at [github](.).
 
 ## Related packages
 

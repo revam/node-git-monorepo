@@ -1,36 +1,33 @@
 /**
  * git-service package
  * Copyright (c) 2018 Mikal Stordal <mikalstordal@gmail.com>
- *
- * @module git-service
  */
+
 import { createHash } from 'crypto';
 import { createPacketInspectStream, createPacketReadableStream } from 'git-packet-streams';
 import * as encode from 'git-side-band-message';
 import { STATUS_CODES } from "http";
-import { Signal } from 'micro-signals';
-import { Headers } from 'node-fetch';
-import { Readable, Transform } from 'stream';
+import { Readable } from 'stream';
 
 /**
- * Reference IService implementation.
+ * Reference implementation of IService. Works with all valid driver implementation.
  */
-export default class implements IService {
+export default class Service implements IService {
   public readonly driver: IServiceDriver;
   public readonly awaitRequestReady: Promise<void>;
   public readonly awaitResponseReady: Promise<IResponseData>;
   public readonly isAdvertisement: boolean;
   public readonly isRequestReady: boolean;
   public readonly isResponseReady: boolean;
-  public readonly onError: Signal<any>;
-  public readonly onResponse: Signal<IResponseData>;
+  public readonly onError: ISignal<any>;
+  public readonly onResponse: ISignal<IResponse>;
   public readonly requestBody: Readable;
   public readonly requestCapabilities: Map<string, string>;
   public readonly requestData: Array<IUploadPackData | IReceivePackData>;
   public readonly status: RequestStatus;
   public readonly type: RequestType;
   public repository: string;
-  private __headers: Headers;
+  private __headers: IHeaders;
   private __messages: Buffer[];
   private __readyRequest: boolean;
   private __readyResponse: boolean;
@@ -55,7 +52,7 @@ export default class implements IService {
     driver: IServiceDriver,
     method: string,
     url: string,
-    headers: Headers | Array<[string, string]> | {[index: string]: string | string[]},
+    headers: HeadersInput,
     body: Readable,
   ) {
     inspectServiceDriver(driver);
@@ -68,7 +65,7 @@ export default class implements IService {
     if (!(body instanceof Readable)) {
       throw new TypeError('argument `input` must be s sub-instance of stream.Readable');
     }
-    this.__headers = createHeaders(headers);
+    this.__headers = new Headers(headers);
     this.__messages = [];
     this.__status = RequestStatus.Pending;
     this.__readyRequest = false;
@@ -270,8 +267,14 @@ export default class implements IService {
    * Schedule payload dispatchment for next event loop.
    * @param payload Payload to dispatch
    */
-  private dispatchResponse(payload: IResponseData) {
-    setImmediate(() => { try { this.onResponse.dispatch(payload); } catch (err) { this.onError.dispatch(err); } });
+  private dispatchResponse(payload: IResponse) {
+    setImmediate(async() => {
+      try {
+        await this.onResponse.dispatch(payload);
+      } catch (err) {
+        await this.onError.dispatch(err);
+      }
+    });
   }
 
   public async checkIfExists(): Promise<boolean> {
@@ -317,11 +320,11 @@ export default class implements IService {
   }
 
   public async createRequestSignature(): Promise<string> {
-    if (this.__signatureRequest) {
-      return this.__signatureRequest;
-    }
     if (!this.type) {
       return;
+    }
+    if (this.__signatureRequest) {
+      return this.__signatureRequest;
     }
     if (!this.isAdvertisement) {
       await this.awaitRequestReady;
@@ -337,16 +340,17 @@ export default class implements IService {
   }
 
   public async createResponseSignature(): Promise<string> {
-    if (this.__signatureResponse) {
-      return this.__signatureResponse;
-    }
     if (!this.type) {
       return;
+    }
+    if (this.__signatureResponse) {
+      return this.__signatureResponse;
     }
     const response = await this.awaitResponseReady;
     const hash = createHash("sha256");
     hash.update(response.statusCode.toString());
     hash.update(response.statusMessage);
+    response.headers.forEach((header, value) => hash.update(`${header}: ${value}`));
     hash.update(await response.buffer());
     return this.__signatureResponse = hash.digest("hex");
   }
@@ -354,6 +358,100 @@ export default class implements IService {
   public informClient(message: string | Buffer) {
     this.__messages.push(encode(message));
     return this;
+  }
+}
+
+/**
+ * Valid inputs for Headers class constructor
+ */
+export type HeadersInput = Headers | Map<string, string[]> | string[][] | {[key: string]: string | string[]};
+
+/**
+ * Simple class implementing IHeaders
+ */
+export class Headers implements IHeaders {
+  private __raw: Map<string, string[]>;
+  constructor(input?: HeadersInput) {
+    if (input instanceof Headers || input instanceof Map) {
+      this.__raw = new Map(input);
+    } else {
+      this.__raw = new Map();
+      if (input instanceof Array && input.length > 1) {
+        for (const [header, ...values] of input) {
+          for (const value of values) {
+            this.append(header, value);
+          }
+        }
+      } else if (typeof input === "object") {
+        for (const header of Object.keys(input)) {
+          const values = input[header];
+          if (values instanceof Array) {
+            for (const value of values) {
+              this.append(header, value);
+            }
+          } else {
+            this.append(header, values);
+          }
+        }
+      }
+    }
+  }
+  public get(header) { return this.__raw.get(sanitizeHeader(header))!.join(','); }
+  public set(header, value) { this.__raw.set(sanitizeHeader(header), [value]); }
+  public has(header) { return this.__raw.has(sanitizeHeader(header)); }
+  public delete(header) { return this.__raw.delete(sanitizeHeader(header)); }
+  public append(header, value) { this.__raw.get(sanitizeHeader(header))!.push(value); }
+  public forEach<T>(fn, thisArg) { this.__raw.forEach((v, k) => fn.call(thisArg, k, v)); }
+  public keys() { return this.__raw.keys(); }
+  public values() { return this.__raw.values(); }
+  public entries() { return this.__raw.entries(); }
+  public [Symbol.iterator]() { return this.__raw.entries(); }
+}
+
+const SymbolSignals = Symbol("signals");
+
+/**
+ * Simple class implementing ISignal
+ */
+export class Signal<P> implements ISignal<P> {
+  private __raw: Set<(payload: P) => void | PromiseLike<void>>;
+  constructor() {
+    this.__raw = new Set();
+  }
+
+  public add(fn: (payload: P) => void | PromiseLike<void>): void {
+    this.__raw.add(fn);
+    if (fn[SymbolSignals] && fn[SymbolSignals].has(this)) {
+      (fn[SymbolSignals] as Set<Signal<any>>).delete(this);
+    }
+  }
+
+  public addOnce(fn: (payload: P) => void | PromiseLike<void>): void {
+    if (!(SymbolSignals in fn)) {
+      fn[SymbolSignals] = new Set();
+    }
+    (fn[SymbolSignals] as Set<Signal<any>>).add(this);
+    this.__raw.add(fn);
+  }
+
+  public has(fn: (payload: P) => void | PromiseLike<void>): boolean {
+    return this.__raw.has(fn);
+  }
+
+  public delete(fn: (payload: P) => void | PromiseLike<void>): boolean {
+    return this.__raw.delete(fn);
+  }
+
+  public async dispatch(payload: P): Promise<void> {
+    const stack = Array.from(this.__raw);
+    // Remove singular listeners from stack
+    stack.forEach((fn) => {
+      if (fn[SymbolSignals] && fn[SymbolSignals].has(this)) {
+        fn[SymbolSignals].delete(this);
+        this.__raw.delete(fn);
+      }
+    });
+    await Promise.all(stack.map(async(fn) => { await fn.call(void 0, payload); }));
   }
 }
 
@@ -535,7 +633,7 @@ export interface IServiceDriver {
    * @param service IService object with related information to check
    * @param headers Headers to check for access rights
    */
-  checkForAccess(service: IService, headers: Headers): Promise<boolean>;
+  checkForAccess(service: IService, headers: IHeaders): Promise<boolean>;
   /**
    * Checks if service is enabled for repository.
    * @param service IService object with related information to check
@@ -552,7 +650,7 @@ export interface IServiceDriver {
    * @param headers HTTP headers received with request
    * @param messages Buffered messages to inform client
    */
-  createResponse(service: IService, headers: Headers, messages: Buffer[]): Promise<IResponseData>;
+  createResponse(service: IService, headers: IHeaders, messages: Buffer[]): Promise<IResponseData>;
   /**
    * Creates and initialise a bare repository at origin, but only if repository does not exist.
    * @param service IService object with related information
@@ -668,29 +766,30 @@ export interface IService {
 }
 
 /**
- * Simple signal interface compatible with most implementions.
+ * Sync and async signal interface.
  */
-export interface ISignal<T> {
+export interface ISignal<P> {
   /**
    * Adds a listener that listens till removed.
-   * @param listener Listener to add
+   * @param fn Listener to add
    */
-  add(listener: (payload: T) => any): void;
+  add(fn: (payload: P) => any): void;
   /**
    * Adds a listener that only listens once.
-   * @param listener Listener to add
+   * @param fn Listener to add
    */
-  addOnce(listener: (payload: T) => any): void;
-  /**
-   * Dispatches payload to all listeners.
-   * @param payload Payload to dispatch
-   */
-  dispatch(payload: T): void;
+  addOnce(fn: (payload: P) => any): void;
   /**
    * Removes a listener.
-   * @param listener Listener to remote
+   * @param fn Listener to remote
    */
-  remove(listener: (payload: T) => any): void;
+  delete(fn: (payload: P) => any): boolean;
+  /**
+   * Dispatches payload to all listener and waits till all finish.
+   * Throws if one of the listeners encounter an error.
+   * @param payload Payload to dispatch
+   */
+  dispatch(payload: P): Promise<void>;
 }
 
 /**
@@ -708,7 +807,7 @@ export interface IResponseData {
   /**
    * Response headers.
    */
-  headers: Headers;
+  headers: IHeaders;
   /**
    * Response status code.
    */
@@ -717,6 +816,61 @@ export interface IResponseData {
    * Response status message.
    */
   statusMessage: string;
+}
+
+/**
+ * simple headers holder
+ */
+export interface IHeaders  {
+  /**
+   * Returns value under key from internal collection.
+   * @param header Header name
+   */
+  get(header: string): string;
+  /**
+   * Sets value under key in internal collection
+   * @param header   Header name
+   * @param value  Header value to set
+   */
+  set(header: string, value: string): void;
+  /**
+   * Appends value onto existing header, creating it if not.
+   * @param header Header name
+   * @param value Header value to append
+   */
+  append(header: string, value: string): void;
+  /**
+   * Checks if header name exists
+   * @param header Header name
+   */
+  has(header: string): boolean;
+  /**
+   * Deletes header and accossiated values.
+   * @param header Header name
+   */
+  delete(header: string): boolean;
+  /**
+   * Iterates over each header-value pair. If multiple headers
+   * @param fn Callback
+   * @param thisArg Value of `this` in `fn`
+   */
+  forEach<T = undefined>(fn: (this: T, header: string, value: string[]) => any, thisArg?: T): void;
+  /**
+   * Returns an iterator for the header names.
+   */
+  keys(): IterableIterator<string>;
+  /**
+   * Returns an iterator for the values of each header.
+   */
+  values(): IterableIterator<string[]>;
+  /**
+   * Returns an iterator for the header and values in pairs.
+   */
+  entries(): IterableIterator<[string, string[]]>;
+  /**
+   * Returns an iterator for the header and values in pairs.
+   */
+  [Symbol.iterator](): IterableIterator<[string, string[]]>;
 }
 
 /**
@@ -799,39 +953,12 @@ const PacketMapper = new Map<RequestType, (service: IService) => (buffer: Buffer
   ],
 ]);
 
-/**
- * Creates an instance of class Headers from input headers.
- * @param headers Input headers
- */
-function createHeaders(headers: Headers | Array<[string, string]> | {[index: string]: string | string[]}): Headers {
-  if (!(
-    headers instanceof Headers ||
-    headers instanceof Array && headers.length !== 0 ||
-    typeof headers === "object" && Reflect.ownKeys(headers).length !== 0
-  )) {
-    throw new TypeError("argument `headers` must be either an instance of Headers, a string array or headers object");
+function sanitizeHeader(header: string) {
+  header += "";
+  if (!/^[^_`a-zA-Z\-0-9!#-'*+.|~]*$/.test(header)) {
+    throw new TypeError(`${header} is not a legal HTTP header name`);
   }
-  // Workaround for string array headers
-  const multi_headers: Array<[string, string[]]> = [];
-  if (!(headers instanceof Headers || headers instanceof Array)) {
-    (Reflect.ownKeys(headers) as string[]).filter((h) => {
-      if (headers[h] instanceof Array) {
-        multi_headers.push([h, headers[h] as string[]]);
-        Reflect.deleteProperty(headers, h);
-      }
-    });
-  }
-  // @ts-ignore incomplete definition file for package "node-fetch"
-  const output = new Headers(headers);
-  // Workaround for string array headers
-  if (multi_headers.length) {
-    for (const [header, values] of multi_headers) {
-      for (const value of values) {
-        output.append(header, value);
-      }
-    }
-  }
-  return output;
+  return header.toLowerCase();
 }
 
 /**

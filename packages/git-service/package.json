@@ -8,12 +8,9 @@
     "test": "test"
   },
   "scripts": {
-    "copy": "node -e \"const args=process.argv.slice(1);if(args.length%2===0){const j=args.length/2;for(let i=0;i<j;i++){fs=require('fs');fs.createReadStream(args[i*2]).pipe(fs.createWriteStream(args[i*2+1]));}}else{throw new Error('Invalid number of arguments');}\"",
-    "docs": "typedoc --out ./docs/ --mode file --theme minimal --excludePrivate --excludeProtected --readme DOCS.md --tsconfig ./tsconfig.json",
     "test": "tslint test/**/*.ts && jest",
     "build": "tsc --noEmit -p . && tslint src/**/*.ts && tsc -p .",
-    "prepublish": "npm run test && npm run copy ../../LICENSE LICENSE ../../.npmignore .npmignore && npm run build",
-    "postpublish": "del-cli lib LICENSE .npmignore"
+    "prepublish": "npm run test && npm run build"
   },
   "repository": {
     "type": "git",

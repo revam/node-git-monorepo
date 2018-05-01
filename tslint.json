@@ -4,6 +4,8 @@
   },
   "extends": "tslint:all",
   "rules": {
+    // Want these
+    "max-file-line-count": [true, 2000],
     // Don't want these
     "cyclomatic-complexity": false,
     "newline-before-return": false,
@@ -11,6 +13,7 @@
     "no-parameter-properties": false,
     "no-parameter-reassignment": false,
     "no-unused-variable": false,
+    "no-default-export": false,
     "no-bitwise": false,
     // TODO: Enable stricter options for these
     "comment-format": [

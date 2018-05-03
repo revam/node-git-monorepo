@@ -1,95 +1,73 @@
 import { Readable, Transform } from "stream";
 
-export function createPacketInspectStream(forEach: (packet: Buffer) => any): [Transform, Promise<void>] {
-  if (typeof forEach !== 'function') {
-    throw new TypeError(`Invalid arguement "reader". Expected type "function", got "${typeof forEach}"`);
+/**
+ * Error codes thrown by this package.
+ */
+export enum ErrorCodes {
+  /**
+   * Packet starting position is invalid.
+   */
+  ERR_INVALID_PACKET = "ERR_INVALID_PACKET_START",
+  /**
+   * An incomplete packet exceeds the rest of available buffer.
+   */
+  ERR_INCOMPLETE_PACKET = "ERR_INCOMPLETE_PACKET",
+  /**
+   * An argument of the wrong type was passed to the function. (Same as Node.js API)
+   */
+  ERR_INVALID_ARG_TYPE = "ERR_INVALID_ARG_TYPE",
+}
+
+export function createPacketReader(fn: (packet: Buffer) => any): Transform {
+  if (typeof fn !== 'function') {
+    throw new TypeError(`Invalid arguement "reader". Expected type "function", got "${typeof fn}"`);
   }
-  let ready = false;
   let underflow: Buffer;
-  const stream = new Transform({
+  return new Transform({
     async transform(this: Transform, buffer: Buffer, encoding: string, next: (err?: Error) => void) {
-      if (ready) {
-        this.push(buffer);
-        next();
-      } else {
-        if (underflow) {
-          buffer = Buffer.concat([underflow, buffer]);
-          underflow = undefined;
-        }
-        try {
-          let iterator = iteratePacketsInBuffer(buffer, true, true);
-          let result: IteratorResult<Buffer>;
-          do {
-            // Force iteration onto next loop
-            result = await iterator.next();
-            if (result.value) {
-              if (result.done) {
-                const length = parsePacketLength(result.value);
-                if (length === 0) {
-                  result.done = false;
-                  if (!ready) {
-                    ready = true;
-                    this.emit(SymbolAwait);
-                  }
-                  iterator = iteratePacketsInBuffer(result.value, false, true);
-                } else {
-                  underflow = result.value;
-                }
-              } else {
-                forEach(result.value);
-              }
-            }
-          } while (!result.done);
-          this.push(underflow ? buffer.slice(0, -(underflow.length)) : buffer);
-          next();
-        } catch (err) {
-          this.emit(SymbolAwait);
-          next(err);
-        }
-      }
-    },
-    final(this: Transform) {
       if (underflow) {
-        const length = parsePacketLength(underflow);
-        this.emit(
-          'error',
-          new Error(`Incomplete packet with length ${length} remaining in buffer (${underflow.length})`),
-        );
+        buffer = Buffer.concat([underflow, buffer]);
+        underflow = undefined;
       }
-      if (!ready) {
-        this.emit(SymbolAwait);
-      }
-    },
-  });
-  const promise = new Promise<void>((resolve) => stream.on(SymbolAwait as any, resolve));
-  return [stream, promise];
-}
-
-export function createPacketReadableStream(buffers: Buffer[], pauseBufferIndex: number = -1): Readable {
-  const iterator = createPacketIterator(buffers, pauseBufferIndex);
-  return new Readable({
-    read(this: Readable, size: number) {
       try {
-        const {done, value} = iterator.next();
-        if (!done) {
-          this.push(value);
-        }
-      } catch (err) {
-        this.push(null);
-        this.emit('error', err);
+        const iterator = createPacketIterator(buffer, false, true);
+        let result: IteratorResult<Buffer>;
+        do {
+          // Force async iteration
+          result = await iterator.next();
+          if (result.value) {
+            if (result.done) {
+              underflow = result.value;
+            } else {
+              fn.call(void 0, result.value);
+            }
+          }
+        } while (!result.done);
+        this.push(underflow ? buffer.slice(0, -(underflow.length)) : buffer);
+        next();
+      } catch (error) {
+        next(error);
       }
+    },
+    final(this: Transform, next: (err?: Error) => void) {
+      let error: IError;
+      if (underflow) {
+        const length = readPacketLength(underflow);
+        const missing = length - underflow.length;
+        error = new Error(`Incomplete packet missing ${missing} bytes (${length})`);
+        error.code = ErrorCodes.ERR_INCOMPLETE_PACKET;
+      }
+      next(error);
     },
   });
 }
-
-const SymbolAwait = Symbol('await');
 
 /**
- * Parse packet length from the four next bytes after `offset`
+ * Reads next packet length after `offset`.
  * @param buffer Packet buffer
  * @param offset Start offset
  */
-function parsePacketLength(buffer: Buffer, offset: number = 0) {
+export function readPacketLength(buffer: Buffer, offset: number = 0) {
   if (buffer.length - offset < 4) {
     return -1;
   }
@@ -101,60 +79,117 @@ function parsePacketLength(buffer: Buffer, offset: number = 0) {
 }
 
 /**
- * Creates an iterator yielding packets from multiple buffers.
- * @param buffers Buffers to read
- * @param pauseBufferIndex Pauseable buffer index
+ * Concats packet buffers. Can split the buffer at desired index,
+ * inserting the rest buffers inbetween the split chunks.
+ * @param buffers Buffers to concat
+ * @param splitBufferAtIndex Index of buffer to split
  */
-export function *createPacketIterator(buffers: Buffer[], pauseBufferIndex: number = -1): IterableIterator<Buffer> {
-  let counter = 0;
-  let paused: Buffer;
-  for (const buffer of buffers) {
-    if (pauseBufferIndex === counter) {
-      paused = yield* iteratePacketsInBuffer(buffer, true);
-    } else {
-      yield* iteratePacketsInBuffer(buffer);
+export function concatPacketBuffers(
+  buffers?: Buffer[],
+  splitBufferAtIndex: number = -1,
+  offset?: number,
+): Buffer {
+  if (!buffers || !buffers.length) {
+    return Buffer.alloc(0);
+  }
+  buffers = buffers.slice();
+  if (splitBufferAtIndex >= 0 && splitBufferAtIndex < buffers.length) {
+    const buffer = buffers[splitBufferAtIndex];
+    const _offset = findNextZeroPacketInBuffer(buffer, offset);
+    if (_offset >= 0) {
+      buffers[splitBufferAtIndex] = buffer.slice(0, _offset - 1);
+      buffers.push(buffer.slice(_offset - 1));
     }
-    counter++;
   }
-  if (paused) {
-    yield* iteratePacketsInBuffer(paused);
+  return Buffer.concat(buffers, buffers.reduce((p, c) => p + c.length, 0));
+}
+
+/**
+ * Returns the first position of a zero packet after offset.
+ * @param buffer A valid packet buffer
+ * @param offset A valid packet start position
+ * @throws {IError}
+ */
+function findNextZeroPacketInBuffer(
+  buffer: Buffer,
+  offset: number = 0,
+): number {
+  if (!buffer || !buffer.length) {
+    return -1;
   }
-  yield null;
+  do {
+    const length = readPacketLength(buffer, offset);
+    if (length === 0) {
+      return offset;
+      // All packet lengths less than 4, except 0, are invalid.
+    } else if (length > 3) {
+      if (offset + length <= buffer.length) {
+        offset += length;
+      } else {
+        const error: IError = new Error(
+          `Incomplete packet ending at position ${offset + length} in buffer (${buffer.length})`,
+        );
+        error.code = ErrorCodes.ERR_INCOMPLETE_PACKET;
+        throw error;
+      }
+    } else {
+      const error: IError = new Error(
+        `Invalid packet starting at position ${offset} in buffer (${buffer.length})`,
+      );
+      error.code = ErrorCodes.ERR_INVALID_PACKET;
+      throw error;
+    }
+  } while (offset < buffer.length);
+  return -1;
 }
 
 /**
  * Iterates all packets in a single buffer.
+ * @throws {IError}
  */
-function *iteratePacketsInBuffer(
+export function *createPacketIterator(
   buffer: Buffer,
   breakOnZeroLength: boolean = false,
-  breakOnMissingChunk: boolean = false,
+  breakOnIncompletePacket: boolean = false,
 ): IterableIterator<Buffer> {
   if (!buffer.length) {
     return;
   }
   let offset = 0;
   do {
-    let length = parsePacketLength(buffer, offset);
+    let length = readPacketLength(buffer, offset);
     if (length === 0) {
       if (breakOnZeroLength) {
         return buffer.slice(offset);
       }
       length = 4;
     }
-    if (length > 0) {
+    // All packet lengths less than 4, except 0, are invalid.
+    if (length > 3) {
       if (offset + length <= buffer.length) {
         yield buffer.slice(offset, offset + length);
         offset += length;
       } else {
-        if (breakOnMissingChunk) {
+        if (breakOnIncompletePacket) {
           return buffer.slice(offset);
         } else {
-          throw new Error(`Invalid packet ending at position ${offset + length} in buffer (${buffer.length})`);
+          const error: IError = new Error(
+            `Incomplete packet ending at position ${offset + length} in buffer (${buffer.length})`,
+          );
+          error.code = ErrorCodes.ERR_INCOMPLETE_PACKET;
+          throw error;
         }
       }
-    } else if (length < 0) {
-      throw new Error(`Invalid packet starting at position ${offset} in buffer (${buffer.length})`);
+    } else {
+      const error: IError = new Error(
+        `Invalid packet starting at position ${offset} in buffer (${buffer.length})`,
+      );
+      error.code = ErrorCodes.ERR_INVALID_PACKET;
+      throw error;
     }
   } while (offset < buffer.length);
+}
+
+export interface IError extends Error {
+  code?: string;
 }

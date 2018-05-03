@@ -1,189 +1,262 @@
-import { Duplex, PassThrough, Readable } from "stream";
-import { createPacketInspectStream, createPacketReadableStream } from "../src";
+import { ok } from "assert";
+import { Duplex, PassThrough, Readable, Writable } from "stream";
+import {
+  concatPacketBuffers,
+  createPacketIterator,
+  createPacketReader,
+  ErrorCodes,
+  IError,
+  readPacketLength,
+} from "../src";
 
-describe('createPacketReadableStream', () => {
-  it(
-    'It should return an instance of stream.Readable',
-    async(done) => {
-      const instance = createPacketReadableStream([Buffer.from("0000")]);
-      expect(instance).toBeInstanceOf(Readable);
-      done();
-    },
-  );
-  /**
-   * It should accept a buffer list as first arguement, and optionally an index as second argument.
-   * Buffers **must** contain only valid packets.
-   */
-  it(
-    'It should accept a list of buffers as first argument, and optionally an index as second argument',
-    async(done) => {
-      const source = [
-        Buffer.from("0008test00000007abc"),
-        Buffer.from("000apacket"),
-      ];
-      const results = [
-        [
-          Buffer.from("0008test"),
-          Buffer.from("0000"),
-          Buffer.from("0007abc"),
-          Buffer.from("000apacket"),
-        ],
-        [
-          Buffer.from("0008test"),
-          Buffer.from("000apacket"),
-          Buffer.from("0000"),
-          Buffer.from("0007abc"),
-        ],
-      ];
-      await Promise.all(results.map(async(r, i) => {
-        let j = 0;
-        const packets = createPacketReadableStream(source, i - 1);
-        const [inspect, promise] = createPacketInspectStream((b) => {
-          const a = r[j++];
-          expect(b.equals(a)).toBeTruthy();
-        });
-        packets.pipe(inspect);
-        await promise;
-      }));
-      done();
-    },
-  );
-  it('should throw on invalid packets', async(done) => {
-    const packets = createPacketReadableStream([Buffer.from('Not a packet stream')]);
-    packets.on(
-      'error',
-      (err) => expect(err.message).toMatch('Invalid packet starting at position 0 in buffer (19)'),
-    );
-    packets.pipe(new PassThrough());
+const noop = () => void 0;
+
+// an incomplete packet
+const incompletePacket = Buffer.from("0018an incompl-");
+// an invalid packet
+const invalidPacket = Buffer.from("an invalid packet");
+
+function expectBuffersToMatch(actual: Buffer, expected: Buffer) {
+  ok(actual.equals(actual), `Actual value of buffer does not match expected result`);
+}
+
+describe("concatPacketBuffers", () => {
+
+  it("should return a new buffer when provided array is empty", (done) => {
+    const actual = concatPacketBuffers();
+    expectBuffersToMatch(actual, Buffer.alloc(0));
     done();
   });
-  it('should throw when packet length is greater then the length of the remaining buffer', async(done) => {
-    const packets = createPacketReadableStream([Buffer.from('000apack')]);
-    packets.on(
-      'error',
-      (err) => expect(err.message).toMatch('Invalid packet ending at position 10 in buffer (8)'),
-    );
-    packets.pipe(new PassThrough());
+
+  it("should return a new buffer when provided array is empty", (done) => {
+    const actual = concatPacketBuffers([]);
+    expectBuffersToMatch(actual, Buffer.alloc(0));
     done();
   });
-});
 
-describe('createPacketInspectStream', () => {
-  /**
-   * It should return an instance of stream.Duplex and a promise resolving when first packets load is done
-   */
-  it(
-    'It should return an instance of stream.Duplex and a promise resolving when first packets load is done',
-    async(done) => {
-      const [instance, promise] = createPacketInspectStream(() => void 0);
-      expect(instance).toBeInstanceOf(Duplex);
-      expect(promise).toBeInstanceOf(Promise);
-      done();
-    },
-  );
-
-  it('should throw on invalid packets', async(done) => {
-    const packets = createReabableBufferStream([Buffer.from('00')]);
-    const [inspect, promise] = createPacketInspectStream(() => void 0);
-    let error: Error;
-    inspect.on('error', (err) => expect(error = err).toBeInstanceOf(Error));
-    packets.pipe(inspect);
-    await Promise.all([
-      promise,
-      new Promise<void>((resolve) => inspect.on('error', resolve)),
-    ]);
-    expect(error.message).toMatch('Invalid packet starting at position 0 in buffer (2)');
+  it("should just concat buffers if no second argument is set", (done) => {
+    const packets = [
+      Buffer.from("0007abc0000"),
+      Buffer.from("0007def"),
+    ];
+    const result = Buffer.from("0007abc00000007def");
+    const actual = concatPacketBuffers(packets);
+    expectBuffersToMatch(actual, result);
     done();
   });
 
   /**
-   * It should read out all packets to the supplied handler
+   * And should split desired buffer indicated by the second argument if valid.
    */
-  it(
-    'It should read out all packets to the supplied handler',
-    async(done) => {
-      const source = [
-        Buffer.from("0008test00000007abc"),
-        Buffer.from("000apacket"),
-      ];
+  it("should split desired buffer indicated by the second argument if valid.", (done) => {
+    const packets = [
+      Buffer.from("0007abc0000"),
+      Buffer.from("0007def"),
+    ];
+    const result = Buffer.from("0007abc0007def0000");
+    const actual = concatPacketBuffers(packets, 0);
+    expectBuffersToMatch(actual, result);
+    done();
+  });
 
-      const results = [
-        Buffer.from("0008test"),
-        Buffer.from("0000"),
-        Buffer.from("0007abc"),
-        Buffer.from("000apacket"),
-      ];
-
-      let i = 0;
-      const packets = createPacketReadableStream(source);
-      const [readPackets, promise] = createPacketInspectStream((b) => expect(b.equals(results[i++])).toBeTruthy());
-      packets.pipe(readPackets);
-      await promise;
-      done();
-    },
-  );
-
-  /**
-   * It should read out all packets to the supplied handler
-   */
-  it(
-    'It should not care for split packet chuncks, and seamlessly combining them',
-    async(done) => {
-      const source = [
-        Buffer.from("0008te"),
-        Buffer.from("st"),
-        Buffer.from("000a"),
-        Buffer.from("pac"),
-        Buffer.from("ket"),
-      ];
-
-      const results = [
-        Buffer.from("0008test"),
-        Buffer.from("000apacket"),
-      ];
-
-      let i = 0;
-      const packets = createReabableBufferStream(source);
-      const [readPackets, promise] = createPacketInspectStream((b) => expect(b.equals(results[i++])).toBeTruthy());
-      packets.pipe(readPackets);
-      await promise;
-      done();
-    },
-  );
-
-  it(
-    'should still throw if packet cannot be completed with available chuncks',
-    async(done) => {
-      const source = [
-        Buffer.from("0008te"),
-      ];
-
-      const results = [
-        Buffer.from("0008test"),
-        Buffer.from("000apacket"),
-      ];
-
-      const packets = createReabableBufferStream(source);
-      const [readPackets, promise] = createPacketInspectStream((b) => void 0);
-      readPackets.on(
-        'error',
-        (err) => expect(err.message).toMatch('Incomplete packet with length 8 remaining in buffer (6)'),
-      );
-      packets.pipe(readPackets);
-      await promise;
-      done();
-    },
-  );
-});
-
-function createReabableBufferStream(buffers: Buffer[]): Readable {
-  const iterator = buffers[Symbol.iterator]();
-  return new Readable({ read() {
-    const {value, done} = iterator.next();
-    if (!done) {
-      this.push(value);
-    } else {
-      this.push(null);
+  it("should throw if it tries to split an invalid packet", (done) => {
+    let error: IError;
+    try {
+      const actual = concatPacketBuffers([invalidPacket], 0);
+    } catch (err) {
+      error = err;
+    } finally {
+      expect(error && error.code).toMatch(ErrorCodes.ERR_INVALID_PACKET);
     }
-  } });
+    done();
+  });
+
+  it("should throw if it tries to split an incomplete packet", (done) => {
+    let error: IError;
+    try {
+      const actual = concatPacketBuffers([incompletePacket], 0);
+    } catch (err) {
+      error = err;
+    } finally {
+      expect(error && error.code).toMatch(ErrorCodes.ERR_INCOMPLETE_PACKET);
+    }
+    done();
+  });
+});
+
+describe("readPacketLength", () => {
+  it("should read the first four bytes of buffer by default", (done) => {
+    const length = readPacketLength(incompletePacket);
+    expect(length).toBe(24);
+    done();
+  });
+
+  it("should read the first four bytes after offset if supplied", (done) => {
+    const length = readPacketLength(Buffer.from("skip0000"), 4);
+    expect(length).toBe(0);
+    done();
+  });
+
+  it("should return -1 when it cannot determine length of packet", (done) => {
+    let length = readPacketLength(invalidPacket);
+    expect(length).toBe(-1);
+    length = readPacketLength(incompletePacket.slice(0, 3));
+    expect(length).toBe(-1);
+    done();
+  });
+});
+
+describe("createPacketReader", () => {
+  /**
+   * It should return an instance of stream.Duplex
+   */
+  it("should return an instance of stream.Duplex", (done) => {
+    const instance = createPacketReader(noop);
+    expect(instance).toBeInstanceOf(Duplex);
+    done();
+  });
+
+  /**
+   * It should read out all packets to the supplied handler
+   */
+  it("should read all packets to supplied handler", async(done) => {
+    const source = [
+      Buffer.from("0007abc00000007def"),
+      Buffer.from("0007ghi"),
+    ];
+    const results = [
+      Buffer.from("0007abc"),
+      Buffer.from("0000"),
+      Buffer.from("0007def"),
+      Buffer.from("0007ghi"),
+    ];
+    const error = await waitForErrorOrFinish(source, (b) => expectBuffersToMatch(b, results.shift()));
+    console.dir(error);
+    expect(error).toBeUndefined();
+    done();
+  });
+
+  it("should seamlessly combine multi-chunked packets", async(done) => {
+    const source = [
+      Buffer.from("0008te"),
+      Buffer.from("st"),
+      Buffer.from("000a"),
+      Buffer.from("pac"),
+      Buffer.from("ket"),
+    ];
+    const results = [
+      Buffer.from("0008test"),
+      Buffer.from("000apacket"),
+    ];
+    const error = await waitForErrorOrFinish(source, (b) => expectBuffersToMatch(b, results.shift()));
+    console.dir(error);
+    expect(error).toBeUndefined();
+    done();
+  });
+
+  it("should throw if it reads an invalid packet", async(done) => {
+    const error = await waitForErrorOrFinish([invalidPacket]);
+    expect(error && error.code).toMatch(ErrorCodes.ERR_INVALID_PACKET);
+    done();
+  });
+
+  it("should throw if it reads an incomplete packet", async(done) => {
+    const error = await waitForErrorOrFinish([incompletePacket]);
+    expect(error && error.code).toMatch(ErrorCodes.ERR_INCOMPLETE_PACKET);
+    done();
+  });
+});
+
+describe("createPacketIterator", () => {
+  it("should return an iterator", (done) => {
+    const packets = Buffer.from("0007abc00000007def");
+    const results = [
+      Buffer.from("0007abc"),
+      Buffer.from("0000"),
+      Buffer.from("0007def"),
+    ];
+    const iterator = createPacketIterator(packets);
+    expect(Symbol.iterator in iterator).toBe(true);
+    done();
+  });
+
+  it("should yield packets from provided buffer", async(resolve) => {
+    const packets = Buffer.from("0007abc00000007def");
+    const results = [
+      Buffer.from("0007abc"),
+      Buffer.from("0000"),
+      Buffer.from("0007def"),
+    ];
+    const iterator = createPacketIterator(packets);
+    for (const result of results) {
+      const {value, done} = iterator.next();
+      expect(done).toBe(false);
+      expectBuffersToMatch(value, result);
+    }
+    const output = iterator.next();
+    expect(output.value).toBeUndefined();
+    expect(output.done).toBe(true);
+    resolve();
+  });
+
+  it("should break at zero length if second argument is true", (resolve) => {
+    const packets = Buffer.from("0007abc00000007def");
+    const results = [
+      Buffer.from("0007abc"),
+      Buffer.from("00000007def"),
+    ];
+    const iterator = createPacketIterator(packets, true);
+    for (const result of results) {
+      const {value, done} = iterator.next();
+      expect(done).toBe(result.length > 7 ? true : false);
+      ok(result.equals(value), `Actual value does not match expected result ${result}`);
+    }
+    resolve();
+  });
+
+  it("should throw if it reads an invalid packet", (done) => {
+    let error: IError;
+    try {
+      const iterator = createPacketIterator(invalidPacket);
+      iterator.next();
+    } catch (err) {
+      error = err;
+    } finally {
+      expect(error && error.code).toMatch(ErrorCodes.ERR_INVALID_PACKET);
+    }
+    done();
+  });
+
+  it("should throw if it reads an incomplete packet", (done) => {
+    let error: IError;
+    try {
+      const iterator = createPacketIterator(incompletePacket);
+      iterator.next();
+    } catch (err) {
+      error = err;
+    } finally {
+      expect(error && error.code).toMatch(ErrorCodes.ERR_INCOMPLETE_PACKET);
+    }
+    done();
+  });
+});
+
+function waitForErrorOrFinish(buffers: Buffer[], fn: (p: Buffer) => any = noop): Promise<IError> {
+  const iterator = buffers[Symbol.iterator]();
+  const output = new Readable({
+    read() {
+      const {value, done} = iterator.next();
+      if (!done) {
+        this.push(value);
+      } else {
+        this.push(null);
+      }
+    },
+  });
+  const input = createPacketReader(fn);
+  output.pipe(input);
+  return Promise.race([
+    new Promise<Error>((resolve) => input.once("error", resolve)),
+    new Promise<never>((resolve) => input.once("finish", resolve)),
+  ]);
 }

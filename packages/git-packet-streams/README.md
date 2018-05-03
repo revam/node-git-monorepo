@@ -1,6 +1,6 @@
 # git-packet-streams
 
-Helper streams for to work with the git packet format
+Helper functions to work with git packet format.
 
 ## Install
 
@@ -10,81 +10,15 @@ npm install --save git-packet-streams
 
 ## What is this?
 
-This package contains two helper functions to work with buffered (git) packet streams.
-
-## Related packages
-
-- [git-service](.)
-- [git-service-driver](.)
-- [git-service-http](.)
-- [git-service-koa](.)
+This package contains helper functions to work with git packet buffers and streams.
 
 ## Usage
 
-```js
-import { createPacketInspectStream, createPacketReadableStream } from "git-packet-streams";
+See tests for some usage example. ([Not a link](.))
 
-console.log("inspecting");
-const readable = createPacketReadableStream([Buffer.from("0008test00000007abc")]);
-const [inspect, promise] = createPacketInspectStream((buffer) => console.log(buffer.toString("utf8", 4));
-readable.pipe(inspect);
-promise.then(() => console.log("done inspecting"));
-```
+## Documentation
 
-## Public API
-
-**Exports list:**
-
-- [createPacketInspectStream](.)
-- [createPacketReadableStream](.)
-- [createPacketIterator](.)
-
-### **createPacketInspectStream** (function)
-
-Creates a duplex passthrough stream that inspects each packet passing through.
-Returns both the stream and a promise resolving when the first packet load is
-inspected.
-
-**Note:** The stream will throw erros if it receives incomplete packets.
-
-#### Arguments
-
-- `forEach`
-  \<[Function](.)>
-  A function accepting iterating over each buffered packet in stream.
-
-#### Return value
-
-- \<\[ [Transform](.), [Promise](.)\<void> \]>
-  A stream and a promise.
-
-### **createPacketReadableStream** (function)
-
-Creates a readable stream consistent of all packets provided as part of `buffers`.
-
-**Note:** The stream will throw erros if it receives incomplete packets.
-
-#### Arguments
-
-- `buffers`
-  \<[Array](.)\<[Buffer](.)>>
-  Packet buffers. Packets may be chunked over multiple buffers.
-- `pauseBufferIndex`
-  \<[Number](.)>
-  Optional index to break at, and resume when rest of buffers are consumed.
-
-### **createPacketIterator** (function)
-
-Creates an iterator yielding packets from multiple buffers.
-
-#### Arguments
-
-- `buffers`
-  \<[Array](.)\<[Buffer](.)>>
-  Packet buffers. Packets may be chunked over multiple buffers.
-- `pauseBufferIndex`
-  \<[Number](.)>
-  Optional index to break at, and resume when rest of buffers are consumed.
+The documentation is not yet available.
 
 ## Typescript
 

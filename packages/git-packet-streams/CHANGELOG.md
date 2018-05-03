@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.0.1] - 2018-05-03
+
+## Fixed
+
+- Fix version compare links in changelog
+
 ## [2.0.0] - 2018-05-03
 
 ## Added
@@ -56,6 +62,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial release
 
-[Unreleased]: https://github.com/revam/koa-git-smart-proxy/compare/git-packet-streams-v2.0.0...HEAD
-[1.1.0]: https://github.com/revam/koa-git-smart-proxy/compare/git-packet-streams-v1.1.0...git-packet-streams-v2.0.0
-[1.1.0]: https://github.com/revam/koa-git-smart-proxy/compare/git-packet-streams-v1.0.0...git-packet-streams-v1.1.0
+[Unreleased]: https://github.com/revam/node-git-service/compare/git-packet-streams-v2.0.1...HEAD
+[2.0.1]: https://github.com/revam/node-git-service/compare/git-packet-streams-v2.0.0...git-packet-streams-v2.0.1
+[2.0.0]: https://github.com/revam/node-git-service/compare/git-packet-streams-v1.1.0...git-packet-streams-v2.0.0
+[1.1.0]: https://github.com/revam/node-git-service/compare/git-packet-streams-v1.0.0...git-packet-streams-v1.1.0

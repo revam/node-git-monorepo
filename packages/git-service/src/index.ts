@@ -20,7 +20,7 @@ export default class Service implements IService {
   public readonly isRequestReady: boolean;
   public readonly isResponseReady: boolean;
   public readonly onError: ISignal<any>;
-  public readonly onResponse: ISignal<IResponse>;
+  public readonly onResponse: ISignal<IResponseData>;
   public readonly requestBody: Readable;
   public readonly requestCapabilities: Map<string, string>;
   public readonly requestData: Array<IUploadPackData | IReceivePackData>;
@@ -267,7 +267,7 @@ export default class Service implements IService {
    * Schedule payload dispatchment for next event loop.
    * @param payload Payload to dispatch
    */
-  private dispatchResponse(payload: IResponse) {
+  private dispatchResponse(payload: IResponseData) {
     setImmediate(async() => {
       try {
         await this.onResponse.dispatch(payload);

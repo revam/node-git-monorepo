@@ -11,6 +11,10 @@ export class Signal<P> implements ISignal<P> {
     this.__raw = new Set();
   }
 
+  public get count() {
+    return this.__raw.size;
+  }
+
   public add(fn: (payload: P) => any): void {
     this.__raw.add(fn);
     if (fn[SymbolSignals] && fn[SymbolSignals].has(this)) {

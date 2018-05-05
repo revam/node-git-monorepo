@@ -1,18 +1,29 @@
+import { OutgoingHttpHeaders } from "http";
 import { Readable } from "stream";
 import { RequestStatus, RequestType } from "./enums";
 
 /**
- * Response data for request.
+ * Request data.
+ */
+export interface IRequestData {
+  /**
+   * Requested capebilities client support and/or want.
+   */
+  capabilities: Map<string, string>;
+  /**
+   * Requested commands for service.
+   */
+  commands: Array<IUploadPackCommand | IReceivePackCommand>;
+}
+
+/**
+ * Response data.
  */
 export interface IResponseData {
   /**
-   * Process response and return response body as a buffer when done.
+   * Response body.
    */
-  buffer(): Promise<Buffer>;
-  /**
-   * Creates a new readable stream of response body.
-   */
-  stream(): Readable;
+  body: Buffer;
   /**
    * Response headers.
    */
@@ -28,9 +39,32 @@ export interface IResponseData {
 }
 
 /**
- * Contains information of what client want to retrive from this upload-pack service request.
+ * Response data from driver
  */
-export interface IUploadPackData {
+export interface IResponseRawData {
+  /**
+   * Status code. Uses HTTP Codes for compatibility.
+   */
+  statusCode: number;
+  /**
+   * Status message. Error message if status code is an error code.
+   */
+  statusMessage: string;
+  /**
+   * Additional headers for response.
+   */
+  headers?: OutgoingHttpHeaders;
+  /**
+   * Raw buffered response
+   */
+  body?: Buffer;
+}
+
+/**
+ * Contains information of what client want to retrive from this upload-pack
+ * service request.
+ */
+export interface IUploadPackCommand {
   /**
    * Upload-pack command type.
    */
@@ -44,7 +78,7 @@ export interface IUploadPackData {
 /**
  * Contains information of what client want to upload in a receive-pack request.
  */
-export interface IReceivePackData {
+export interface IReceivePackCommand {
   /**
    * Receive-pack command type.
    */
@@ -54,7 +88,8 @@ export interface IReceivePackData {
    */
   commits: [string, string];
   /**
-   * Reference path. Can be any segmented path, but usually starting with either 'heads' or 'tags'.
+   * Reference path. Can be any segmented path, but usually starting with either
+   * "heads" or "tags".
    */
   reference: string;
 }
@@ -63,6 +98,10 @@ export interface IReceivePackData {
  * Sync and async signal interface.
  */
 export interface ISignal<P> {
+  /**
+   * Number of active listeners.
+   */
+  readonly count: number;
   /**
    * Adds a listener that listens till removed.
    * @param fn Listener to add
@@ -91,6 +130,10 @@ export interface ISignal<P> {
  */
 export interface IHeaders  {
   /**
+   * Number of headers in object.
+   */
+  readonly count: number;
+  /**
    * Returns value under key from internal collection.
    * @param header Header name
    */
@@ -100,13 +143,13 @@ export interface IHeaders  {
    * @param header   Header name
    * @param value  Header value to set
    */
-  set(header: string, value: string): void;
+  set(header: string, value: number | string | string[]): void;
   /**
    * Appends value onto existing header, creating it if not.
    * @param header Header name
    * @param value Header value to append
    */
-  append(header: string, value: string): void;
+  append(header: string, value: number | string | string[]): void;
   /**
    * Checks if header name exists
    * @param header Header name
@@ -151,74 +194,64 @@ export interface IService {
   readonly driver: IServiceDriver;
 
   /**
-   * Resolves when request body has been read.
+   * Resolves when request data is ready. If any errors occurred it will throw
+   * the first error.
    */
-  readonly awaitRequestReady: Promise<void>;
+  readonly awaitRequestData: Promise<IRequestData>;
   /**
-   * Resolves when response is ready for request. If any errors occurred it will throw the first error.
+   * Resolves when response data is ready. If any errors occurred it will throw
+   * the first error.
    */
-  readonly awaitResponseReady: Promise<IResponseData>;
+  readonly awaitResponseData: Promise<IResponseData>;
 
   /**
    * Check if client only want advertisement from service.
    */
   readonly isAdvertisement: boolean;
-  /**
-   * Check if request data has been read and is ready for use.
-   */
-  readonly isRequestReady: boolean;
-  /**
-   * Check if response is ready.
-   */
-  readonly isResponseReady: boolean;
 
   /**
    * Checks if repository exists.
    */
   checkIfExists(): Promise<boolean>;
   /**
-   * Checks if service is enabled. (we can still atempt a forcefull use of service)
+   * Checks if service is enabled.
+   * We can still *atempt* a forcefull use of service.
    */
   checkIfEnabled(): Promise<boolean>;
   /**
-   * Checks access to service as indicated by driver.
+   * Checks access rights to service.
+   * Depends on driver implementation.
    */
   checkForAccess(): Promise<boolean>;
 
   /**
-   * Creates a predictable uniform signature for response status code and body.
+   * Creates a uniform signature for request data, response data, or both.
+   * @param type Signature type. Default type is `"request"`.
    */
-  createResponseSignature(): Promise<string>;
+  createSignature(type?: "request" | "response" | "shared"): Promise<string>;
   /**
-   * Creates a predictable uniform signature for request data, independent of agent used.
-   */
-  createRequestSignature(): Promise<string>;
-  /**
-   * Creates and initialises a new repository, but only if nonexistant. Return value indicate a new repo.
+   * Creates and initialises a new repository, but only if nonexistant.
+   * Return value indicate a new repo.
    */
   createAndInitRepository(): Promise<boolean>;
 
   /**
-   * Dispatched when any error ocurr. Dispatched payload may be anything.
+   * Dispatched when any error ocurr.
    */
   readonly onError: ISignal<any>;
   /**
-   * Dispatched with response data when ready.
+   * Dispatched with request data when data is ready.
+   */
+  readonly onRequest: ISignal<IRequestData>;
+  /**
+   * Dispatched with response data when data is ready.
    */
   readonly onResponse: ISignal<IResponseData>;
 
   /**
-   * Requested capebilities client support and/or want.
+   * Raw request body or a stream leading to the raw body.
    */
-  readonly requestCapabilities: Map<string, string>;
-  /**
-   * Request data for service.
-   */
-  readonly requestData: Array<IUploadPackData | IReceivePackData>;
-  /**
-   * Raw request body. May have been altered before it was given to service.
-   */
-  readonly requestBody: Readable;
+  readonly body: Readable;
   /**
    * Requested service type.
    */
@@ -228,24 +261,29 @@ export interface IService {
    */
   readonly status: RequestStatus;
   /**
-   * Repository path requested.
+   * Repository path for requested service.
    */
   repository: string;
+
   /**
    * Accepts request and asks the underlying driver for an appropriate response.
    */
   accept(): Promise<void>;
   /**
-   * Rejects request with status code and an optional status message. Only works with status error codes.
-   * @param statusCode 4xx or 5xx http status code for rejection. Defaults to `403`.
-   * @param statusMessage Optional reason for rejection. Defaults to status message for status code.
+   * Rejects request with status code and an optional status message.
+   * Only works with http status error codes.
+   * @param statusCode 4xx or 5xx http status code for rejection.
+   *                   Default is `403`.
+   * @param statusMessage Optional reason for rejection.
+   *                      Default is status message for status code.
    */
   reject(statusCode?: number, statusMessage?: string): Promise<void>;
   /**
-   * Inform client of message, but only if service is accepted.
+   * Inform client of message, but only if service is accepted and not a
+   * failure.
    * @param message Message to inform client
    */
-  informClient(message: string | Buffer): this;
+  sidebandMessage(message: string | Buffer): this;
 }
 
 /**
@@ -253,23 +291,24 @@ export interface IService {
  */
 export interface IServiceDriver {
   /**
-   * Repositories origin location - for reference only. Dependent of driver implementation.
+   * Repositories origin location - for reference only. Dependent of driver
+   * implementation.
    */
   readonly origin?: string;
   /**
    * Checks access to service authenticated by headers for repository at origin.
-   * @param service IService object with related information to check
-   * @param headers Headers to check for access rights
+   * @param service IService object with related information
+   * @param headers HTTP headers received with request
    */
   checkForAccess(service: IService, headers: IHeaders): Promise<boolean>;
   /**
    * Checks if service is enabled for repository.
-   * @param service IService object with related information to check
+   * @param service IService object with related information
    */
   checkIfEnabled(service: IService): Promise<boolean>;
   /**
    * Checks if repository exists at origin.
-   * @param service IService object with related information to check
+   * @param service IService object with related information
    */
   checkIfExists(service: IService): Promise<boolean>;
   /**
@@ -278,10 +317,11 @@ export interface IServiceDriver {
    * @param headers HTTP headers received with request
    * @param messages Buffered messages to inform client
    */
-  createResponse(service: IService, headers: IHeaders, messages: Buffer[]): Promise<IResponseData>;
+  createResponse(service: IService, headers: IHeaders): Promise<IResponseRawData>;
   /**
-   * Creates and initialise a bare repository at origin, but only if repository does not exist.
+   * Creates and initialise a new repository at origin, but only if repository does not exist.
    * @param service IService object with related information
+   * @param headers HTTP headers received with request
    */
-  createAndInitRespository(service: IService): Promise<boolean>;
+  createAndInitRespository(service: IService, headers: IHeaders): Promise<boolean>;
 }

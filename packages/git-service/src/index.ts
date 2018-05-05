@@ -25,11 +25,11 @@ export async function serveRequest(
     // should we skip creation of resource?
     if (!createAndInitNonexistant) {
       service.reject(404); // 404 Not Found
-      return service.awaitResponseReady;
+      return service.awaitResponseData;
     }
     if (! await service.createAndInitRepository()) {
       service.reject(500, "Could not initialize new repository");
-      return service.awaitResponseReady;
+      return service.awaitResponseData;
     }
   }
   if (! await service.checkForAccess()) {
@@ -39,5 +39,5 @@ export async function serveRequest(
   } else {
     service.accept();
   }
-  return service.awaitResponseReady;
+  return service.awaitResponseData;
 }

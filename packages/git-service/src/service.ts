@@ -1,17 +1,20 @@
 
 import { createHash } from "crypto";
-import { createPacketInspectStream, createPacketReadableStream } from "git-packet-streams";
+import { concatPacketBuffers, createPacketReader, readPacketLength } from "git-packet-streams";
 import * as encode from "git-side-band-message";
-import { STATUS_CODES } from "http";
+import { OutgoingHttpHeaders, STATUS_CODES } from "http";
 import { Readable } from "stream";
 import { RequestStatus, RequestType } from "./enums";
 import { Headers, HeadersInput } from "./headers";
 import {
-  IReceivePackData,
+  IHeaders,
+  IReceivePackCommand,
+  IRequestData,
   IResponseData,
+  IResponseRawData,
   IService,
   IServiceDriver,
-  IUploadPackData,
+  IUploadPackCommand,
 } from "./interfaces";
 import { Signal } from "./signal";
 
@@ -22,26 +25,20 @@ export { Service as default };
  */
 export class Service implements IService {
   public readonly driver: IServiceDriver;
-  public readonly awaitRequestReady: Promise<void>;
-  public readonly awaitResponseReady: Promise<IResponseData>;
+  public readonly awaitRequestData: Promise<IRequestData>;
+  public readonly awaitResponseData: Promise<IResponseData>;
   public readonly isAdvertisement: boolean;
-  public readonly isRequestReady: boolean;
-  public readonly isResponseReady: boolean;
   public readonly onError: Signal<any>;
+  public readonly onRequest: Signal<IRequestData>;
   public readonly onResponse: Signal<IResponseData>;
-  public readonly requestBody: Readable;
-  public readonly requestCapabilities: Map<string, string>;
-  public readonly requestData: Array<IUploadPackData | IReceivePackData>;
+  public readonly body: Readable;
   public readonly status: RequestStatus;
   public readonly type: RequestType;
   public repository: string;
   private __headers: Headers;
   private __messages: Buffer[];
-  private __readyRequest: boolean;
-  private __readyResponse: boolean;
   private __repository?: string;
-  private __signatureRequest?: string;
-  private __signatureResponse?: string;
+  private __signatures: Map<string, string>;
   private __status: RequestStatus;
 
   /**
@@ -64,39 +61,30 @@ export class Service implements IService {
     body: Readable,
   ) {
     inspectServiceDriver(driver);
-    if (typeof method !== 'string' || !method) {
-      throw new TypeError('argument `method` must be a valid string');
+    if (typeof method !== "string" || !method) {
+      throw new TypeError("argument `method` must be a valid string");
     }
-    if (typeof url !== 'string' || !url) {
-      throw new TypeError('argument `url_fragment` must be a valid string');
+    if (typeof url !== "string" || !url) {
+      throw new TypeError("argument `url_fragment` must be a valid string");
     }
     if (!(body instanceof Readable)) {
-      throw new TypeError('argument `input` must be s sub-instance of stream.Readable');
+      throw new TypeError("argument `input` must be s sub-instance of stream.Readable");
     }
     this.__headers = new Headers(headers);
     this.__messages = [];
     this.__status = RequestStatus.Pending;
-    this.__readyRequest = false;
-    this.__readyResponse = false;
     this.__repository = undefined;
-    this.__signatureRequest = undefined;
-    this.__signatureResponse = undefined;
+    this.__signatures = new Map();
     Object.defineProperties(this, {
       driver: {
         value: driver,
         writable: false,
       },
-      isRequestReady: {
-        get() {
-          return this.__readyRequest;
-        },
-      },
-      isResponseReady: {
-        get() {
-          return this.__readyResponse;
-        },
-      },
       onError: {
+        value: new Signal(),
+        writable: false,
+      },
+      onRequest: {
         value: new Signal(),
         writable: false,
       },
@@ -105,35 +93,34 @@ export class Service implements IService {
         writable: false,
       },
       repository: {
-        get() {
+        get(this: Service) {
           return this.__repository;
         },
-        set(value) {
+        set(this: Service, value) {
           if (this.__repository !== value) {
-            this.__signatureRequest = undefined;
+            this.__signatures.delete("request");
+            this.__signatures.delete("shared");
             this.__repository = value;
           }
         },
       },
-      requestCapabilities: {
-        value: new Map(),
-        writable: false,
-      },
-      requestData: {
-        value: [],
-        writable: false,
-      },
       status: {
-        get() {
+        get(this: Service) {
           return this.__status;
         },
       },
     });
     Object.defineProperties(this, {
-      awaitResponseReady: {
+      awaitRequestData: {
+        value: new Promise<IRequestData>((resolve, reject) => {
+          this.onError.addOnce(reject);
+          this.onRequest.addOnce(resolve);
+        }),
+        writable: false,
+      },
+      awaitResponseData: {
         value: new Promise<IResponseData>((resolve, reject) => {
           this.onError.addOnce(reject);
-          this.onResponse.addOnce(() => this.__readyResponse = true);
           this.onResponse.addOnce(resolve);
         }),
         writable: false,
@@ -151,7 +138,7 @@ export class Service implements IService {
         }
         if (expected_content_type) {
           // Only check content type for post requests
-          const content_type = this.__headers.get('Content-Type');
+          const content_type = this.__headers.get("Content-Type");
           if (content_type !== expected_content_type) {
             this.onError.dispatch(
               new TypeError(`Unexpected content-type "${content_type}", expected "${expected_content_type}"`),
@@ -175,7 +162,7 @@ export class Service implements IService {
         break;
       }
     }
-    if (!('type' in this)) {
+    if (!("type" in this)) {
       Object.defineProperties(this, {
         isAdvertisement: {
           enumerable: true,
@@ -189,39 +176,20 @@ export class Service implements IService {
         },
       });
     }
-    if ("isAdvertisement" in this && !this.isAdvertisement) {
-      const disposables: Array<() => void> = [];
-      const onError = (ee, cb) => { ee.on('error', cb); disposables.push(() => ee.removeListener('error', cb)); };
-      onError(body, (err) => this.onError.dispatch(err));
+    if (!this.isAdvertisement) {
       const middleware = PacketMapper.get(this.type);
-      const [parser, awaitReady] = createPacketInspectStream(middleware(this));
-      onError(parser, (err) => this.onError.dispatch(err));
-      Object.defineProperties(this, {
-        awaitRequestReady: {
-          value: awaitReady.then(() => {
-            this.__readyRequest = true;
-            disposables.forEach((d) => d());
-            disposables.length = 0;
-          }),
-          writable: false,
-        },
-        requestBody: {
-          value: parser,
-          writable: false,
-        },
+      const reader = createPacketReader(middleware(this));
+      reader.on("error", (error) => this.onError.dispatch(error));
+      body.pipe(reader);
+      Object.defineProperty(this, "body", {
+        value: reader,
+        writable: false,
       });
-      body.pipe(parser);
     } else {
-      this.__readyRequest = true;
-      Object.defineProperties(this, {
-        awaitRequestReady: {
-          value: Promise.resolve(),
-          writable: false,
-        },
-        requestBody: {
-          value: body,
-          writable: false,
-        },
+      this.dispatchRequest({capabilities: new Map(), commands: []});
+      Object.defineProperty(this, "body", {
+        value: body,
+        writable: false,
       });
     }
   }
@@ -235,15 +203,39 @@ export class Service implements IService {
       return;
     }
     try {
-      const output = await this.driver.createResponse(this, this.__headers, this.__messages);
+      const output = await this.driver.createResponse(this, this.__headers);
       if (output.statusCode >= 400) {
         this.__status = RequestStatus.Failure;
+        this.createRejectedResponse(output);
+      } else {
+        this.createAcceptedResponse(output);
       }
-      // Schedule dispatch for next loop
-      this.dispatchResponse(output);
     } catch (err) {
       this.onError.dispatch(err);
     }
+  }
+
+  private createAcceptedResponse(payload: IResponseRawData) {
+    let packets: Buffer[];
+    const headers = new Headers(payload.headers);
+    if (payload.body) {
+      if (this.isAdvertisement) {
+        const header = AdHeaders[this.type];
+        packets = payload.body.slice(0, header.length).equals(header) ? [payload.body] : [header, payload.body];
+        headers.set("Content-Type", `application/x-git-${this.type}-advertisement`);
+      } else {
+        packets = [payload.body, ...this.__messages];
+        headers.set("Content-Type", `application/x-git-${this.type}-result`);
+      }
+      headers.set("Content-Length", packets.reduce((p, c) => p + c.length, 0).toString());
+    }
+    const body = concatPacketBuffers(packets, !this.isAdvertisement && this.__messages.length ? 0 : undefined);
+    this.dispatchResponse({
+      body,
+      headers,
+      statusCode: payload.statusCode,
+      statusMessage: payload.statusMessage,
+    });
   }
 
   public async reject(statusCode?: number, statusMessage?: string): Promise<void> {
@@ -254,20 +246,27 @@ export class Service implements IService {
     if (!(statusCode < 600 && statusCode >= 400)) {
       statusCode = 403;
     }
-    if (!(statusMessage && typeof statusMessage === 'string')) {
-      statusMessage = STATUS_CODES[statusCode] || '';
+    if (!(statusMessage && typeof statusMessage === "string")) {
+      statusMessage = STATUS_CODES[statusCode] || "";
     }
-    const buffer = Buffer.from(statusMessage);
-    const body = createPacketReadableStream([buffer]);
-    const headers = new Headers();
-    headers.set('Content-Type', 'text/plain');
-    headers.set('Content-Length', buffer.length.toString());
+    this.createRejectedResponse({statusCode, statusMessage});
+  }
+
+  private createRejectedResponse(payload: IResponseRawData) {
+    const headers = new Headers(payload.headers);
+    let body: Buffer;
+    if (!payload.body) {
+      body = Buffer.from(payload.statusMessage);
+      headers.set("Content-Type", "text/plain; charset=utf-8");
+      headers.set("Content-Length", body.length);
+    } else {
+      body = payload.body;
+    }
     this.dispatchResponse({
+      body,
       headers,
-      statusCode,
-      statusMessage,
-      async buffer() { return Buffer.from(buffer); },
-      stream() { return createPacketReadableStream([buffer]); },
+      statusCode: payload.statusCode,
+      statusMessage: payload.statusMessage,
     });
   }
 
@@ -279,6 +278,20 @@ export class Service implements IService {
     setImmediate(async() => {
       try {
         await this.onResponse.dispatch(payload);
+      } catch (err) {
+        await this.onError.dispatch(err);
+      }
+    });
+  }
+
+  /**
+   * Schedule payload dispatchment for next event loop.
+   * @param payload Payload to dispatch
+   */
+  private dispatchRequest(payload: IRequestData) {
+    setImmediate(async() => {
+      try {
+        await this.onRequest.dispatch(payload);
       } catch (err) {
         await this.onError.dispatch(err);
       }
@@ -320,50 +333,76 @@ export class Service implements IService {
 
   public async createAndInitRepository(): Promise<boolean> {
     try {
-      return await this.driver.createAndInitRespository(this);
+      return await this.driver.createAndInitRespository(this, this.__headers);
     } catch (err) {
       this.onError.dispatch(err);
       return false;
     }
   }
 
-  public async createRequestSignature(): Promise<string> {
+  public async createSignature(type: "request" | "response" | "shared" = "request"): Promise<string> {
     if (!this.type) {
       return;
     }
-    if (this.__signatureRequest) {
-      return this.__signatureRequest;
+    switch (type) {
+      case "request":
+        return this.__createRequestSignature();
+      case "response":
+        return this.__createRequestSignature();
+      case "shared":
+        return this.__createSharedSignature();
+      default:
+        return;
     }
-    if (!this.isAdvertisement) {
-      await this.awaitRequestReady;
+  }
+
+  private async __createRequestSignature(): Promise<string> {
+    if (this.__signatures.has("request")) {
+      return this.__signatures.get("request");
     }
     const hash = createHash("sha256");
     hash.update(this.repository);
     hash.update(this.type);
-    const metadata = this.requestData.slice().sort(sortMetadata).map((m) => JSON.stringify(m));
-    hash.update(metadata.join(","));
-    const capabilities = Array.from(this.requestCapabilities).sort(sortCapabilities).map((a) => a.join("="));
-    hash.update(capabilities.join(","));
-    return this.__signatureRequest = hash.digest("hex");
+    if (!this.isAdvertisement) {
+      const request = await this.awaitRequestData;
+      const commands = request.commands.slice().sort(sortMetadata).map((m) => JSON.stringify(m));
+      hash.update(commands.join(","));
+      const capabilities = Array.from(request.capabilities).sort(sortCapabilities).map((a) => a.join("="));
+      hash.update(capabilities.join(","));
+    }
+    const signature = hash.digest("hex");
+    this.__signatures.set("request", signature);
+    return signature;
   }
 
-  public async createResponseSignature(): Promise<string> {
-    if (!this.type) {
-      return;
+  private async __createResponseSignature(): Promise<string> {
+    if (this.__signatures.has("response")) {
+      return this.__signatures.get("response");
     }
-    if (this.__signatureResponse) {
-      return this.__signatureResponse;
-    }
-    const response = await this.awaitResponseReady;
+    const response = await this.awaitResponseData;
     const hash = createHash("sha256");
     hash.update(response.statusCode.toString());
     hash.update(response.statusMessage);
     response.headers.forEach((header, value) => hash.update(`${header}: ${value}`));
-    hash.update(await response.buffer());
-    return this.__signatureResponse = hash.digest("hex");
+    hash.update(await response.body);
+    const signature = hash.digest("hex");
+    this.__signatures.set("response", signature);
+    return signature;
   }
 
-  public informClient(message: string | Buffer) {
+  private async __createSharedSignature(): Promise<string> {
+    if (this.__signatures.has("shared")) {
+      return this.__signatures.get("shared");
+    }
+    const hash = createHash("sha256");
+    hash.update(await this.__createRequestSignature());
+    hash.update(await this.__createResponseSignature());
+    const signature = hash.digest("hex");
+    this.__signatures.set("shared", signature);
+    return signature;
+  }
+
+  public sidebandMessage(message: string | Buffer) {
     this.__messages.push(encode(message));
     return this;
   }
@@ -413,7 +452,7 @@ export function inspectServiceDriver(candidate: any): candidate is IServiceDrive
     throw new TypeError("Candidate driver is missing valid method 'createResponse'");
   }
 
-  if (candidate.createResponse.length !== 3) {
+  if (candidate.createResponse.length !== 2) {
     throw new TypeError("Method 'createResponse' on candidate has invalid call signature");
   }
 
@@ -421,7 +460,7 @@ export function inspectServiceDriver(candidate: any): candidate is IServiceDrive
     throw new TypeError("Candidate is missing method 'createAndInitRepository'");
   }
 
-  if (candidate.createAndInitRepository.length !== 1) {
+  if (candidate.createAndInitRepository.length !== 2) {
     throw new TypeError("Method 'createAndInitRepository' on candidate has invalid call signature");
   }
 
@@ -435,13 +474,21 @@ export function inspectServiceDriver(candidate: any): candidate is IServiceDrive
 const SymbolChecked = Symbol("checked");
 
 /**
+ * Advertisement Headers
+ */
+const AdHeaders = {
+  [RequestType.ReceivePack]: Buffer.from("001f# service=git-receive-pack\n0000"),
+  [RequestType.UploadPack]: Buffer.from("001e# service=git-upload-pack\n0000"),
+};
+
+/**
  * Maps request url to vaild services.
  */
 const Services: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
-  [RequestType.UploadPack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
-  [RequestType.ReceivePack, 'GET', /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
-  [RequestType.UploadPack, 'POST',  /^\/?(.*?)\/git-upload-pack$/, 'application/x-git-upload-pack-request'],
-  [RequestType.ReceivePack, 'POST',  /^\/?(.*?)\/git-receive-pack$/, 'application/x-git-receive-pack-request'],
+  [RequestType.UploadPack, "GET", /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
+  [RequestType.ReceivePack, "GET", /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
+  [RequestType.UploadPack, "POST",  /^\/?(.*?)\/git-upload-pack$/, "application/x-git-upload-pack-request"],
+  [RequestType.ReceivePack, "POST",  /^\/?(.*?)\/git-receive-pack$/, "application/x-git-receive-pack-request"],
 ];
 
 /**
@@ -453,31 +500,35 @@ const PacketMapper = new Map<RequestType, (service: IService) => (buffer: Buffer
     (service) => {
       const regex =
       /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
+      const request: IRequestData = {
+        capabilities: new Map(),
+        commands: [],
+      };
       return (buffer) => {
-        const value = buffer.toString('utf8');
+        const value = buffer.toString("utf8");
         const results = regex.exec(value);
         if (results) {
-          let kind: 'create' | 'delete' | 'update';
-          if ('0000000000000000000000000000000000000000' === results[1]) {
-            kind = 'create';
-          } else if ('0000000000000000000000000000000000000000' === results[2]) {
-            kind = 'delete';
+          let kind: "create" | "delete" | "update";
+          if ("0000000000000000000000000000000000000000" === results[1]) {
+            kind = "create";
+          } else if ("0000000000000000000000000000000000000000" === results[2]) {
+            kind = "delete";
           } else {
-            kind = 'update';
+            kind = "update";
           }
-          const metadata: IReceivePackData = {
+          const command: IReceivePackCommand = {
             commits: [results[1], results[2]],
             kind,
             reference: results[3],
           };
-          service.requestData.push(metadata);
+          request.commands.push(command);
           if (results[4]) {
-            for (const c of results[4].trim().split(' ')) {
+            for (const c of results[4].trim().split(" ")) {
               if (/=/.test(c)) {
-                const [k, v] = c.split('=');
-                service.requestCapabilities.set(k, v);
+                const [k, v] = c.split("=");
+                request.capabilities.set(k, v);
               } else {
-                service.requestCapabilities.set(c, undefined);
+                request.capabilities.set(c, undefined);
               }
             }
           }
@@ -489,22 +540,26 @@ const PacketMapper = new Map<RequestType, (service: IService) => (buffer: Buffer
     RequestType.UploadPack,
     (service) => {
       const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
+      const request: IRequestData = {
+        capabilities: new Map(),
+        commands: [],
+      };
       return (buffer) => {
-        const value = buffer.toString('utf8');
+        const value = buffer.toString("utf8");
         const results = regex.exec(value);
         if (results) {
-          const metadata: IUploadPackData = {
+          const metadata: IUploadPackCommand = {
             commits: [results[2]],
-            kind: results[1] as ('want' | 'have'),
+            kind: results[1] as ("want" | "have"),
           };
-          service.requestData.push(metadata);
+          request.commands.push(metadata);
           if (results[3]) {
-            for (const c of results[3].trim().split(' ')) {
+            for (const c of results[3].trim().split(" ")) {
               if (/=/.test(c)) {
-                const [k, v] = c.split('=');
-                service.requestCapabilities.set(k, v);
+                const [k, v] = c.split("=");
+                request.capabilities.set(k, v);
               } else {
-                service.requestCapabilities.set(c, undefined);
+                request.capabilities.set(c, undefined);
               }
             }
           }
@@ -519,7 +574,10 @@ const PacketMapper = new Map<RequestType, (service: IService) => (buffer: Buffer
  * @param a Data pack A
  * @param b Data pack B
  */
-function sortMetadata(a: IUploadPackData | IReceivePackData , b: IUploadPackData | IReceivePackData): number {
+function sortMetadata(
+  a: IUploadPackCommand | IReceivePackCommand,
+  b: IUploadPackCommand | IReceivePackCommand,
+): number {
   // TODO: Make a predictable sort for metadata
   return 0;
 }

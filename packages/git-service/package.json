@@ -37,7 +37,7 @@
     "typescript": "^2.8.3"
   },
   "dependencies": {
-    "git-packet-streams": "^1.1.0",
+    "git-packet-streams": "^2.0.1",
     "git-side-band-message": "0.0.3"
   },
   "jest": {

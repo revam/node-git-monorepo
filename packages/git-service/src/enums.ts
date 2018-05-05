@@ -5,11 +5,11 @@ export enum RequestType {
   /**
    * Request the use of upload-pack service.
    */
-  UploadPack = "UploadPack",
+  UploadPack = "upload-pack",
   /**
    * Request the use of receive-pack service.
    */
-  ReceivePack = "ReceivePack",
+  ReceivePack = "receive-pack",
 }
 
 /**

@@ -2,18 +2,19 @@
 import { createHash } from "crypto";
 import { concatPacketBuffers, createPacketReader, readPacketLength } from "git-packet-streams";
 import * as encode from "git-side-band-message";
-import { OutgoingHttpHeaders, STATUS_CODES } from "http";
+import { STATUS_CODES } from "http";
 import { Readable } from "stream";
 import { RequestStatus, RequestType } from "./enums";
-import { Headers, HeadersInput } from "./headers";
+import { Headers } from "./headers";
+import { inspectServiceDriver } from "./helpers";
 import {
-  IHeaders,
   IReceivePackCommand,
   IRequestData,
   IResponseData,
   IResponseRawData,
   IService,
   IServiceDriver,
+  IServiceInput,
   IUploadPackCommand,
 } from "./interfaces";
 import { Signal } from "./signal";
@@ -42,42 +43,28 @@ export class Service implements IService {
   private __status: RequestStatus;
 
   /**
-   * Accepts 5 arguments and will throw if it is supplied the wrong type or to few arguments.
-   *
+   * Creates a new service compatible with IService interface.
    * @param driver Service driver to use.
-   * @param method Upper-case HTTP method for request.
-   * @param url Incoming URL or tail snippet. Will extract repository from here when possible.
-   * @param headers Request headers supplied as: 1) an instance of [Headers](.),
-   *                2) a key-value array, or 3) a plain object with headers as keys.
-   * @param body Input (normally the request itself)
-   *
+   * @param data Input data
    * @throws {TypeError}
    */
-  constructor(
-    driver: IServiceDriver,
-    method: string,
-    url: string,
-    headers: HeadersInput,
-    body: Readable,
-  ) {
+  constructor(driver: IServiceDriver, data: IServiceInput) {
     inspectServiceDriver(driver);
-    if (typeof method !== "string" || !method) {
-      throw new TypeError("argument `method` must be a valid string");
+    if (typeof data !== "object") {
+      throw new TypeError("argument `data` must be of type 'object'");
     }
-    if (typeof url !== "string" || !url) {
-      throw new TypeError("argument `url_fragment` must be a valid string");
-    }
-    if (!(body instanceof Readable)) {
-      throw new TypeError("argument `input` must be s sub-instance of stream.Readable");
-    }
-    this.__headers = new Headers(headers);
+    this.__headers = new Headers(data.headers);
     this.__messages = [];
     this.__status = RequestStatus.Pending;
-    this.__repository = undefined;
+    this.__repository = data.repository;
     this.__signatures = new Map();
     Object.defineProperties(this, {
       driver: {
         value: driver,
+        writable: false,
+      },
+      isAdvertisement: {
+        value: data.isAdvertisement,
         writable: false,
       },
       onError: {
@@ -109,6 +96,10 @@ export class Service implements IService {
           return this.__status;
         },
       },
+      type: {
+        value: data.requestType,
+        writable: false,
+      },
     });
     Object.defineProperties(this, {
       awaitRequestData: {
@@ -126,69 +117,20 @@ export class Service implements IService {
         writable: false,
       },
     });
-    for (const [service, expected_method, regex, expected_content_type] of Services) {
-      const results = regex.exec(url);
-      if (results) {
-        const advertisement = !expected_content_type;
-        if (method !== expected_method) {
-          this.onError.dispatch(
-            new TypeError(`Unexpected HTTP ${method} request, expected a HTTP ${expected_method}) request`),
-          );
-          break;
-        }
-        if (expected_content_type) {
-          // Only check content type for post requests
-          const content_type = this.__headers.get("Content-Type");
-          if (content_type !== expected_content_type) {
-            this.onError.dispatch(
-              new TypeError(`Unexpected content-type "${content_type}", expected "${expected_content_type}"`),
-            );
-            break;
-          }
-        }
-        this.__repository = results[1];
-        Object.defineProperties(this, {
-          isAdvertisement: {
-            enumerable: true,
-            value: advertisement,
-            writable: false,
-          },
-          type: {
-            enumerable: true,
-            value: service,
-            writable: false,
-          },
-        });
-        break;
-      }
-    }
-    if (!("type" in this)) {
-      Object.defineProperties(this, {
-        isAdvertisement: {
-          enumerable: true,
-          value: false,
-          writable: false,
-        },
-        type: {
-          enumerable: true,
-          value: undefined,
-          writable: false,
-        },
-      });
-    }
-    if (!this.isAdvertisement) {
+    if (this.type && !this.isAdvertisement) {
       const middleware = PacketMapper.get(this.type);
-      const reader = createPacketReader(middleware(this));
-      reader.on("error", (error) => this.onError.dispatch(error));
-      body.pipe(reader);
+      const reader = middleware((payload) => this.dispatchRequest(payload));
+      const passthrough = createPacketReader(reader);
+      passthrough.on("error", (error) => this.onError.dispatch(error));
+      data.body.pipe(passthrough);
       Object.defineProperty(this, "body", {
-        value: reader,
+        value: passthrough,
         writable: false,
       });
     } else {
       this.dispatchRequest({capabilities: new Map(), commands: []});
       Object.defineProperty(this, "body", {
-        value: body,
+        value: data.body,
         writable: false,
       });
     }
@@ -409,72 +351,7 @@ export class Service implements IService {
 }
 
 /**
- * Inspects candidate for any missing or invalid methods from `IServiceDriver`,
- * and throws an error if found. Will only check the same candidate once if
- * no errors was found.
- * @param candidate Service driver candidate
- * @throws {TypeError}
- */
-export function inspectServiceDriver(candidate: any): candidate is IServiceDriver {
-  if (SymbolChecked in candidate) {
-    return true;
-  }
-
-  if (typeof candidate !== "object") {
-    throw new TypeError("Candidate is not an object primitive type");
-  }
-
-  if (!("checkForAccess" in candidate) || typeof candidate.checkForAccess !== "function") {
-    throw new TypeError("Candidate is missing method 'checkForAccess'");
-  }
-
-  if (candidate.checkForAccess.length !== 2) {
-    throw new TypeError("Method 'checkForAccess' on candidate has invalid call signature");
-  }
-
-  if (!("checkIfEnabled" in candidate) || typeof candidate.checkIfEnabled !== "function") {
-    throw new TypeError("Candidate is missing method 'checkIfEnabled'");
-  }
-
-  if (candidate.checkIfEnabled.length !== 1) {
-    throw new TypeError("Method 'checkIfEnabled' on candidate has invalid call signature");
-  }
-
-  if (!("checkIfExists" in candidate) || typeof candidate.checkIfExists !== "function") {
-    throw new TypeError("Candidate is missing method 'checkIfExists'");
-  }
-
-  if (candidate.checkIfExists.length !== 1) {
-    throw new TypeError("Method 'checkIfExists' on candidate has invalid call signature");
-  }
-
-  if (!("createResponse" in candidate) || typeof candidate.createResponse !== "function") {
-    throw new TypeError("Candidate driver is missing valid method 'createResponse'");
-  }
-
-  if (candidate.createResponse.length !== 2) {
-    throw new TypeError("Method 'createResponse' on candidate has invalid call signature");
-  }
-
-  if (!("createAndInitRepository" in candidate) || typeof candidate.createAndInitRepository !== "function") {
-    throw new TypeError("Candidate is missing method 'createAndInitRepository'");
-  }
-
-  if (candidate.createAndInitRepository.length !== 2) {
-    throw new TypeError("Method 'createAndInitRepository' on candidate has invalid call signature");
-  }
-
-  candidate[SymbolChecked] = undefined;
-  return true;
-}
-
-/**
- * Symbol used to check if candidate has been checked previously.
- */
-const SymbolChecked = Symbol("checked");
-
-/**
- * Advertisement Headers
+ * Advertisement Headers for response
  */
 const AdHeaders = {
   [RequestType.ReceivePack]: Buffer.from("001f# service=git-receive-pack\n0000"),
@@ -482,22 +359,13 @@ const AdHeaders = {
 };
 
 /**
- * Maps request url to vaild services.
- */
-const Services: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
-  [RequestType.UploadPack, "GET", /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
-  [RequestType.ReceivePack, "GET", /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
-  [RequestType.UploadPack, "POST",  /^\/?(.*?)\/git-upload-pack$/, "application/x-git-upload-pack-request"],
-  [RequestType.ReceivePack, "POST",  /^\/?(.*?)\/git-receive-pack$/, "application/x-git-receive-pack-request"],
-];
-
-/**
  * Maps RequestType to a valid packet reader for request body.
  */
-const PacketMapper = new Map<RequestType, (service: IService) => (buffer: Buffer) => any>([
+const PacketMapper = new Map<RequestType, (resolve: (value: IRequestData) => void) => (buffer: Buffer) => any>([
   [
     RequestType.ReceivePack,
-    (service) => {
+    (resolve) => {
+      let ongoing = true;
       const regex =
       /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
       const request: IRequestData = {
@@ -505,30 +373,38 @@ const PacketMapper = new Map<RequestType, (service: IService) => (buffer: Buffer
         commands: [],
       };
       return (buffer) => {
-        const value = buffer.toString("utf8");
-        const results = regex.exec(value);
-        if (results) {
-          let kind: "create" | "delete" | "update";
-          if ("0000000000000000000000000000000000000000" === results[1]) {
-            kind = "create";
-          } else if ("0000000000000000000000000000000000000000" === results[2]) {
-            kind = "delete";
+        if (ongoing) {
+          const length = readPacketLength(buffer);
+          if (length === 0) {
+            ongoing = false;
+            resolve(request);
           } else {
-            kind = "update";
-          }
-          const command: IReceivePackCommand = {
-            commits: [results[1], results[2]],
-            kind,
-            reference: results[3],
-          };
-          request.commands.push(command);
-          if (results[4]) {
-            for (const c of results[4].trim().split(" ")) {
-              if (/=/.test(c)) {
-                const [k, v] = c.split("=");
-                request.capabilities.set(k, v);
+            const value = buffer.toString("utf8");
+            const results = regex.exec(value);
+            if (results) {
+              let kind: "create" | "delete" | "update";
+              if ("0000000000000000000000000000000000000000" === results[1]) {
+                kind = "create";
+              } else if ("0000000000000000000000000000000000000000" === results[2]) {
+                kind = "delete";
               } else {
-                request.capabilities.set(c, undefined);
+                kind = "update";
+              }
+              const command: IReceivePackCommand = {
+                commits: [results[1], results[2]],
+                kind,
+                reference: results[3],
+              };
+              request.commands.push(command);
+              if (results[4]) {
+                for (const c of results[4].trim().split(" ")) {
+                  if (/=/.test(c)) {
+                    const [k, v] = c.split("=");
+                    request.capabilities.set(k, v);
+                  } else {
+                    request.capabilities.set(c, undefined);
+                  }
+                }
               }
             }
           }
@@ -538,28 +414,37 @@ const PacketMapper = new Map<RequestType, (service: IService) => (buffer: Buffer
   ],
   [
     RequestType.UploadPack,
-    (service) => {
+    (resolve) => {
+      let ongoing = true;
       const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
       const request: IRequestData = {
         capabilities: new Map(),
         commands: [],
       };
       return (buffer) => {
-        const value = buffer.toString("utf8");
-        const results = regex.exec(value);
-        if (results) {
-          const metadata: IUploadPackCommand = {
-            commits: [results[2]],
-            kind: results[1] as ("want" | "have"),
-          };
-          request.commands.push(metadata);
-          if (results[3]) {
-            for (const c of results[3].trim().split(" ")) {
-              if (/=/.test(c)) {
-                const [k, v] = c.split("=");
-                request.capabilities.set(k, v);
-              } else {
-                request.capabilities.set(c, undefined);
+        if (ongoing) {
+          const length = readPacketLength(buffer);
+          if (length === 0) {
+            ongoing = false;
+            resolve(request);
+          } else {
+            const value = buffer.toString("utf8");
+            const results = regex.exec(value);
+            if (results) {
+              const metadata: IUploadPackCommand = {
+                commits: [results[2]],
+                kind: results[1] as ("want" | "have"),
+              };
+              request.commands.push(metadata);
+              if (results[3]) {
+                for (const c of results[3].trim().split(" ")) {
+                  if (/=/.test(c)) {
+                    const [k, v] = c.split("=");
+                    request.capabilities.set(k, v);
+                  } else {
+                    request.capabilities.set(c, undefined);
+                  }
+                }
               }
             }
           }

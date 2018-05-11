@@ -1,6 +1,7 @@
 import { OutgoingHttpHeaders } from "http";
 import { Readable } from "stream";
 import { RequestStatus, RequestType } from "./enums";
+import { HeadersInput } from './headers';
 
 /**
  * Request data.
@@ -182,6 +183,32 @@ export interface IHeaders  {
    * Returns an iterator for the header and values in pairs.
    */
   [Symbol.iterator](): IterableIterator<[string, string[]]>;
+}
+
+/**
+ * Service Input data
+ */
+export interface IServiceInput {
+  /**
+   * Input body
+   */
+  body: Readable;
+  /**
+   * Input headers
+   */
+  headers?: HeadersInput;
+  /**
+   * Service requested is advertisement only.
+   */
+  isAdvertisement: boolean;
+  /**
+   * Repository path.
+   */
+  repository: string;
+  /**
+   * Service request type.
+   */
+  requestType: RequestType;
 }
 
 /**

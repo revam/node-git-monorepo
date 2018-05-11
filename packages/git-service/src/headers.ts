@@ -58,6 +58,17 @@ export class Headers implements IHeaders {
   public values() { return this.__raw.values(); }
   public entries() { return this.__raw.entries(); }
   public [Symbol.iterator]() { return this.__raw.entries(); }
+  public toJSON(): OutgoingHttpHeaders {
+    const headers = {};
+    for (const [key, value] of this.__raw) {
+      if (value.length === 1) {
+        headers[key] = value[0];
+      } else if (value.length) {
+        headers[key] = value.slice();
+      }
+    }
+    return headers;
+  }
 }
 
 function sanitizeHeader(header: string) {

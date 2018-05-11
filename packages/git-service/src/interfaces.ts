@@ -183,6 +183,10 @@ export interface IHeaders  {
    * Returns an iterator for the header and values in pairs.
    */
   [Symbol.iterator](): IterableIterator<[string, string[]]>;
+  /**
+   * Convert data to a JSON-friendly format.
+   */
+  toJSON(key?: PropertyKey): OutgoingHttpHeaders;
 }
 
 /**

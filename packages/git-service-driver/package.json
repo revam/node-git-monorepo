@@ -29,15 +29,15 @@
   },
   "homepage": "https://github.com/revam/node-git-service#readme",
   "devDependencies": {
-    "del-cli": "^1.1.0",
+    "@types/jest": "^22.2.3",
+    "@types/node": "^10.0.8",
     "git-service": "^1.0.0",
-    "jest": "^22.0.4",
-    "ts-jest": "^22.0.0",
-    "tslint": "^5.8.0",
-    "typescript": "^2.7.2"
+    "jest": "^22.4.3",
+    "ts-jest": "^22.4.5",
+    "tslint": "^5.10.0",
+    "typescript": "^2.8.3"
   },
   "dependencies": {
-    "git-packet-streams": "^1.0.0",
     "node-fetch": "^2.0.0"
   },
   "jest": {

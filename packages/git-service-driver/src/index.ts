@@ -186,7 +186,7 @@ export function createFileSystemDriver(origin: string, options: IServiceDriverOp
     createResponse(service) {
       return createFSResponse(origin, service, options.cache);
     },
-    async createAndInitRespository(service, headers) {
+    async createAndInitRepository(service, headers) {
       if (options.createAndInitRespository) {
         return options.createAndInitRespository(origin, service, headers, options.cache);
       } else {
@@ -228,7 +228,7 @@ export function createHttpDriver(origin: string, options: IServiceDriverOptions 
     createResponse(service, headers) {
       return createHTTPResponse(origin, service, headers, options.cache);
     },
-    async createAndInitRespository(service, headers) {
+    async createAndInitRepository(service, headers) {
       if (!options.createAndInitRespository) {
         return false;
       } else {

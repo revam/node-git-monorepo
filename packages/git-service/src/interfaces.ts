@@ -354,5 +354,5 @@ export interface IServiceDriver {
    * @param service IService object with related information
    * @param headers HTTP headers received with request
    */
-  createAndInitRespository(service: IService, headers: IHeaders): Promise<boolean>;
+  createAndInitRepository(service: IService, headers: IHeaders): Promise<boolean>;
 }

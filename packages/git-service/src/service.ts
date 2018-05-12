@@ -275,7 +275,7 @@ export class Service implements IService {
 
   public async createAndInitRepository(): Promise<boolean> {
     try {
-      return await this.driver.createAndInitRespository(this, this.__headers);
+      return await this.driver.createAndInitRepository(this, this.__headers);
     } catch (err) {
       this.onError.dispatch(err);
       return false;

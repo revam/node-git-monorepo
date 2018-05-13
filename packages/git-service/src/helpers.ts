@@ -110,40 +110,20 @@ export function inspectServiceDriver(candidate: any): candidate is IServiceDrive
     throw new TypeError("Candidate is missing method 'checkForAccess'");
   }
 
-  if (candidate.checkForAccess.length !== 2) {
-    throw new TypeError("Method 'checkForAccess' on candidate has invalid call signature");
-  }
-
   if (!("checkIfEnabled" in candidate) || typeof candidate.checkIfEnabled !== "function") {
     throw new TypeError("Candidate is missing method 'checkIfEnabled'");
-  }
-
-  if (candidate.checkIfEnabled.length !== 1) {
-    throw new TypeError("Method 'checkIfEnabled' on candidate has invalid call signature");
   }
 
   if (!("checkIfExists" in candidate) || typeof candidate.checkIfExists !== "function") {
     throw new TypeError("Candidate is missing method 'checkIfExists'");
   }
 
-  if (candidate.checkIfExists.length !== 1) {
-    throw new TypeError("Method 'checkIfExists' on candidate has invalid call signature");
-  }
-
   if (!("createResponse" in candidate) || typeof candidate.createResponse !== "function") {
     throw new TypeError("Candidate driver is missing valid method 'createResponse'");
   }
 
-  if (candidate.createResponse.length !== 2) {
-    throw new TypeError("Method 'createResponse' on candidate has invalid call signature");
-  }
-
   if (!("createAndInitRepository" in candidate) || typeof candidate.createAndInitRepository !== "function") {
     throw new TypeError("Candidate is missing method 'createAndInitRepository'");
-  }
-
-  if (candidate.createAndInitRepository.length !== 2) {
-    throw new TypeError("Method 'createAndInitRepository' on candidate has invalid call signature");
   }
 
   candidate[SymbolChecked] = undefined;

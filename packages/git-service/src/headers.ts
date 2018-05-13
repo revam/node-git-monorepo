@@ -73,7 +73,7 @@ export class Headers implements IHeaders {
 
 function sanitizeHeader(header: string) {
   header += "";
-  if (!/^[^_`a-zA-Z\-0-9!#-'*+.|~]*$/.test(header)) {
+  if (/[^_`a-zA-Z\-0-9!#-'*+.|~]/.test(header)) {
     throw new TypeError(`${header} is not a legal HTTP header name`);
   }
   return header.toLowerCase();

@@ -404,7 +404,7 @@ async function createFSResponse(
   let value: IResponseRawData;
   if (!/\.\.?(\/\\)/.test(service.repository)) {
     const fullpath = join(origin, service.repository);
-    const args = ["-c", fullpath, service.type, service.isAdvertisement ? "--advertise-refs" : "--stateless-rpc", "."];
+    const args = ["-C", fullpath, service.type, service.isAdvertisement ? "--advertise-refs" : "--stateless-rpc", "."];
     const child = spawn("git", args);
     if (service.isAdvertisement) {
       service.body.pipe(child.stdin);

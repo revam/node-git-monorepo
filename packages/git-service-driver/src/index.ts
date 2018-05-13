@@ -41,58 +41,61 @@ export interface IExecError extends Error {
  */
 export interface IServiceDriverOptions {
   /**
-   * Cache for responses and other return values.
+   * Cache for booleans and responses.
    */
   cache?: IServiceDriverCache;
   /**
-   * Custom implementation of checkForAccess. Default implementation will always
-   * return true.
-   * @param origin Origin location.
+   * Custom implementation of checkForAccess. Will fallback to default
+   * implementation if promise resolves to `undefined`.
    * @param service Service interface with related information
    * @param headers HTTP Headers sent with request
+   * @param origin Origin location.
    * @param cache Cache for responses and other return values.
    */
   checkForAccess?(
-    origin: string,
     service: IService,
     headers: IHeaders,
+    origin: string,
     cache?: IServiceDriverCache,
-  ): Promise<boolean>;
+  ): Promise<boolean | undefined>;
   /**
-   * Custom implementation of checkIfEnabled.
-   * @param origin Origin location.
+   * Custom implementation of checkIfEnabled. Will fallback to default
+   * implementation if promise resolves to `undefined`.
    * @param service Service interface with related information
+   * @param origin Origin location.
    * @param cache Cache for responses and other return values.
    */
   checkIfEnabled?(
-    origin: string,
     service: IService,
+    origin: string,
     cache?: IServiceDriverCache,
-  ): Promise<boolean>;
+  ): Promise<boolean | undefined>;
   /**
-   * Custom implementation of checkIfExists.
-   * @param origin Origin location.
+   * Custom implementation of checkIfExists. Will fallback to default
+   * implementation if promise resolves to `undefined`.
    * @param service Service interface with related information
+   * @param origin Origin location.
    * @param cache Cache for responses and other return values.
    */
   checkIfExists?(
-    origin: string,
     service: IService,
+    origin: string,
     cache?: IServiceDriverCache,
-  ): Promise<boolean>;
+  ): Promise<boolean | undefined>;
   /**
-   * Custom implementation of createAndInitRespository.
-   * @param origin Origin location.
+   * Custom implementation of createAndInitRespository. Will fallback to default
+   * implementation if promise resolves to `undefined`.
    * @param service Service interface with related information
    * @param headers HTTP Headers sent with request
+   * @param origin Origin location.
    * @param cache Cache for responses and other return values.
    */
-  createAndInitRespository?(
-    origin: string,
+  createAndInitRepository?(
     service: IService,
     headers: IHeaders,
+    origin: string,
     cache?: IServiceDriverCache,
-  ): Promise<boolean>;
+  ): Promise<boolean | undefined>;
   /**
    * Defautls to use if config for service not found. Only used by the file-
    * system driver.
@@ -164,34 +167,43 @@ export function createFileSystemDriver(origin: string, options: IServiceDriverOp
   return {
     get origin() { return origin; },
     async checkForAccess(service, headers) {
-      if (!options.checkForAccess) {
-        return true;
+      if (options.checkForAccess) {
+        const value = options.checkForAccess(service, headers, origin, options.cache);
+        if (value !== undefined) {
+          return value;
+        }
       }
-      return options.checkForAccess(origin, service, headers, options.cache);
+      return true;
     },
     checkIfEnabled(service) {
       if (options.checkIfEnabled) {
-        return options.checkIfEnabled(origin, service, options.cache);
-      } else {
-        return checkIfEnabledOnFS(origin, service, options.serviceEnabledByDefault, options.cache);
+        const value = options.checkIfEnabled(service, origin, options.cache);
+        if (value !== undefined) {
+          return value;
+        }
       }
+      return checkIfEnabledOnFS(origin, service, options.serviceEnabledByDefault, options.cache);
     },
     checkIfExists(service) {
       if (options.checkIfExists) {
-        return options.checkIfExists(origin, service, options.cache);
-      } else {
-        return checkIfExistsOnFS(origin, service, options.cache);
+        const value = options.checkIfExists(service, origin, options.cache);
+        if (value !== undefined) {
+          return value;
+        }
       }
+      return checkIfExistsOnFS(origin, service, options.cache);
     },
     createResponse(service) {
       return createFSResponse(origin, service, options.cache);
     },
     async createAndInitRepository(service, headers) {
-      if (options.createAndInitRespository) {
-        return options.createAndInitRespository(origin, service, headers, options.cache);
-      } else {
-        return createAndInitRespositoryOnFS(origin, service, options.cache);
+      if (options.createAndInitRepository) {
+        const value = options.createAndInitRepository(service, headers, origin, options.cache);
+        if (value !== undefined) {
+          return value;
+        }
       }
+      return createAndInitRespositoryOnFS(origin, service, options.cache);
     },
   };
 }
@@ -205,35 +217,43 @@ export function createHttpDriver(origin: string, options: IServiceDriverOptions 
   return {
     get origin() { return origin; },
     async checkForAccess(service, headers) {
-      if (!options.checkForAccess) {
-        return true;
-      } else {
-        return options.checkForAccess(origin, service, headers, options.cache);
+      if (options.checkForAccess) {
+        const value = options.checkForAccess(service, headers, origin, options.cache);
+        if (value !== undefined) {
+          return value;
+        }
       }
+      return true;
     },
     checkIfEnabled(service) {
       if (options.checkIfEnabled) {
-        return options.checkIfEnabled(origin, service, options.cache);
-      } else {
-        return checkIfEnabledOverHTTP(origin, service, options.cache);
+        const value = options.checkIfEnabled(service, origin, options.cache);
+        if (value !== undefined) {
+          return value;
+        }
       }
+      return checkIfEnabledOverHTTP(origin, service, options.cache);
     },
     checkIfExists(service) {
       if (options.checkIfExists) {
-        return options.checkIfExists(origin, service, options.cache);
-      } else {
-        return checkIfExistsOverHTTP(origin, service, options.cache);
+        const value = options.checkIfExists(service, origin, options.cache);
+        if (value !== undefined) {
+          return value;
+        }
       }
+      return checkIfExistsOverHTTP(origin, service, options.cache);
     },
     createResponse(service, headers) {
       return createHTTPResponse(origin, service, headers, options.cache);
     },
     async createAndInitRepository(service, headers) {
-      if (!options.createAndInitRespository) {
-        return false;
-      } else {
-        return options.createAndInitRespository(origin, service, headers, options.cache);
+      if (options.createAndInitRepository) {
+        const value = options.createAndInitRepository(service, headers, origin, options.cache);
+        if (value !== undefined) {
+          return value;
+        }
       }
+      return false;
     },
   };
 }

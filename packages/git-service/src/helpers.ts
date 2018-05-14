@@ -1,94 +1,46 @@
-import { Readable } from "stream";
-import { RequestType } from "./enums";
-import { HeadersInput } from "./headers";
-import { IResponseData, IService, IServiceDriver, IServiceInput } from './interfaces';
+import { DataSignal } from "./data-signal";
+import { ServiceType, SignalPriority } from "./enums";
+import { IGitDriver, IResponseData } from "./interfaces";
+import { LogicController } from "./logic-controller";
 
 /**
- * Reference business logic in line with spec. defined in the technical documentation.
- *
- * See https://github.com/git/git/blob/master/Documentation/technical/http-protocol.txt for more info.
+ * Maps vital request properties to vital service properties.
+ * @param path Tailing url path fragment with querystring.
+ * @param method HTTP method used with incoming request.
+ * @param content_type Incoming content-type header.
  */
-export async function serveRequest(
-  service: IService,
-  createAndInitNonexistant: boolean = false,
-): Promise<IResponseData> {
-  if (! await service.checkIfExists()) {
-    // should we skip creation of resource?
-    if (!createAndInitNonexistant) {
-      service.reject(404); // 404 Not Found
-      return service.awaitResponseData;
-    }
-    if (! await service.createAndInitRepository()) {
-      service.reject(500, "Could not initialize new repository");
-      return service.awaitResponseData;
-    }
-  }
-  if (! await service.checkForAccess()) {
-    service.reject(401); // 401 Unauthorized
-  } else if (! await service.checkIfEnabled()) {
-    service.reject(403); // 403 Forbidden
-  } else {
-    service.accept();
-  }
-  return service.awaitResponseData;
-}
-
-/**
- * Maps method and url to valid service types for IServiceInput.
- * @param method Upper-case HTTP method for request.
- * @param url Incoming URL or tail snippet. Will extract repository from here when possible.
- * @param headers Request headers supplied as: 1) an instance of [Headers](.),
- *                2) a key-value array, or 3) a plain object with headers as keys.
- * @param body Input (normally the request itself)
- */
-export function mapToServiceInput(method: string, url: string, headers: HeadersInput, body: Readable): IServiceInput {
-  if (typeof method !== "string" || !method) {
-    throw new TypeError("argument `method` must be a valid string");
-  }
-  if (typeof url !== "string" || !url) {
-    throw new TypeError("argument `url_fragment` must be a valid string");
-  }
-  if (!(body instanceof Readable)) {
-    throw new TypeError("argument `input` must be s sub-instance of stream.Readable");
-  }
+export function mapInputToRequest(
+  path: string,
+  method: string,
+  content_type: string,
+): [boolean, ServiceType, string] {
   for (const [requestType, expected_method, regex, expected_content_type] of Services) {
-    const results = regex.exec(url);
+    const results = regex.exec(path);
     if (results) {
       const isAdvertisement = !expected_content_type;
       if (method !== expected_method) {
-        this.onError.dispatch(
-          new TypeError(`Unexpected HTTP ${method} request, expected a HTTP ${expected_method}) request`),
-        );
         break;
+        // throw new TypeError(`Unexpected HTTP ${method} request, expected a HTTP ${expected_method}) request`);
       }
-      if (expected_content_type) {
-        // Only check content type for post requests
-        const content_type = this.__headers.get("Content-Type");
-        if (content_type !== expected_content_type) {
-          this.onError.dispatch(
-            new TypeError(`Unexpected content-type "${content_type}", expected "${expected_content_type}"`),
-          );
-          break;
-        }
+      // Only check content type for post requests
+      if (expected_content_type && content_type !== expected_content_type) {
+        break;
+        // throw new TypeError(`Unexpected content-type "${content_type}", expected "${expected_content_type}"`);
       }
-      this.__repository = results[1];
-      return {
-        body,
-        headers,
-        isAdvertisement,
-        repository: results[1],
-        requestType,
-      };
+      return [isAdvertisement, requestType, results[1]];
     }
   }
-  return {
-    body,
-    headers,
-    isAdvertisement: false,
-    repository: undefined,
-    requestType: undefined,
-  };
 }
+
+/**
+ * Maps request url to vaild services.
+ */
+const Services: Array<[ServiceType, "GET" | "POST", RegExp, string]> = [
+  [ServiceType.UploadPack, "GET", /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
+  [ServiceType.ReceivePack, "GET", /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
+  [ServiceType.UploadPack, "POST", /^\/?(.*?)\/git-upload-pack$/, "application/x-git-upload-pack-request"],
+  [ServiceType.ReceivePack, "POST", /^\/?(.*?)\/git-receive-pack$/, "application/x-git-receive-pack-request"],
+];
 
 /**
  * Inspects candidate for any missing or invalid methods from `IServiceDriver`,
@@ -97,7 +49,7 @@ export function mapToServiceInput(method: string, url: string, headers: HeadersI
  * @param candidate Service driver candidate
  * @throws {TypeError}
  */
-export function inspectServiceDriver(candidate: any): candidate is IServiceDriver {
+export function inspectDriver(candidate: any): candidate is IGitDriver {
   if (SymbolChecked in candidate) {
     return true;
   }
@@ -134,13 +86,3 @@ export function inspectServiceDriver(candidate: any): candidate is IServiceDrive
  * Symbol used to check if candidate has been checked previously.
  */
 const SymbolChecked = Symbol("checked");
-
-/**
- * Maps request url to vaild services.
- */
-const Services: Array<[RequestType, "GET" | "POST", RegExp, string]> = [
-  [RequestType.UploadPack, "GET", /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
-  [RequestType.ReceivePack, "GET", /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
-  [RequestType.UploadPack, "POST", /^\/?(.*?)\/git-upload-pack$/, "application/x-git-upload-pack-request"],
-  [RequestType.ReceivePack, "POST", /^\/?(.*?)\/git-receive-pack$/, "application/x-git-receive-pack-request"],
-];

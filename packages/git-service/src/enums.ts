@@ -1,13 +1,13 @@
 /**
- * Request service type.
+ * Service types.
  */
-export enum RequestType {
+export enum ServiceType {
   /**
-   * Request the use of upload-pack service.
+   * Git upload-pack service.
    */
   UploadPack = "upload-pack",
   /**
-   * Request the use of receive-pack service.
+   * Git receive-pack service.
    */
   ReceivePack = "receive-pack",
 }
@@ -34,4 +34,26 @@ export enum RequestStatus {
    * Combination of flags Accepted and Rejected. (1 | 2 -> 3)
    */
   Failure = 3,
+}
+
+/**
+ * Named signal priorities.
+ */
+export enum SignalPriority {
+  /**
+   * Pre-run priority
+   */
+  Early = -5,
+  /**
+   * Normal priority
+   */
+  Normal = 0,
+  /**
+   * Post-run priority
+   */
+  Late = 5,
+  /**
+   * Async data is collected from signal.
+   */
+  Send = 10,
 }

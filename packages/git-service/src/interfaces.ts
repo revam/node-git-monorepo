@@ -1,12 +1,67 @@
 import { OutgoingHttpHeaders } from "http";
 import { Readable } from "stream";
-import { RequestStatus, RequestType } from "./enums";
-import { HeadersInput } from './headers';
+import { DataSignal } from "./data-signal";
+import { RequestStatus, ServiceType, SignalPriority } from './enums';
+import { Headers } from "./headers";
+import { LogicController } from "./logic-controller";
+import { Signal, SymbolOnce, SymbolPriority } from "./signal";
+
+/**
+ * Async request data holder.
+ */
+export type RequestData = DataSignal<IRequestData>;
+
+/**
+ * Async response data holder.
+ */
+export type ResponseData = DataSignal<IResponseData>;
+
+/**
+ *
+ */
+export interface IService {
+  /**
+   * Async request data holder.
+   */
+  readonly request: RequestData;
+  /**
+   * Async response data holder.
+   */
+  readonly response: ResponseData;
+  /**
+   * Logic controller.
+   */
+  readonly controller: LogicController;
+  /**
+   * Serves request with default behavior and rules.
+   */
+  serve(): Promise<void>;
+}
 
 /**
  * Request data.
  */
 export interface IRequestData {
+  /**
+   * Request data stream.
+   */
+  body: Readable;
+  /**
+   * Request headers.
+   */
+  headers: Headers;
+  /**
+   * Check if client only want advertisement from service.
+   */
+  isAdvertisement: boolean;
+  /**
+   * Service type.
+   */
+  service: ServiceType;
+  /**
+   * Request status.
+   */
+  status: RequestStatus;
   /**
    * Requested capebilities client support and/or want.
    */
@@ -15,50 +70,10 @@ export interface IRequestData {
    * Requested commands for service.
    */
   commands: Array<IUploadPackCommand | IReceivePackCommand>;
-}
-
-/**
- * Response data.
- */
-export interface IResponseData {
   /**
-   * Response body.
+   * Repository path for requested service.
    */
-  body: Buffer;
-  /**
-   * Response headers.
-   */
-  headers: IHeaders;
-  /**
-   * Response status code.
-   */
-  statusCode: number;
-  /**
-   * Response status message.
-   */
-  statusMessage: string;
-}
-
-/**
- * Response data from driver
- */
-export interface IResponseRawData {
-  /**
-   * Status code. Uses HTTP Codes for compatibility.
-   */
-  statusCode: number;
-  /**
-   * Status message. Error message if status code is an error code.
-   */
-  statusMessage: string;
-  /**
-   * Additional headers for response.
-   */
-  headers?: OutgoingHttpHeaders;
-  /**
-   * Raw buffered response
-   */
-  body?: Buffer;
+  repository: string;
 }
 
 /**
@@ -96,263 +111,104 @@ export interface IReceivePackCommand {
 }
 
 /**
- * Sync and async signal interface.
+ * Response data.
  */
-export interface ISignal<P> {
+export interface IResponseData {
   /**
-   * Number of active listeners.
+   * Response body.
    */
-  readonly count: number;
+  body: Buffer;
   /**
-   * Adds a listener that listens till removed.
-   * @param fn Listener to add
+   * Response headers.
    */
-  add(fn: (payload: P) => any): void;
+  headers: Headers;
   /**
-   * Adds a listener that only listens once.
-   * @param fn Listener to add
+   * Response status code.
    */
-  addOnce(fn: (payload: P) => any): void;
+  statusCode: number;
   /**
-   * Removes a listener.
-   * @param fn Listener to remote
+   * Response status message.
    */
-  delete(fn: (payload: P) => any): boolean;
-  /**
-   * Dispatches payload to all listener and waits till all finish.
-   * Throws if one of the listeners encounter an error.
-   * @param payload Payload to dispatch
-   */
-  dispatch(payload: P): Promise<void>;
-}
-
-/**
- * simple headers holder
- */
-export interface IHeaders  {
-  /**
-   * Number of headers in object.
-   */
-  readonly count: number;
-  /**
-   * Returns value under key from internal collection.
-   * @param header Header name
-   */
-  get(header: string): string;
-  /**
-   * Sets value under key in internal collection
-   * @param header   Header name
-   * @param value  Header value to set
-   */
-  set(header: string, value: number | string | string[]): void;
-  /**
-   * Appends value onto existing header, creating it if not.
-   * @param header Header name
-   * @param value Header value to append
-   */
-  append(header: string, value: number | string | string[]): void;
-  /**
-   * Checks if header name exists
-   * @param header Header name
-   */
-  has(header: string): boolean;
-  /**
-   * Deletes header and accossiated values.
-   * @param header Header name
-   */
-  delete(header: string): boolean;
-  /**
-   * Iterates over each header-value pair. If multiple headers
-   * @param fn Callback
-   * @param thisArg Value of `this` in `fn`
-   */
-  forEach<T = undefined>(fn: (this: T, header: string, value: string[]) => any, thisArg?: T): void;
-  /**
-   * Returns an iterator for the header names.
-   */
-  keys(): IterableIterator<string>;
-  /**
-   * Returns an iterator for the values of each header.
-   */
-  values(): IterableIterator<string[]>;
-  /**
-   * Returns an iterator for the header and values in pairs.
-   */
-  entries(): IterableIterator<[string, string[]]>;
-  /**
-   * Returns an iterator for the header and values in pairs.
-   */
-  [Symbol.iterator](): IterableIterator<[string, string[]]>;
-  /**
-   * Convert data to a JSON-friendly format.
-   */
-  toJSON(key?: PropertyKey): OutgoingHttpHeaders;
-}
-
-/**
- * Service Input data
- */
-export interface IServiceInput {
-  /**
-   * Input body
-   */
-  body: Readable;
-  /**
-   * Input headers
-   */
-  headers?: HeadersInput;
-  /**
-   * Service requested is advertisement only.
-   */
-  isAdvertisement: boolean;
-  /**
-   * Repository path.
-   */
-  repository: string;
-  /**
-   * Service request type.
-   */
-  requestType: RequestType;
-}
-
-/**
- * High-level git service interface.
- */
-export interface IService {
-  /**
-   * Service driver - doing the heavy-lifting for us.
-   */
-  readonly driver: IServiceDriver;
-
-  /**
-   * Resolves when request data is ready. If any errors occurred it will throw
-   * the first error.
-   */
-  readonly awaitRequestData: Promise<IRequestData>;
-  /**
-   * Resolves when response data is ready. If any errors occurred it will throw
-   * the first error.
-   */
-  readonly awaitResponseData: Promise<IResponseData>;
-
-  /**
-   * Check if client only want advertisement from service.
-   */
-  readonly isAdvertisement: boolean;
-
-  /**
-   * Checks if repository exists.
-   */
-  checkIfExists(): Promise<boolean>;
-  /**
-   * Checks if service is enabled.
-   * We can still *atempt* a forcefull use of service.
-   */
-  checkIfEnabled(): Promise<boolean>;
-  /**
-   * Checks access rights to service.
-   * Depends on driver implementation.
-   */
-  checkForAccess(): Promise<boolean>;
-
-  /**
-   * Creates a uniform signature for request data, response data, or both.
-   * @param type Signature type. Default type is `"request"`.
-   */
-  createSignature(type?: "request" | "response" | "shared"): Promise<string>;
-  /**
-   * Creates and initialises a new repository, but only if nonexistant.
-   * Return value indicate a new repo.
-   */
-  createAndInitRepository(): Promise<boolean>;
-
-  /**
-   * Dispatched when any error ocurr.
-   */
-  readonly onError: ISignal<any>;
-  /**
-   * Dispatched with request data when data is ready.
-   */
-  readonly onRequest: ISignal<IRequestData>;
-  /**
-   * Dispatched with response data when data is ready.
-   */
-  readonly onResponse: ISignal<IResponseData>;
-
-  /**
-   * Raw request body or a stream leading to the raw body.
-   */
-  readonly body: Readable;
-  /**
-   * Requested service type.
-   */
-  readonly type: RequestType;
-  /**
-   * Response status.
-   */
-  readonly status: RequestStatus;
-  /**
-   * Repository path for requested service.
-   */
-  repository: string;
-
-  /**
-   * Accepts request and asks the underlying driver for an appropriate response.
-   */
-  accept(): Promise<void>;
-  /**
-   * Rejects request with status code and an optional status message.
-   * Only works with http status error codes.
-   * @param statusCode 4xx or 5xx http status code for rejection.
-   *                   Default is `403`.
-   * @param statusMessage Optional reason for rejection.
-   *                      Default is status message for status code.
-   */
-  reject(statusCode?: number, statusMessage?: string): Promise<void>;
-  /**
-   * Inform client of message, but only if service is accepted and not a
-   * failure.
-   * @param message Message to inform client
-   */
-  sidebandMessage(message: string | Buffer): this;
+  statusMessage: string;
 }
 
 /**
  * Low-level service driver for working with git.
  */
-export interface IServiceDriver {
-  /**
-   * Repositories origin location - for reference only. Dependent of driver
-   * implementation.
-   */
-  readonly origin?: string;
+export interface IGitDriver {
   /**
    * Checks access to service authenticated by headers for repository at origin.
-   * @param service IService object with related information
-   * @param headers HTTP headers received with request
+   * @param request IService object with related information
    */
-  checkForAccess(service: IService, headers: IHeaders): Promise<boolean>;
+  checkForAccess(request: IRequestData, onResponse: IReadableSignal<IResponseData>): Promise<boolean>;
   /**
    * Checks if service is enabled for repository.
-   * @param service IService object with related information
+   * @param requestData IService object with related information
    */
-  checkIfEnabled(service: IService): Promise<boolean>;
+  checkIfEnabled(requestData: IRequestData, onResponse: IReadableSignal<IResponseData>): Promise<boolean>;
   /**
    * Checks if repository exists at origin.
-   * @param service IService object with related information
+   * @param requestData IService object with related information
    */
-  checkIfExists(service: IService): Promise<boolean>;
+  checkIfExists(requestData: IRequestData, onResponse: IReadableSignal<IResponseData>): Promise<boolean>;
   /**
-   * Create a response for service request.
-   * @param service IService object with related information
-   * @param headers HTTP headers received with request
-   * @param messages Buffered messages to inform client
+   * Creates response data for request data.
+   * @param requestData IService object with related information
    */
-  createResponse(service: IService, headers: IHeaders): Promise<IResponseRawData>;
+  createResponse(requestData: IRequestData, onResponse: IReadableSignal<IResponseData>): Promise<IGitDriverData>;
+}
+
+/**
+ * Response data from driver
+ */
+export interface IGitDriverData {
   /**
-   * Creates and initialise a new repository at origin, but only if repository does not exist.
-   * @param service IService object with related information
-   * @param headers HTTP headers received with request
+   * Raw buffered response
    */
-  createAndInitRepository(service: IService, headers: IHeaders): Promise<boolean>;
+  body?: Buffer;
+  /**
+   * Status code. Uses HTTP Codes for compatibility.
+   */
+  statusCode: number;
+  /**
+   * Status message. Error message if status code is an HTTP error code.
+   */
+  statusMessage: string;
+}
+
+/**
+ * Readable signal
+ */
+export interface IReadableSignal<P> {
+  count: number;
+  add(fn: ISignalHandle<P>, priority?: SignalPriority | number): void;
+  addOnce(fn: ISignalHandle<P>, priority?: SignalPriority | number): void;
+  has(fn: ISignalHandle<P> | SignalPriority | number): number;
+  remove(fn: ISignalHandle<P> | SignalPriority | number): number;
+  clear(): number;
+}
+
+/**
+ * Writable signal
+ */
+export interface IWritableSignal<P> {
+  dispatch(payload: P): Promise<void>;
+}
+
+/**
+ * Signal handler
+ */
+export interface ISignalHandle<P> {
+  /**
+   * Call signature
+   */
+  (payload: P): any;
+  /**
+   * Signals to distach from after use.
+   */
+  [SymbolOnce]?: Set<Signal<P>>;
+  /**
+   * Priorities for different signals.
+   */
+  [SymbolPriority]?: Map<Signal<P>, number>;
 }

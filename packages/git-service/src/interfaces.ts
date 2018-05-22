@@ -1,33 +1,25 @@
-import { OutgoingHttpHeaders } from "http";
+import { ReadableSignal } from "micro-signals";
 import { Readable } from "stream";
-import { DataSignal } from "./data-signal";
-import { RequestStatus, ServiceType, SignalPriority } from './enums';
+import { RequestStatus, ServiceType } from './enums';
 import { Headers } from "./headers";
 import { LogicController } from "./logic-controller";
-import { Signal, SymbolOnce, SymbolPriority } from "./signal";
-
-/**
- * Async request data holder.
- */
-export type RequestData = DataSignal<IRequestData>;
-
-/**
- * Async response data holder.
- */
-export type ResponseData = DataSignal<IResponseData>;
 
 /**
  *
  */
 export interface IService {
   /**
-   * Async request data holder.
+   * Resolves when request is ready.
    */
-  readonly request: RequestData;
+  readonly request: Promise<IRequestData>;
   /**
-   * Async response data holder.
+   * Resolves when response is ready.
    */
-  readonly response: ResponseData;
+  readonly response: Promise<IResponseData>;
+  /**
+   * Dispatched if any errors occurr while serving.
+   */
+  readonly onError: ReadableSignal<any>;
   /**
    * Logic controller.
    */
@@ -45,19 +37,19 @@ export interface IRequestData {
   /**
    * Request data stream.
    */
-  body: Readable;
+  readonly body: Readable;
   /**
    * Request headers.
    */
-  headers: Headers;
+  readonly headers: Headers;
   /**
    * Check if client only want advertisement from service.
    */
-  isAdvertisement: boolean;
+  readonly isAdvertisement: boolean;
   /**
    * Service type.
    */
-  service: ServiceType;
+  readonly service: ServiceType;
   /**
    * Request status.
    */
@@ -65,15 +57,19 @@ export interface IRequestData {
   /**
    * Requested capebilities client support and/or want.
    */
-  capabilities: Map<string, string>;
+  readonly capabilities: Map<string, string>;
   /**
    * Requested commands for service.
    */
-  commands: Array<IUploadPackCommand | IReceivePackCommand>;
+  readonly commands: Array<IUploadPackCommand | IReceivePackCommand>;
   /**
-   * Repository path for requested service.
+   * Leading path fragment.
    */
-  repository: string;
+  readonly path: string;
+  /**
+   * Returns a signature for object.
+   */
+  signature(): string;
 }
 
 /**
@@ -117,19 +113,23 @@ export interface IResponseData {
   /**
    * Response body.
    */
-  body: Buffer;
+  readonly body: Buffer;
   /**
    * Response headers.
    */
-  headers: Headers;
+  readonly headers: Headers;
   /**
    * Response status code.
    */
-  statusCode: number;
+  readonly statusCode: number;
   /**
    * Response status message.
    */
-  statusMessage: string;
+  readonly statusMessage: string;
+  /**
+   * Returns a signature for object.
+   */
+  signature(): string;
 }
 
 /**
@@ -137,78 +137,41 @@ export interface IResponseData {
  */
 export interface IGitDriver {
   /**
-   * Checks access to service authenticated by headers for repository at origin.
+   * Checks access to service (e.g. authenticate by headers).
    * @param request IService object with related information
    */
-  checkForAccess(request: IRequestData, onResponse: IReadableSignal<IResponseData>): Promise<boolean>;
+  checkForAccess(request: IRequestData, onResponse: ReadableSignal<IResponseData>): Promise<boolean>;
   /**
    * Checks if service is enabled for repository.
    * @param requestData IService object with related information
    */
-  checkIfEnabled(requestData: IRequestData, onResponse: IReadableSignal<IResponseData>): Promise<boolean>;
+  checkIfEnabled(requestData: IRequestData, onResponse: ReadableSignal<IResponseData>): Promise<boolean>;
   /**
-   * Checks if repository exists at origin.
+   * Checks if repository exists.
    * @param requestData IService object with related information
    */
-  checkIfExists(requestData: IRequestData, onResponse: IReadableSignal<IResponseData>): Promise<boolean>;
+  checkIfExists(requestData: IRequestData, onResponse: ReadableSignal<IResponseData>): Promise<boolean>;
   /**
-   * Creates response data for request data.
+   * Creates partly response data for request data.
    * @param requestData IService object with related information
    */
-  createResponse(requestData: IRequestData, onResponse: IReadableSignal<IResponseData>): Promise<IGitDriverData>;
+  createResponse(requestData: IRequestData, onResponse: ReadableSignal<IResponseData>): Promise<IGitDriverData>;
 }
 
 /**
- * Response data from driver
+ * Partly response data from driver.
  */
 export interface IGitDriverData {
   /**
-   * Raw buffered response
+   * Raw buffer response.
    */
   body?: Buffer;
   /**
-   * Status code. Uses HTTP Codes for compatibility.
+   * Status code. Uses HTTP status codes for compatibility.
    */
   statusCode: number;
   /**
-   * Status message. Error message if status code is an HTTP error code.
+   * Status message. May be an error message if statusCode is an HTTP error code.
    */
-  statusMessage: string;
-}
-
-/**
- * Readable signal
- */
-export interface IReadableSignal<P> {
-  count: number;
-  add(fn: ISignalHandle<P>, priority?: SignalPriority | number): void;
-  addOnce(fn: ISignalHandle<P>, priority?: SignalPriority | number): void;
-  has(fn: ISignalHandle<P> | SignalPriority | number): number;
-  remove(fn: ISignalHandle<P> | SignalPriority | number): number;
-  clear(): number;
-}
-
-/**
- * Writable signal
- */
-export interface IWritableSignal<P> {
-  dispatch(payload: P): Promise<void>;
-}
-
-/**
- * Signal handler
- */
-export interface ISignalHandle<P> {
-  /**
-   * Call signature
-   */
-  (payload: P): any;
-  /**
-   * Signals to distach from after use.
-   */
-  [SymbolOnce]?: Set<Signal<P>>;
-  /**
-   * Priorities for different signals.
-   */
-  [SymbolPriority]?: Map<Signal<P>, number>;
+  statusMessage?: string;
 }

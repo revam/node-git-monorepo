@@ -91,7 +91,8 @@ const server = http.createServer(async function(request, response) {
       response.statusCode = err.status || err.statusCode || 500;
       response.setHeader("Content-Type", "text/plain");
       response.end(HttpStatus[response.statusCode], "utf8");
-    } else if (response.connection.writable) {
+    }
+    else if (response.connection.writable) {
       response.end();
     }
   });

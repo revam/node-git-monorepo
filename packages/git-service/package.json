@@ -39,7 +39,8 @@
   },
   "dependencies": {
     "git-packet-streams": "^2.0.1",
-    "git-side-band-message": "0.0.3"
+    "git-side-band-message": "0.0.3",
+    "micro-signals": "^2.0.0"
   },
   "jest": {
     "transform": {

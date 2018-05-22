@@ -27,13 +27,15 @@ export class Headers {
     });
     if (input instanceof Headers) {
       this.__raw = new Map(input);
-    } else {
+    }
+    else {
       this.__raw = new Map();
       if (input instanceof Array || input instanceof Map) {
         for (const [header, value] of input) {
           this.append(header, value);
         }
-      } else if (typeof input === "object") {
+      }
+      else if (typeof input === "object") {
         for (const header of Object.keys(input)) {
           this.append(header, input[header]);
         }
@@ -87,7 +89,8 @@ export class Headers {
     const values = this.__raw.get(saneHeader);
     if (value instanceof Array) {
       values.push(...value);
-    } else {
+    }
+    else {
       values.push(`${value}`);
     }
   }
@@ -139,7 +142,8 @@ export class Headers {
     for (const [key, value] of this.__raw) {
       if (value.length === 1) {
         headers[key] = value[0];
-      } else if (value.length) {
+      }
+      else if (value.length) {
         headers[key] = value.slice();
       }
     }

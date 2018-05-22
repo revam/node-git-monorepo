@@ -1,11 +1,11 @@
-import { concatPacketBuffers } from 'git-packet-streams';
-import * as encode from 'git-side-band-message';
-import { STATUS_CODES } from 'http';
-import { RequestStatus, ServiceType } from './enums';
-import { Headers } from './headers';
-import { inspectDriver } from './helpers';
-import { IGitDriver, IGitDriverData, IReadableSignal, IRequestData, IResponseData } from './interfaces';
-import { Signal } from "./signal";
+import { createHash } from 'crypto';
+import { concatPacketBuffers } from "git-packet-streams";
+import * as encode from "git-side-band-message";
+import { STATUS_CODES } from "http";
+import { ReadableSignal, Signal } from "micro-signals";
+import { RequestStatus, ServiceType } from "./enums";
+import { Headers } from "./headers";
+import { IGitDriver, IGitDriverData, IRequestData, IResponseData } from "./interfaces";
 
 /**
  * Controls service logic, such as
@@ -20,13 +20,9 @@ export class LogicController {
    */
   public readonly onError: Signal<any>;
 
-  private __request: Promise<IRequestData>;
-  private __response: IReadableSignal<IResponseData>;
   private __messages: Buffer[] = [];
 
-  constructor(driver: IGitDriver, requestData: Promise<IRequestData>, responseSignal: IReadableSignal<IResponseData>) {
-    this.__request = requestData;
-    this.__response = responseSignal;
+  constructor(driver: IGitDriver) {
     Object.defineProperties(this, {
       driver: {
         value: driver,
@@ -42,35 +38,67 @@ export class LogicController {
   /**
    * Serves request with default behavior and rules.
    */
-  public async serve(): Promise<IResponseData> {
-    if (! await this.checkIfExists()) {
-      return this.reject(404); // 404 Not Found
-    } else if (! await this.checkForAccess()) {
-      return this.reject(401); // 401 Unauthorized
-    } else if (! await this.checkIfEnabled()) {
-      return this.reject(403); // 403 Forbidden
+  public async serve(
+    request: IRequestData,
+    response: ReadableSignal<IResponseData>,
+  ): Promise<IResponseData> {
+    if (! await this.checkIfExists(request, response)) {
+      return this.reject(request, 404); // 404 Not Found
     }
-    return this.accept(); // 200 Ok / 304 Not Modified
+    else if (! await this.checkForAccess(request, response)) {
+      return this.reject(request, 401); // 401 Unauthorized
+    }
+    else if (! await this.checkIfEnabled(request, response)) {
+      return this.reject(request, 403); // 403 Forbidden
+    }
+    return this.accept(request, response); // 2xx-5xx HTTP status code
   }
 
   /**
    * Accepts request and asks the underlying driver for an appropriate response.
+   * If driver returns a 4xx or 5xx, then the request is rejected and marked as
+   * a failure.
    */
-  public async accept(): Promise<IResponseData> {
-    const requestData = await this.__request;
-    if (!requestData || requestData.status !== RequestStatus.Pending) {
+  public async accept(
+    request: IRequestData,
+    response: ReadableSignal<IResponseData>,
+  ): Promise<IResponseData> {
+    if (request.status !== RequestStatus.Pending) {
       return;
     }
-    requestData.status = RequestStatus.Accepted;
-    if (!requestData.service) {
+    request.status = RequestStatus.Accepted;
+    if (!request.service) {
       return;
     }
-    const output = await this.driver.createResponse(requestData, this.__response);
+    const output = await this.driver.createResponse(request, response);
     if (output.statusCode >= 400) {
-      requestData.status = RequestStatus.Failure;
+      request.status = RequestStatus.Failure;
       return this.createRejectedResponse(output);
     }
-    return this.createAcceptedResponse(requestData, output);
+    const packets: Buffer[] = [];
+    const headers = new Headers();
+    if (output.body) {
+      packets.push(output.body);
+      if (request.isAdvertisement) {
+        const header = AdHeaders[request.service];
+        if (!output.body.slice(0, header.length).equals(header)) {
+          packets.splice(0, 1, header);
+        }
+        headers.set("Content-Type", `application/x-git-${request.service}-advertisement`);
+      }
+      else {
+        packets.push(...this.__messages);
+        headers.set("Content-Type", `application/x-git-${request.service}-result`);
+      }
+      headers.set("Content-Length", packets.reduce((p, c) => p + c.length, 0).toString());
+    }
+    const body = concatPacketBuffers(packets, !request.isAdvertisement && this.__messages.length ? 0 : undefined);
+    return createResponse({
+      body,
+      headers,
+      statusCode: output.statusCode,
+      statusMessage: output.statusMessage,
+    });
   }
 
   /**
@@ -81,17 +109,20 @@ export class LogicController {
    * @param statusMessage Optional reason for rejection.
    *                      Default is status message for status code.
    */
-  public async reject(statusCode?: number, statusMessage?: string): Promise<IResponseData> {
-    const requestData = await this.__request;
-    if (!requestData || requestData.status !== RequestStatus.Pending) {
+  public async reject(
+    request: IRequestData,
+    statusCode?: number,
+    statusMessage?: string,
+  ): Promise<IResponseData> {
+    if (request.status !== RequestStatus.Pending) {
       return;
     }
-    requestData.status = RequestStatus.Rejected;
-    if (!requestData.service) {
+    request.status = RequestStatus.Rejected;
+    if (!request.service) {
       return;
     }
     if (!(statusCode < 600 && statusCode >= 400)) {
-      statusCode = 403;
+      statusCode = 500;
     }
     if (!(statusMessage && typeof statusMessage === "string")) {
       statusMessage = STATUS_CODES[statusCode] || "Unknown status";
@@ -102,12 +133,12 @@ export class LogicController {
   /**
    * Checks if repository exists.
    */
-  public async checkIfExists(): Promise<boolean> {
+  public async checkIfExists(
+    request: IRequestData,
+    response: ReadableSignal<IResponseData>,
+  ): Promise<boolean> {
     try {
-      const requestData = await this.__request;
-      if (requestData) {
-        return this.driver.checkIfExists(requestData, this.__response);
-      }
+      return this.driver.checkIfExists(request, response);
     } catch (error) {
       this.dispatchError(error);
     }
@@ -118,12 +149,12 @@ export class LogicController {
    * Checks if service is enabled.
    * We can still *atempt* a forcefull use of service.
    */
-  public async checkIfEnabled(): Promise<boolean> {
+  public async checkIfEnabled(
+    request: IRequestData,
+    response: ReadableSignal<IResponseData>,
+  ): Promise<boolean> {
     try {
-      const requestData = await this.__request;
-      if (requestData) {
-        return this.driver.checkIfEnabled(requestData, this.__response);
-      }
+      return this.driver.checkIfEnabled(request, response);
     } catch (error) {
       this.dispatchError(error);
     }
@@ -134,12 +165,12 @@ export class LogicController {
    * Checks access rights to service.
    * Depends on driver implementation.
    */
-  public async checkForAccess(): Promise<boolean> {
+  public async checkForAccess(
+    request: IRequestData,
+    response: ReadableSignal<IResponseData>,
+  ): Promise<boolean> {
     try {
-      const requestData = await this.__request;
-      if (requestData) {
-        return this.driver.checkForAccess(requestData, this.__response);
-      }
+      return this.driver.checkForAccess(request, response);
     } catch (error) {
       this.dispatchError(error);
     }
@@ -156,51 +187,23 @@ export class LogicController {
     return this;
   }
 
-  private createAcceptedResponse(
-    requestData: IRequestData,
-    driverData: IGitDriverData,
-  ): IResponseData {
-    const packets: Buffer[] = [];
-    const headers = new Headers();
-    if (driverData.body) {
-      packets.push(driverData.body);
-      if (requestData.isAdvertisement) {
-        const header = AdHeaders[requestData.service];
-        if (!driverData.body.slice(0, header.length).equals(header)) {
-          packets.splice(0, 1, header);
-        }
-        headers.set("Content-Type", `application/x-git-${requestData.service}-advertisement`);
-      } else {
-        packets.push(...this.__messages);
-        headers.set("Content-Type", `application/x-git-${requestData.service}-result`);
-      }
-      headers.set("Content-Length", packets.reduce((p, c) => p + c.length, 0).toString());
-    }
-    const body = concatPacketBuffers(packets, !requestData.isAdvertisement && this.__messages.length ? 0 : undefined);
-    return {
-      body,
-      headers,
-      statusCode: driverData.statusCode,
-      statusMessage: driverData.statusMessage,
-    };
-  }
-
   private createRejectedResponse(payload: IGitDriverData): IResponseData {
     const headers = new Headers();
     let body: Buffer;
     if (payload.body) {
       body = payload.body;
-    } else {
+    }
+    else {
       body = Buffer.from(payload.statusMessage);
       headers.set("Content-Type", "text/plain; charset=utf-8");
       headers.set("Content-Length", body.length);
     }
-    return {
+    return createResponse({
       body,
       headers,
       statusCode: payload.statusCode,
       statusMessage: payload.statusMessage,
-    };
+    });
   }
 
   private dispatchError(error: any) {
@@ -215,3 +218,42 @@ const AdHeaders = {
   [ServiceType.ReceivePack]: Buffer.from("001f# service=git-receive-pack\n0000"),
   [ServiceType.UploadPack]: Buffer.from("001e# service=git-upload-pack\n0000"),
 };
+
+/**
+ * Creates a response data holder with signature.
+ * @param data Response data
+ */
+function createResponse(data: Partial<IResponseData>) {
+  return Object.create(null, {
+    __signature: {
+      enumerable: false,
+      value: undefined,
+    },
+    body: {
+      value: data.body,
+      writable: false,
+    },
+    headers: {
+      value: data.headers,
+      writable: false,
+    },
+    signature: {
+      enumerable: false,
+      value() {
+        if (this.__signature) {
+          return this.__signature;
+        }
+        return this.__signature = createHash("sha256").update(JSON.stringify(this)).digest("hex");
+      },
+      writable: false,
+    },
+    statusCode: {
+      value: data.statusCode,
+      writable: false,
+    },
+    statusMessage: {
+      value: data.statusMessage,
+      writable: false,
+    },
+  });
+}

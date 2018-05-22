@@ -1,7 +1,5 @@
-import { DataSignal } from "./data-signal";
-import { ServiceType, SignalPriority } from "./enums";
-import { IGitDriver, IResponseData } from "./interfaces";
-import { LogicController } from "./logic-controller";
+import { ServiceType } from "./enums";
+import { IGitDriver } from "./interfaces";
 
 /**
  * Maps vital request properties to vital service properties.

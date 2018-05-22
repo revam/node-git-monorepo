@@ -2,24 +2,25 @@
  * git-service package
  * Copyright (c) 2018 Mikal Stordal <mikalstordal@gmail.com>
  */
-import { IncomingMessage, ServerRequest, ServerResponse, STATUS_CODES } from "http";
+import { Signal } from "micro-signals";
 import { Readable } from "stream";
-import { DataSignal } from "./data-signal";
-import { SignalPriority } from "./enums";
 import { Headers, HeadersInput } from "./headers";
 import { inspectDriver, mapInputToRequest } from "./helpers";
 import { IGitDriver, IResponseData, IService } from "./interfaces";
 import { LogicController } from "./logic-controller";
 import { createRequest } from "./request";
 
-export * from "./data-signal";
 export * from "./enums";
 export * from "./headers";
 export * from "./helpers";
 export * from "./interfaces";
 export * from "./logic-controller";
 export * from "./request";
-export * from "./signal";
+
+export function createController(driver: IGitDriver) {
+  inspectDriver(driver);
+  return new LogicController(driver);
+}
 
 /**
  * Creates a IService compatible object.
@@ -30,13 +31,12 @@ export * from "./signal";
  * @param body Incoming request body stream
  */
 export function createService(
-  driver: IGitDriver,
+  controller: LogicController,
   path: string,
   method: string,
   inputHeaders: HeadersInput,
   body: Readable,
 ): IService {
-  inspectDriver(driver);
   if (typeof path !== "string" || !path) {
     throw new TypeError("argument `url` must be of type 'string'.");
   }
@@ -53,19 +53,21 @@ export function createService(
   const content_type = headers.get("Content-Type");
   const [isAdvertisement, requestType, repository] = mapInputToRequest(path, method, content_type);
   const request = createRequest(body, headers, isAdvertisement, requestType, repository);
-  const response = new DataSignal<IResponseData>();
-  const controller = new LogicController(driver, request.awaitData, response);
+  const response = new Signal<IResponseData>();
+  const onError = new Signal<any>();
   return {
     controller,
+    onError: onError.readOnly(),
     request,
-    response,
+    response: new Promise<IResponseData>((resolve) => response.addOnce(resolve)),
     async serve(this: IService) {
-      const onError = (err) => this.response.onError.dispatch(err);
-      this.controller.onError.add(onError, SignalPriority.Early);
-      // Will safely await response data and throw errors on response object.
-      this.response.dispatch(this.controller.serve());
-      await this.response.awaitData;
-      this.controller.onError.remove(onError);
+      try {
+        const requestData = await request;
+        const responseData = await controller.serve(requestData, response.readOnly());
+        response.dispatch(responseData);
+      } catch (error) {
+        onError.dispatch(error);
+      }
     },
   };
 }

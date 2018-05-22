@@ -35,25 +35,3 @@ export enum RequestStatus {
    */
   Failure = 3,
 }
-
-/**
- * Named signal priorities.
- */
-export enum SignalPriority {
-  /**
-   * Pre-run priority
-   */
-  Early = -5,
-  /**
-   * Normal priority
-   */
-  Normal = 0,
-  /**
-   * Post-run priority
-   */
-  Late = 5,
-  /**
-   * Async data is collected from signal.
-   */
-  Send = 10,
-}

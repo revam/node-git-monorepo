@@ -1,6 +1,6 @@
+import { createHash } from "crypto";
 import { createPacketReader } from "git-packet-streams";
 import { Readable } from "stream";
-import { DataSignal } from "./data-signal";
 import { RequestStatus, ServiceType } from "./enums";
 import { Headers } from "./headers";
 import { IReceivePackCommand, IRequestData, IUploadPackCommand } from "./interfaces";
@@ -10,30 +10,71 @@ export function createRequest(
   headers: Headers,
   isAdvertisement: boolean = false,
   service?: ServiceType,
-  repository?: string,
-): DataSignal<IRequestData> {
-  const request = new DataSignal<IRequestData>();
-  const requestData: IRequestData = {
-    body,
-    capabilities: new Map(),
-    commands: [],
-    headers,
-    isAdvertisement,
-    repository,
-    service,
-    status: RequestStatus.Pending,
-  };
-  if (service && !isAdvertisement) {
-    const middleware = ServiceReaders.get(service);
-    const reader = middleware(requestData);
-    const passthrough = createPacketReader(reader);
-    passthrough.on("error", (error) => request.onError.dispatch(error));
-    passthrough.on("end", () => request.dispatch(requestData));
-    requestData.body = body.pipe(passthrough);
-  } else {
-    request.dispatch(requestData as IRequestData);
-  }
-  return request;
+  path?: string,
+): Promise<IRequestData> {
+  return new Promise((resolve, reject) => {
+    const requestData: IRequestData = Object.create(null, {
+      __signature: {
+        enumerable: false,
+        value: undefined,
+      },
+      body: {
+        value: body,
+        writable: false,
+      },
+      capabilities: {
+        value: new Map(),
+        writable: false,
+      },
+      commands: {
+        value: new Array(),
+        writable: false,
+      },
+      headers: {
+        value: headers,
+        writable: false,
+      },
+      isAdvertisement: {
+        value: isAdvertisement,
+        writable: false,
+      },
+      path: {
+        value: path,
+        writable: false,
+      },
+      service: {
+        value: service,
+        writable: false,
+      },
+      signature: {
+        enumerable: false,
+        value() {
+          if (this.__signature) {
+            return this.__signature;
+          }
+          return this.__signature = createHash("sha256").update(JSON.stringify(this)).digest("hex");
+        },
+        writable: false,
+      },
+      status: {
+        value: RequestStatus.Pending,
+      },
+    });
+    if (service && !isAdvertisement) {
+      const middleware = ServiceReaders.get(service);
+      const reader = middleware(requestData);
+      const passthrough = createPacketReader(reader);
+      passthrough.on("error", reject);
+      passthrough.on("end", () => resolve(requestData));
+      Object.defineProperty(requestData, "body", {
+        value: passthrough,
+      });
+      body.pipe(passthrough);
+    }
+    else {
+      resolve(requestData);
+    }
+  });
 }
 
 /**
@@ -52,9 +93,11 @@ const ServiceReaders = new Map<ServiceType, (s: IRequestData) => (b: Buffer) => 
           let kind: "create" | "delete" | "update";
           if ("0000000000000000000000000000000000000000" === results[1]) {
             kind = "create";
-          } else if ("0000000000000000000000000000000000000000" === results[2]) {
+          }
+          else if ("0000000000000000000000000000000000000000" === results[2]) {
             kind = "delete";
-          } else {
+          }
+          else {
             kind = "update";
           }
           const command: IReceivePackCommand = {
@@ -68,7 +111,8 @@ const ServiceReaders = new Map<ServiceType, (s: IRequestData) => (b: Buffer) => 
               if (/=/.test(c)) {
                 const [k, v] = c.split("=");
                 request.capabilities.set(k, v);
-              } else {
+              }
+              else {
                 request.capabilities.set(c, undefined);
               }
             }
@@ -95,7 +139,8 @@ const ServiceReaders = new Map<ServiceType, (s: IRequestData) => (b: Buffer) => 
                 if (/=/.test(c)) {
                   const [k, v] = c.split("=");
                   request.capabilities.set(k, v);
-                } else {
+                }
+                else {
                   request.capabilities.set(c, undefined);
                 }
               }

@@ -27,6 +27,8 @@
         "allow-named-functions"
     ],
 
+    "one-line": [true, "check-catch", "check-finally", "check-whitespace", "check-open-brace"],
+
     // TODO: Enable these
     "completed-docs": false,
     "no-any": false,

@@ -1,4 +1,14 @@
 /**
+ * Error codes thrown by this package.
+ */
+export enum ErrorCodes {
+  /**
+   * Something went wrong when executing git bin.
+   */
+  ERR_FAILED_GIT_EXECUTION = "ERR_FAILED_GIT_EXECUTION",
+}
+
+/**
  * Service types.
  */
 export enum ServiceType {

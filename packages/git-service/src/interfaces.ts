@@ -169,6 +169,53 @@ export interface IDriver {
 }
 
 /**
+ * Generic driver options.
+ */
+export interface IGenericDriverOptions {
+  /**
+   * Default values for enabled-check with file-system driver.
+   */
+  enabledDefaults?: boolean | { [K in ServiceType]?: boolean; };
+  /**
+   * Proxied methods.
+   */
+  methods?: IProxiedDriverMethods;
+}
+
+/**
+ * Custom implementations of driver methods.
+ */
+export interface IProxiedDriverMethods {
+  /**
+   * Checks access to service (e.g. authenticate by headers).
+   * Return undefined, or an empty promise to fallback to default
+   * implementation.
+   */
+  checkForAccess?(
+    request: IRequestData,
+    onResponse: ReadableSignal<IResponseData>,
+  ): boolean | undefined | PromiseLike<boolean | undefined>;
+  /**
+   * Checks if service is enabled for repository.
+   * Return undefined, or an empty promise to fallback to default
+   * implementation.
+   */
+  checkIfEnabled?(
+    request: IRequestData,
+    onResponse: ReadableSignal<IResponseData>,
+  ): boolean | undefined | PromiseLike<boolean | undefined>;
+  /**
+   * Checks if repository exists.
+   * Return undefined, or an empty promise to fallback to default
+   * implementation.
+   */
+  checkIfExists?(
+    request: IRequestData,
+    onResponse: ReadableSignal<IResponseData>,
+  ): boolean | undefined | PromiseLike<boolean | undefined>;
+}
+
+/**
  * Partly response data from driver.
  */
 export interface IDriverResponseData {
@@ -185,4 +232,13 @@ export interface IDriverResponseData {
    * code.
    */
   statusMessage?: string;
+}
+
+export interface IError extends Error {
+  code: string;
+}
+
+export interface IDriverError extends IError {
+  exitCode: number;
+  stderr: string;
 }

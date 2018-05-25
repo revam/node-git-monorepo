@@ -4,19 +4,27 @@
  */
 import { Signal } from "micro-signals";
 import { Readable } from "stream";
+import { createDriver } from "./driver";
 import { RequestStatus } from "./enums";
 import { Headers, HeadersInput } from "./headers";
-import { IGitDriver, IResponseData, IService } from "./interfaces";
+import { IDriver, IGenericDriverOptions, IRequestData, IResponseData, IService } from "./interfaces";
 import { LogicController } from "./logic-controller";
 import { createRequest, mapInputToRequest } from "./request";
 
+export * from "./driver";
 export * from "./enums";
 export * from "./headers";
 export * from "./interfaces";
 export * from "./logic-controller";
 export * from "./request";
 
-export function createController(driver: IGitDriver) {
+/**
+ * Creates a new logic controller configured for origin.
+ * @param origin Origin location (URI or rel./abs. path)
+ * @param options Extra options
+ */
+export function createController(origin: string, options: IGenericDriverOptions) {
+  const driver = createDriver(origin, options);
   return new LogicController(driver);
 }
 

@@ -5,7 +5,7 @@ import { STATUS_CODES } from "http";
 import { ReadableSignal, Signal } from "micro-signals";
 import { RequestStatus, ServiceType } from "./enums";
 import { Headers } from "./headers";
-import { IGitDriver, IGitDriverData, IRequestData, IResponseData } from "./interfaces";
+import { IDriver, IDriverResponseData, IRequestData, IResponseData } from "./interfaces";
 
 /**
  * Controls service logic, such as
@@ -14,7 +14,7 @@ export class LogicController {
   /**
    * Service driver - doing the heavy-lifting for us.
    */
-  public readonly driver: IGitDriver;
+  public readonly driver: IDriver;
   /**
    * Dispatched when any error ocurr.
    */
@@ -22,7 +22,7 @@ export class LogicController {
 
   private __messages: Buffer[] = [];
 
-  constructor(driver: IGitDriver) {
+  constructor(driver: IDriver) {
     Object.defineProperties(this, {
       driver: {
         value: driver,
@@ -40,18 +40,18 @@ export class LogicController {
    */
   public async serve(
     request: IRequestData,
-    response: ReadableSignal<IResponseData>,
+    onResponse: ReadableSignal<IResponseData>,
   ): Promise<IResponseData> {
-    if (! await this.checkIfExists(request, response)) {
+    if (! await this.checkIfExists(request, onResponse)) {
       return this.reject(request, 404); // 404 Not Found
     }
-    else if (! await this.checkForAccess(request, response)) {
+    else if (! await this.checkForAccess(request, onResponse)) {
       return this.reject(request, 401); // 401 Unauthorized
     }
-    else if (! await this.checkIfEnabled(request, response)) {
+    else if (! await this.checkIfEnabled(request, onResponse)) {
       return this.reject(request, 403); // 403 Forbidden
     }
-    return this.accept(request, response); // 2xx-5xx HTTP status code
+    return this.accept(request, onResponse); // 2xx-5xx HTTP status code
   }
 
   /**
@@ -61,7 +61,7 @@ export class LogicController {
    */
   public async accept(
     request: IRequestData,
-    response: ReadableSignal<IResponseData>,
+    onResponse: ReadableSignal<IResponseData>,
   ): Promise<IResponseData> {
     if (request.status !== RequestStatus.Pending) {
       return;
@@ -70,7 +70,16 @@ export class LogicController {
     if (!request.service) {
       return;
     }
-    const output = await this.driver.createResponse(request, response);
+    let output: IDriverResponseData;
+    try {
+      output = await this.driver.createResponse(request, onResponse);
+    } catch (error) {
+      this.dispatchError(error);
+      output = {
+        statusCode: 500,
+        statusMessage: error && error.message || STATUS_CODES[500],
+      };
+    }
     if (output.statusCode >= 400) {
       request.status = RequestStatus.Failure;
       return this.createRejectedResponse(output);
@@ -135,10 +144,10 @@ export class LogicController {
    */
   public async checkIfExists(
     request: IRequestData,
-    response: ReadableSignal<IResponseData>,
+    onResponse: ReadableSignal<IResponseData>,
   ): Promise<boolean> {
     try {
-      return this.driver.checkIfExists(request, response);
+      return this.driver.checkIfExists(request, onResponse);
     } catch (error) {
       this.dispatchError(error);
     }
@@ -151,10 +160,10 @@ export class LogicController {
    */
   public async checkIfEnabled(
     request: IRequestData,
-    response: ReadableSignal<IResponseData>,
+    onResponse: ReadableSignal<IResponseData>,
   ): Promise<boolean> {
     try {
-      return this.driver.checkIfEnabled(request, response);
+      return this.driver.checkIfEnabled(request, onResponse);
     } catch (error) {
       this.dispatchError(error);
     }
@@ -167,10 +176,10 @@ export class LogicController {
    */
   public async checkForAccess(
     request: IRequestData,
-    response: ReadableSignal<IResponseData>,
+    onResponse: ReadableSignal<IResponseData>,
   ): Promise<boolean> {
     try {
-      return this.driver.checkForAccess(request, response);
+      return this.driver.checkForAccess(request, onResponse);
     } catch (error) {
       this.dispatchError(error);
     }
@@ -187,7 +196,7 @@ export class LogicController {
     return this;
   }
 
-  private createRejectedResponse(payload: IGitDriverData): IResponseData {
+  private createRejectedResponse(payload: IDriverResponseData): IResponseData {
     const headers = new Headers();
     let body: Buffer;
     if (payload.body) {
@@ -231,11 +240,9 @@ function createResponse(data: Partial<IResponseData>) {
     },
     body: {
       value: data.body,
-      writable: false,
     },
     headers: {
       value: data.headers,
-      writable: false,
     },
     signature: {
       enumerable: false,
@@ -249,11 +256,9 @@ function createResponse(data: Partial<IResponseData>) {
     },
     statusCode: {
       value: data.statusCode,
-      writable: false,
     },
     statusMessage: {
       value: data.statusMessage,
-      writable: false,
     },
   });
 }

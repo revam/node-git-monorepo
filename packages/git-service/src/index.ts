@@ -4,26 +4,24 @@
  */
 import { Signal } from "micro-signals";
 import { Readable } from "stream";
+import { RequestStatus } from "./enums";
 import { Headers, HeadersInput } from "./headers";
-import { inspectDriver, mapInputToRequest } from "./helpers";
 import { IGitDriver, IResponseData, IService } from "./interfaces";
 import { LogicController } from "./logic-controller";
-import { createRequest } from "./request";
+import { createRequest, mapInputToRequest } from "./request";
 
 export * from "./enums";
 export * from "./headers";
-export * from "./helpers";
 export * from "./interfaces";
 export * from "./logic-controller";
 export * from "./request";
 
 export function createController(driver: IGitDriver) {
-  inspectDriver(driver);
   return new LogicController(driver);
 }
 
 /**
- * Creates a IService compatible object.
+ * Creates an IService compatible object.
  * @param driver Service driver to use
  * @param path Tailing url path fragment with querystring.
  * @param method Request HTTP method used
@@ -53,18 +51,24 @@ export function createService(
   const content_type = headers.get("Content-Type");
   const [isAdvertisement, requestType, repository] = mapInputToRequest(path, method, content_type);
   const request = createRequest(body, headers, isAdvertisement, requestType, repository);
-  const response = new Signal<IResponseData>();
+  const onRequest = new AsyncSignal<IRequestData>();
+  const onResponse = new AsyncSignal<IResponseData>();
   const onError = new Signal<any>();
   return {
     controller,
     onError: onError.readOnly(),
-    request,
-    response: new Promise<IResponseData>((resolve) => response.addOnce(resolve)),
+    onRequest: onRequest.readOnly(),
+    onResponse: onResponse.readOnly(),
     async serve(this: IService) {
       try {
         const requestData = await request;
-        const responseData = await controller.serve(requestData, response.readOnly());
-        response.dispatch(responseData);
+        if (requestData.status !== RequestStatus.Pending) {
+          return;
+        }
+        await onRequest.dispatch(requestData);
+        const responseData = await controller.serve(requestData, this.onResponse);
+        await onResponse.dispatch(responseData);
+        return responseData;
       } catch (error) {
         onError.dispatch(error);
       }
@@ -74,3 +78,9 @@ export function createService(
 export { createService as default };
 
 export const SymbolService = Symbol("service");
+
+class AsyncSignal<P> extends Signal<P> {
+  public async dispatch(payload?: P): Promise<void> {
+    await Promise.all(Array.from(this._listeners).map(async(fn) => { await fn.call(void 0, payload); }));
+  }
+}

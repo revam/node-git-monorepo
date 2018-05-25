@@ -11,11 +11,11 @@ export interface IService {
   /**
    * Resolves when request is ready.
    */
-  readonly request: Promise<IRequestData>;
+  readonly onRequest: ReadableSignal<IRequestData>;
   /**
    * Resolves when response is ready.
    */
-  readonly response: Promise<IResponseData>;
+  readonly onResponse: ReadableSignal<IResponseData>;
   /**
    * Dispatched if any errors occurr while serving.
    */
@@ -26,8 +26,10 @@ export interface IService {
   readonly controller: LogicController;
   /**
    * Serves request with default behavior and rules.
+   * Returns the final response data, which may have been altered by any
+   * observers registered on `onResponse`.
    */
-  serve(): Promise<void>;
+  serve(): Promise<IResponseData>;
 }
 
 /**
@@ -35,15 +37,15 @@ export interface IService {
  */
 export interface IRequestData {
   /**
-   * Request data stream.
+   * Stream leading to request data.
    */
-  readonly body: Readable;
+  body: Readable;
   /**
-   * Request headers.
+   * Incoming HTTP headers.
    */
   readonly headers: Headers;
   /**
-   * Check if client only want advertisement from service.
+   * Indicates that client **only** want advertisement from service.
    */
   readonly isAdvertisement: boolean;
   /**
@@ -65,7 +67,7 @@ export interface IRequestData {
   /**
    * Leading path fragment.
    */
-  readonly path: string;
+  path: string;
   /**
    * Returns a signature for object.
    */
@@ -113,19 +115,19 @@ export interface IResponseData {
   /**
    * Response body.
    */
-  readonly body: Buffer;
+  body: Buffer;
   /**
    * Response headers.
    */
-  readonly headers: Headers;
+  headers: Headers;
   /**
    * Response status code.
    */
-  readonly statusCode: number;
+  statusCode: number;
   /**
    * Response status message.
    */
-  readonly statusMessage: string;
+  statusMessage: string;
   /**
    * Returns a signature for object.
    */
@@ -133,35 +135,43 @@ export interface IResponseData {
 }
 
 /**
- * Low-level service driver for working with git.
+ * Low-level interface for working with git.
  */
-export interface IGitDriver {
+export interface IDriver {
   /**
    * Checks access to service (e.g. authenticate by headers).
-   * @param request IService object with related information
    */
-  checkForAccess(request: IRequestData, onResponse: ReadableSignal<IResponseData>): Promise<boolean>;
+  checkForAccess(
+    request: IRequestData,
+    onResponse: ReadableSignal<IResponseData>,
+  ): boolean | PromiseLike<boolean>;
   /**
    * Checks if service is enabled for repository.
-   * @param requestData IService object with related information
    */
-  checkIfEnabled(requestData: IRequestData, onResponse: ReadableSignal<IResponseData>): Promise<boolean>;
+  checkIfEnabled(
+    request: IRequestData,
+    onResponse: ReadableSignal<IResponseData>,
+  ): boolean | PromiseLike<boolean>;
   /**
    * Checks if repository exists.
-   * @param requestData IService object with related information
    */
-  checkIfExists(requestData: IRequestData, onResponse: ReadableSignal<IResponseData>): Promise<boolean>;
+  checkIfExists(
+    request: IRequestData,
+    onResponse: ReadableSignal<IResponseData>,
+  ): boolean | PromiseLike<boolean>;
   /**
    * Creates partly response data for request data.
-   * @param requestData IService object with related information
    */
-  createResponse(requestData: IRequestData, onResponse: ReadableSignal<IResponseData>): Promise<IGitDriverData>;
+  createResponse(
+    request: IRequestData,
+    onResponse: ReadableSignal<IResponseData>,
+  ): IDriverResponseData | Promise<IDriverResponseData>;
 }
 
 /**
  * Partly response data from driver.
  */
-export interface IGitDriverData {
+export interface IDriverResponseData {
   /**
    * Raw buffer response.
    */
@@ -171,7 +181,8 @@ export interface IGitDriverData {
    */
   statusCode: number;
   /**
-   * Status message. May be an error message if statusCode is an HTTP error code.
+   * Status message. May be an error message if statusCode is an HTTP error
+   * code.
    */
   statusMessage?: string;
 }

@@ -78,6 +78,35 @@ export function createRequest(
 }
 
 /**
+ * Maps vital request properties to vital service properties.
+ * @param path Tailing url path fragment with querystring.
+ * @param method HTTP method used with incoming request.
+ * @param content_type Incoming content-type header.
+ */
+export function mapInputToRequest(
+  path: string,
+  method: string,
+  content_type: string,
+): [boolean, ServiceType, string] {
+  for (const [requestType, expected_method, regex, expected_content_type] of Services) {
+    const results = regex.exec(path);
+    if (results) {
+      const isAdvertisement = !expected_content_type;
+      if (method !== expected_method) {
+        break;
+        // throw new TypeError(`Unexpected HTTP ${method} request, expected a HTTP ${expected_method}) request`);
+      }
+      // Only check content type for post requests
+      if (expected_content_type && content_type !== expected_content_type) {
+        break;
+        // throw new TypeError(`Unexpected content-type "${content_type}", expected "${expected_content_type}"`);
+      }
+      return [isAdvertisement, requestType, results[1]];
+    }
+  }
+}
+
+/**
  * Maps RequestType to a valid packet reader for request body.
  */
 const ServiceReaders = new Map<ServiceType, (s: IRequestData) => (b: Buffer) => any>([
@@ -150,3 +179,13 @@ const ServiceReaders = new Map<ServiceType, (s: IRequestData) => (b: Buffer) => 
     },
   ],
 ]);
+
+/**
+ * Maps request url to vaild services.
+ */
+const Services: Array<[ServiceType, "GET" | "POST", RegExp, string]> = [
+  [ServiceType.UploadPack, "GET", /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
+  [ServiceType.ReceivePack, "GET", /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
+  [ServiceType.UploadPack, "POST", /^\/?(.*?)\/git-upload-pack$/, "application/x-git-upload-pack-request"],
+  [ServiceType.ReceivePack, "POST", /^\/?(.*?)\/git-receive-pack$/, "application/x-git-receive-pack-request"],
+];

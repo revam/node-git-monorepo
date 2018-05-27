@@ -22,28 +22,41 @@ export function createPacketReader(fn: (packet: Buffer) => any): Transform {
   if (typeof fn !== 'function') {
     throw new TypeError(`Invalid arguement "reader". Expected type "function", got "${typeof fn}"`);
   }
+  let done = false;
   let underflow: Buffer;
   return new Transform({
     async transform(this: Transform, buffer: Buffer, encoding: string, next: (err?: Error) => void) {
+      if (done) {
+        this.push(buffer);
+        return next();
+      }
+      let iterableBuffer: Buffer;
       if (underflow) {
-        buffer = Buffer.concat([underflow, buffer]);
+        iterableBuffer = Buffer.concat([underflow, buffer]);
         underflow = undefined;
+      } else {
+        iterableBuffer = buffer;
       }
       try {
-        const iterator = createPacketIterator(buffer, false, true);
+        const iterator = createPacketIterator(iterableBuffer, true, true);
         let result: IteratorResult<Buffer>;
         do {
           // Force async iteration
           result = await iterator.next();
           if (result.value) {
             if (result.done) {
-              underflow = result.value;
+              const length = readPacketLength(result.value);
+              if (length === 0) {
+                done = true;
+              } else {
+                underflow = result.value;
+              }
             } else {
               fn.call(void 0, result.value);
             }
           }
         } while (!result.done);
-        this.push(underflow ? buffer.slice(0, -(underflow.length)) : buffer);
+        this.push(buffer);
         next();
       } catch (error) {
         next(error);

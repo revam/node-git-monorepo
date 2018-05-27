@@ -67,6 +67,17 @@ Bare http server.
 import { createServer, STATUS_CODES } from "http";
 import { createController, createMiddleware } from "git-service";
 import { resolve } from "path";
+const { ORIGIN_ENV = "./repos", PORT } = process.env;
+const server = createServer(createMiddleware(createController(resolve(ORIGIN_ENV))));
+server.listen(parseInt(PORT, 10) || 3000));
+```
+
+Minimal, but with some logging added.
+
+```js
+import { createServer, STATUS_CODES } from "http";
+import { createController, createMiddleware } from "git-service";
+import { resolve } from "path";
 
 const { ORIGIN_ENV = "./repos", PORT } = process.env;
 let port = parseInt(PORT, 10);

@@ -2,8 +2,10 @@
  * git-service package
  * Copyright (c) 2018 Mikal Stordal <mikalstordal@gmail.com>
  */
+import { IncomingMessage, ServerResponse, STATUS_CODES } from "http";
 import { Signal } from "micro-signals";
 import { Readable } from "stream";
+import { promisify } from "util";
 import { createDriver } from "./driver";
 import { ErrorCodes, RequestStatus } from "./enums";
 import { Headers, HeadersInput } from "./headers";
@@ -88,7 +90,37 @@ export function createService(
 }
 export { createService as default };
 
-export const SymbolService = Symbol("service");
+export function createMiddleware(controller: LogicController, configure?: (service: IService) => any) {
+  if (typeof configure !== "function") {
+    configure = undefined;
+  }
+  return async(request: IncomingMessage, response: ServerResponse) => {
+    const service = createService(controller, request.url,  request.method, request.headers, request);
+    if (configure) {
+      await configure.call(undefined, service);
+    }
+    try {
+      const {body, headers, statusCode, statusMessage} = await service.serve();
+      headers.forEach((header, value) => { response.setHeader(header, value); });
+      response.statusCode = statusCode;
+      response.statusMessage = statusMessage;
+      await promisify(response.end.bind(response))(body);
+    } catch (error) {
+      console.error(error);
+      if (typeof error === "object") {
+        if (!response.headersSent) {
+          response.statusCode = error.status || error.statusCode || 500;
+          response.setHeader("Content-Type", "text/plain");
+          response.setHeader("Content-Length", STATUS_CODES[response.statusCode].length);
+          response.write(STATUS_CODES[response.statusCode], "utf8");
+        }
+      }
+      if (response.writable) {
+        response.end();
+      }
+    }
+  };
+}
 
 class AsyncSignal<P> extends Signal<P> {
   public async dispatch(payload?: P): Promise<void> {

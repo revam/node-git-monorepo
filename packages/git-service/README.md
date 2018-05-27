@@ -65,9 +65,8 @@ Bare http server.
 
 ```js
 import { createServer, STATUS_CODES } from "http";
-import { createController, createService } from "git-service";
+import { createController, createMiddleware } from "git-service";
 import { resolve } from "path";
-import { promisify } from "util";
 
 const { ORIGIN_ENV = "./repos", PORT } = process.env;
 let port = parseInt(PORT, 10);
@@ -77,29 +76,18 @@ if (Number.isNaN(port)) {
 const origin = resolve(ORIGIN_ENV);
 const controller = createController(origin);
 controller.onError.add((error) => console.error(error));
+const middleware = createMiddleware(controller, (service) => {
+  service.onRequest.addOnce((request) => {
+    console.log(`SERVICE REQUEST - ${request.service} - ${request.path}`);
+  });
+  service.onResponse.addOnce((response) => {
+    console.log(`SERVICE RESPONSE - ${response.statusCode} - ${response.statusMessage}`);
+  });
+});
 const server = createServer(async function(request, response) {
   console.log(`REQUEST - ${request.method} - ${request.url}`);
-  const service = createService(controller, request.url,  request.method, request.headers, request);
-  try {
-    const {body, headers, statusCode, statusMessage} = await service.serve();
-    headers.forEach(function (header, value) { response.setHeader(header, value); });
-    response.statusCode = statusCode;
-    response.statusMessage = statusMessage;
-    await promisify(response.end.bind(response))(body);
-  } catch (error) {
-    console.error(error);
-    if (typeof error === "object") {
-      if (!response.headersSent) {
-        response.statusCode = error.status || error.statusCode || 500;
-        response.setHeader("Content-Type", "text/plain");
-        response.setHeader("Content-Length", STATUS_CODES[response.statusCode].length);
-        response.write(STATUS_CODES[response.statusCode], "utf8");
-      }
-    }
-    if (response.writable) {
-      response.end();
-    }
-  }
+  await middleware(request, response);
+  console.log(`RESPONSE - ${response.statusCode} - ${response.statusMessage}`);
 });
 
 server.listen(port, () => console.log(`server is listening on port ${port}`));

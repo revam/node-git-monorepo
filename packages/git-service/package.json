@@ -33,12 +33,12 @@
     "@types/jest": "^22.2.3",
     "@types/node": "^10.0.8",
     "jest": "^22.4.3",
-    "ts-jest": "^22.4.5",
+    "ts-jest": "^22.4.6",
     "tslint": "^5.10.0",
     "typescript": "^2.8.3"
   },
   "dependencies": {
-    "git-packet-streams": "^2.0.1",
+    "git-packet-streams": "^2.0.2",
     "git-side-band-message": "0.0.3",
     "micro-signals": "^2.0.0"
   },

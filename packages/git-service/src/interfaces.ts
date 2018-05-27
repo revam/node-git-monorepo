@@ -17,10 +17,6 @@ export interface IService {
    */
   readonly onResponse: ReadableSignal<IResponseData>;
   /**
-   * Dispatched if any errors occurr while serving.
-   */
-  readonly onError: ReadableSignal<any>;
-  /**
    * Logic controller.
    */
   readonly controller: LogicController;
@@ -179,13 +175,13 @@ export interface IGenericDriverOptions {
   /**
    * Proxied methods.
    */
-  methods?: IProxiedDriverMethods;
+  methods?: IProxiedMethods;
 }
 
 /**
  * Custom implementations of driver methods.
  */
-export interface IProxiedDriverMethods {
+export interface IProxiedMethods {
   /**
    * Checks access to service (e.g. authenticate by headers).
    * Return undefined, or an empty promise to fallback to default
@@ -236,6 +232,14 @@ export interface IDriverResponseData {
 
 export interface IError extends Error {
   code: string;
+}
+
+export interface IOuterError extends IError {
+  inner: any;
+}
+
+export interface IProxiedError extends IOuterError {
+  methodName: string;
 }
 
 export interface IDriverError extends IError {

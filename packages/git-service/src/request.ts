@@ -1,7 +1,8 @@
 import { createHash } from "crypto";
 import { createPacketReader } from "git-packet-streams";
 import { Readable } from "stream";
-import { RequestStatus, ServiceType } from "./enums";
+import { URL } from "url";
+import { RequestStatus, ServiceType } from './enums';
 import { Headers } from "./headers";
 import { IReceivePackCommand, IRequestData, IUploadPackCommand } from "./interfaces";
 
@@ -17,10 +18,11 @@ export function createRequest(
       __signature: {
         enumerable: false,
         value: undefined,
+        writable: true,
       },
       body: {
         value: body,
-        writable: false,
+        writable: true,
       },
       capabilities: {
         value: new Map(),
@@ -40,7 +42,7 @@ export function createRequest(
       },
       path: {
         value: path,
-        writable: false,
+        writable: true,
       },
       service: {
         value: service,
@@ -58,6 +60,7 @@ export function createRequest(
       },
       status: {
         value: RequestStatus.Pending,
+        writable: true,
       },
     });
     if (service && !isAdvertisement) {
@@ -65,7 +68,7 @@ export function createRequest(
       const reader = middleware(requestData);
       const passthrough = createPacketReader(reader);
       passthrough.on("error", reject);
-      passthrough.on("end", () => resolve(requestData));
+      passthrough.on("finish", () => resolve(requestData));
       Object.defineProperty(requestData, "body", {
         value: passthrough,
       });
@@ -79,31 +82,52 @@ export function createRequest(
 
 /**
  * Maps vital request properties to vital service properties.
- * @param path Tailing url path fragment with querystring.
+ * @param fragment Tailing url path fragment with querystring.
  * @param method HTTP method used with incoming request.
  * @param content_type Incoming content-type header.
  */
 export function mapInputToRequest(
-  path: string,
+  fragment: string,
   method: string,
   content_type: string,
 ): [boolean, ServiceType, string] {
-  for (const [requestType, expected_method, regex, expected_content_type] of Services) {
-    const results = regex.exec(path);
-    if (results) {
-      const isAdvertisement = !expected_content_type;
-      if (method !== expected_method) {
-        break;
-        // throw new TypeError(`Unexpected HTTP ${method} request, expected a HTTP ${expected_method}) request`);
-      }
-      // Only check content type for post requests
-      if (expected_content_type && content_type !== expected_content_type) {
-        break;
-        // throw new TypeError(`Unexpected content-type "${content_type}", expected "${expected_content_type}"`);
-      }
-      return [isAdvertisement, requestType, results[1]];
+  const url = new URL(fragment, "https://127.0.0.1/");
+  // Get advertisement from service
+  let results: RegExpExecArray = /^\/?(.*?)\/info\/refs$/.exec(url.pathname);
+  if (results) {
+    const path = results[1];
+    if (method !== "GET") {
+      return [true, undefined, path];
     }
+    if (!url.searchParams.has("service")) {
+      return [true, undefined, path];
+    }
+    const serviceName = url.searchParams.get("service");
+    results = /^git-((?:receive|upload)-pack)$/.exec(serviceName);
+    if (!results) {
+      return [true, undefined, path];
+    }
+    return [true, results[1] as ServiceType, path];
   }
+  // Use service directly
+  results = /^\/?(.*?)\/(git-[\w\-]+)$/.exec(url.pathname);
+  if (results) {
+    const path = results[1];
+    const serviceName = results[2];
+    if (method !== "POST") {
+      return [false, undefined, path];
+    }
+    results = /^git-((?:receive|upload)-pack)$/.exec(serviceName);
+    if (!results) {
+      return [false, undefined, path];
+    }
+    const service = results[1];
+    if (content_type !== `application/x-git-${service}-request`) {
+      return [false, undefined, path];
+    }
+    return [false, service as ServiceType, path];
+  }
+  return [undefined, undefined, undefined];
 }
 
 /**
@@ -179,13 +203,3 @@ const ServiceReaders = new Map<ServiceType, (s: IRequestData) => (b: Buffer) => 
     },
   ],
 ]);
-
-/**
- * Maps request url to vaild services.
- */
-const Services: Array<[ServiceType, "GET" | "POST", RegExp, string]> = [
-  [ServiceType.UploadPack, "GET", /^\/?(.*?)\/info\/refs\?service=git-upload-pack$/, void 0],
-  [ServiceType.ReceivePack, "GET", /^\/?(.*?)\/info\/refs\?service=git-receive-pack$/, void 0],
-  [ServiceType.UploadPack, "POST", /^\/?(.*?)\/git-upload-pack$/, "application/x-git-upload-pack-request"],
-  [ServiceType.ReceivePack, "POST", /^\/?(.*?)\/git-receive-pack$/, "application/x-git-receive-pack-request"],
-];

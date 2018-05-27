@@ -5,9 +5,9 @@
 import { Signal } from "micro-signals";
 import { Readable } from "stream";
 import { createDriver } from "./driver";
-import { RequestStatus } from "./enums";
+import { ErrorCodes, RequestStatus } from "./enums";
 import { Headers, HeadersInput } from "./headers";
-import { IDriver, IGenericDriverOptions, IRequestData, IResponseData, IService } from "./interfaces";
+import { IGenericDriverOptions, IOuterError, IRequestData, IResponseData, IService } from './interfaces';
 import { LogicController } from "./logic-controller";
 import { createRequest, mapInputToRequest } from "./request";
 
@@ -64,22 +64,25 @@ export function createService(
   const onError = new Signal<any>();
   return {
     controller,
-    onError: onError.readOnly(),
     onRequest: onRequest.readOnly(),
     onResponse: onResponse.readOnly(),
     async serve(this: IService) {
-      try {
-        const requestData = await request;
-        if (requestData.status !== RequestStatus.Pending) {
-          return;
-        }
-        await onRequest.dispatch(requestData);
-        const responseData = await controller.serve(requestData, this.onResponse);
-        await onResponse.dispatch(responseData);
-        return responseData;
-      } catch (error) {
-        onError.dispatch(error);
+      const requestData = await request;
+      if (!requestData || requestData.status !== RequestStatus.Pending) {
+        return;
       }
+      try {
+        await onRequest.dispatch(requestData);
+      } catch (error) {
+        throw createDispatchError(error, ErrorCodes.ERR_FAILED_REQUEST_SIGNAL);
+      }
+      const responseData = await controller.serve(requestData, this.onResponse);
+      try {
+        await onResponse.dispatch(responseData);
+      } catch (error) {
+        throw createDispatchError(error, ErrorCodes.ERR_FAILED_RESPONSE_SIGNAL);
+      }
+      return responseData;
     },
   };
 }
@@ -91,4 +94,11 @@ class AsyncSignal<P> extends Signal<P> {
   public async dispatch(payload?: P): Promise<void> {
     await Promise.all(Array.from(this._listeners).map(async(fn) => { await fn.call(void 0, payload); }));
   }
+}
+
+function createDispatchError(innerError: any, code: ErrorCodes): IOuterError {
+  const error: Partial<IOuterError> = new Error("");
+  error.code = code;
+  error.inner = innerError;
+  return error as IOuterError;
 }

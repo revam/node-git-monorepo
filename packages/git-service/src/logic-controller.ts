@@ -91,7 +91,7 @@ export class LogicController {
       if (request.isAdvertisement) {
         const header = AdHeaders[request.service];
         if (!output.body.slice(0, header.length).equals(header)) {
-          packets.splice(0, 1, header);
+          packets.splice(0, 0, header);
         }
         headers.set("Content-Type", `application/x-git-${request.service}-advertisement`);
       }
@@ -106,7 +106,7 @@ export class LogicController {
       body,
       headers,
       statusCode: output.statusCode,
-      statusMessage: output.statusMessage,
+      statusMessage: output.statusMessage || STATUS_CODES[output.statusCode],
     });
   }
 

@@ -5,14 +5,21 @@ import { join } from "path";
 import { Readable } from "stream";
 import { parse } from "url";
 import { ErrorCodes, ServiceType } from "./enums";
-import { IDriver, IDriverError, IDriverResponseData, IGenericDriverOptions, IProxiedDriverMethods } from "./interfaces";
+import {
+  IDriver,
+  IDriverError,
+  IDriverResponseData,
+  IGenericDriverOptions,
+  IProxiedError,
+  IProxiedMethods,
+} from "./interfaces";
 
 /**
  * Creates an IGitDriver compatible object.
  * @param origin Origin location (URI or rel./abs. path)
  * @param options Extra options
  */
-export function createDriver(origin: string, options: IGenericDriverOptions): IDriver {
+export function createDriver(origin: string, options: IGenericDriverOptions = {}): IDriver {
   let driver = /https?:\/\//.test(origin) ?
     createWebDriver(origin) : createFileSystemDriver(origin, options.enabledDefaults);
   if (options.methods) {
@@ -26,14 +33,18 @@ export function createDriver(origin: string, options: IGenericDriverOptions): ID
  * @param driver Original driver object
  * @param methods Proxy methods
  */
-export function createProxiedDriver(driver: IDriver, methods: IProxiedDriverMethods): IDriver {
+export function createProxiedDriver(driver: IDriver, methods: IProxiedMethods): IDriver {
   return new Proxy(driver, {
     get(target, prop, receiver) {
-      if (DriverMethods.has(prop as any) && Reflect.has(methods, prop)) {
+      if (ProxyMethods.has(prop as any) && prop in methods) {
         return async(...args) => {
-          const value = await methods[prop].apply(receiver, args);
-          if (value !== undefined) {
-            return value;
+          try {
+            const value = await methods[prop].apply(receiver, args);
+            if (value !== undefined) {
+              return value;
+            }
+          } catch (error) {
+            throw createProxiedError(error, prop as string);
           }
           return target[prop].apply(receiver, args);
         };
@@ -53,14 +64,14 @@ export function createFileSystemDriver(
   enabledDefaults: boolean | { [K in ServiceType]?: boolean; } = true,
 ): IDriver {
   return {
-    checkForAccess(): boolean {
+    checkForAccess() {
       return true;
     },
     async checkIfEnabled(request): Promise<boolean> {
-      if (/\.\.?(\/\\)/.test(request.path)) {
+      if (request.service === undefined || request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
         return false;
       }
-      const fullpath = `${origin}/${request.path}`;
+      const fullpath = join(origin, request.path);
       const command = request.service.replace("-", "");
       const child = spawn("git", ["-C", fullpath, "config", "--bool", `deamon.${command}`]);
       const {exitCode, stdout, stderr} = await waitForChild(child);
@@ -78,7 +89,7 @@ export function createFileSystemDriver(
       throw createDriverError(exitCode, stderr);
     },
     async checkIfExists(request) {
-      if (/\.\.?(\/\\)/.test(request.path)) {
+      if (request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
         return false;
       }
       const fullpath = join(origin, request.path);
@@ -86,14 +97,13 @@ export function createFileSystemDriver(
       const {exitCode} = await waitForChild(child);
       return exitCode === 0;
     },
-    async createResponse(request): Promise<IDriverResponseData> {
-      if (/\.\.?(\/\\)/.test(request.path)) {
+    async createResponse(request) {
+      if (request.service === undefined || request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
         return;
       }
       const fullpath = join(origin, request.path);
       const option = request.isAdvertisement ? "--advertise-refs" : "--stateless-rpc";
-      const args = ["-C", fullpath, request.service, option, "."];
-      const child = spawn("git", args);
+      const child = spawn("git", ["-C", fullpath, request.service, option, "."]);
       if (!request.isAdvertisement) {
         request.body.pipe(child.stdin);
       }
@@ -113,13 +123,13 @@ export function createFileSystemDriver(
  * Creates an IDriver compatible object for use over http(s).
  * @param origin Origin location URL
  */
-export function createWebDriver(origin: string, keyvAdapter?: string): IDriver {
+export function createWebDriver(origin: string): IDriver {
   return {
     checkForAccess() {
       return true;
     },
     async checkIfEnabled(request) {
-      if (!request.service || /\.\.?(\/|\\)/.test(request.path)) {
+      if (request.service === undefined || request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
         return false;
       }
       const url = `${origin}/${request.path}/info/refs?service=git-${request.service}`;
@@ -127,7 +137,7 @@ export function createWebDriver(origin: string, keyvAdapter?: string): IDriver {
       return response.statusCode < 300 && response.statusCode >= 200;
     },
     async checkIfExists(request) {
-      if (!request.service || /\.\.?(\/|\\)/.test(request.path)) {
+      if (request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
         return false;
       }
       const url = `${origin}/${request.path}/info/refs?service=git-upload-pack`;
@@ -135,6 +145,9 @@ export function createWebDriver(origin: string, keyvAdapter?: string): IDriver {
       return response.statusCode < 300 && response.statusCode >= 200;
     },
     async createResponse(request, onResponse): Promise<IDriverResponseData> {
+      if (request.service === undefined || request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
+        return;
+      }
       const typePrefix = request.isAdvertisement ? "info/refs?service=" : "";
       const url = `${origin}/${request.path}/${typePrefix}git-${request.service}`;
       const method = request.isAdvertisement ? "GET" : "POST";
@@ -204,6 +217,14 @@ function createDriverError(exitCode: number, stderr: string): IDriverError {
   return error as IDriverError;
 }
 
+function createProxiedError(innerError: any, methodName: string) {
+  const error: Partial<IProxiedError> = new Error("Failed to execute proxied method");
+  error.code = ErrorCodes.ERR_FAILED_PROXY_METHOD;
+  error.inner = innerError;
+  error.methodName = methodName;
+  throw error as IProxiedError;
+}
+
 interface IExecutionResult {
   exitCode: number;
   stdout: Buffer;
@@ -219,4 +240,6 @@ function waitForBuffer(readable: Readable): Promise<Buffer> {
   });
 }
 
-const DriverMethods = new Set(["checkForAccess", "checkIfExists", "checkIfEnabled"]);
+const ProxyMethods = new Set(["checkForAccess", "checkIfExists", "checkIfEnabled"]);
+
+const RELATIVE_PATH_REGEX = /\.{1,2}[/\\]/;

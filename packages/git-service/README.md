@@ -61,47 +61,47 @@ The documentation can be  found at [github](.).
 
 **Note:** It is recommended to use a function or class from a sub-package found above.
 
+Bare http server.
+
 ```js
-"use strict";
+import { createServer, STATUS_CODES } from "http";
+import { createController, createService } from "git-service";
+import { resolve } from "path";
+import { promisify } from "util";
 
-import http from "http";
-import HttpStatus from "http-status";
-import Service, { RequestType, serveResponse } from "git-service";
-import { createDriver, createDriverCache } from "git-service-basic-drivers";
-
-const { ORIGIN_ENV: origin = "./repos", PORT } = process.env;
-const port = safeParseInt(PORT, 3000);
-const cache = createDriverCache();
-const driver = createDriver(origin, cache);
-const server = http.createServer(async function(request, response) {
-  if (request.url === "/favicon.ico") {
-    response.statusCode = 404;
-    return response.end();
-  }
-  console.log("HTTP %s - %s", request.method, request.url);
-  const service = new Service(driver, request.method, request.url, request.headers, request);
-  service.onResponse.addOnce(function ({body, headers, statuscode, statusMessage}) {
-    headers.forEach(function (value, header) { response.setHeader(header, value); });
+const { ORIGIN_ENV = "./repos", PORT } = process.env;
+let port = parseInt(PORT, 10);
+if (Number.isNaN(port)) {
+  port = 3000;
+}
+const origin = resolve(ORIGIN_ENV);
+const controller = createController(origin);
+controller.onError.add((error) => console.error(error));
+const server = createServer(async function(request, response) {
+  console.log(`REQUEST - ${request.method} - ${request.url}`);
+  const service = createService(controller, request.url,  request.method, request.headers, request);
+  try {
+    const {body, headers, statusCode, statusMessage} = await service.serve();
+    headers.forEach(function (header, value) { response.setHeader(header, value); });
     response.statusCode = statusCode;
     response.statusMessage = statusMessage;
-    body.pipe(response, {end: true});
-  });
-  service.onError.addOnce(function (err) {
-    if (!response.headersSent) {
-      response.statusCode = err.status || err.statusCode || 500;
-      response.setHeader("Content-Type", "text/plain");
-      response.end(HttpStatus[response.statusCode], "utf8");
+    await promisify(response.end.bind(response))(body);
+  } catch (error) {
+    console.error(error);
+    if (typeof error === "object") {
+      if (!response.headersSent) {
+        response.statusCode = error.status || error.statusCode || 500;
+        response.setHeader("Content-Type", "text/plain");
+        response.setHeader("Content-Length", STATUS_CODES[response.statusCode].length);
+        response.write(STATUS_CODES[response.statusCode], "utf8");
+      }
     }
-    else if (response.connection.writable) {
+    if (response.writable) {
       response.end();
     }
-  });
-  service.onError.add(function (err) { console.error(err, id); });
-  service.informClient("Served from package 'git-service' found at npmjs.com");
-  await serveRequest(service);
+  }
 });
 
-process.on("SIGTERM", () => server.close());
 server.listen(port, () => console.log(`server is listening on port ${port}`));
 ```
 

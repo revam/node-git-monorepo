@@ -6,6 +6,18 @@ export enum ErrorCodes {
    * Something went wrong when executing git bin.
    */
   ERR_FAILED_GIT_EXECUTION = "ERR_FAILED_GIT_EXECUTION",
+  /**
+   * Something went wrong in a proxied driver method.
+   */
+  ERR_FAILED_PROXY_METHOD = "ERR_FAILED_PROXY_METHOD",
+  /**
+   * Something went wrong in a listener for request data.
+   */
+  ERR_FAILED_REQUEST_SIGNAL = "ERR_FAILED_REQUEST_SIGNAL",
+  /**
+   * Something went wrong in a listener for response data.
+   */
+  ERR_FAILED_RESPONSE_SIGNAL = "ERR_FAILED_RESPONSE_SIGNAL",
 }
 
 /**
@@ -29,19 +41,18 @@ export enum RequestStatus {
   /**
    * Indicate the service is still pending.
    */
-  Pending = 0,
+  Pending = "Pending",
   /**
    * Indicate the service was accepted.
    */
-  Accepted = 1,
+  Accepted = "Accepted",
   /**
    * Indocate the service was rejected.
    */
-  Rejected = 2,
+  Rejected = "Rejected",
   /**
-   * Indicate the service was initially accepted, but failed to fetch result for service.
-   *
-   * Combination of flags Accepted and Rejected. (1 | 2 -> 3)
+   * Indicate the service was initially accepted, but failed to produce valid
+   * results for service.
    */
-  Failure = 3,
+  Failure = "Failure",
 }

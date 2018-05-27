@@ -36,8 +36,8 @@ export class Headers {
         }
       }
       else if (typeof input === "object") {
-        for (const header of Object.keys(input)) {
-          this.append(header, input[header]);
+        for (const [header, value] of Object.entries(input)) {
+          this.append(header, value);
         }
       }
     }

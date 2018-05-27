@@ -1,0 +1,54 @@
+{
+  "name": "git-service-koa",
+  "version": "1.0.0",
+  "description": "Git service middleware for koa",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "tslint test/**/*.ts && jest",
+    "build": "tsc --noEmit -p . && tslint src/**/*.ts && tsc -p .",
+    "prepublish": "npm run test && npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/revam/node-git-service.git"
+  },
+  "keywords": [
+    "git",
+    "packet",
+    "pack-format",
+    "typescript"
+  ],
+  "author": "Mikal Stordal <mikalstordal@gmail.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/revam/node-git-service/issues"
+  },
+  "homepage": "https://github.com/revam/node-git-service#readme",
+  "devDependencies": {
+    "@types/jest": "^22.2.3",
+    "@types/koa": "^2.0.45",
+    "@types/node": "^10.0.8",
+    "jest": "^22.4.3",
+    "koa": "^2.5.1",
+    "ts-jest": "^22.4.5",
+    "tslint": "^5.10.0",
+    "typescript": "^2.8.3"
+  },
+  "dependencies": {
+    "git-service": "^1.0.0"
+  },
+  "jest": {
+    "transform": {
+      "^.+\\.tsx?$": "ts-jest"
+    },
+    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "json",
+      "node"
+    ]
+  }
+}

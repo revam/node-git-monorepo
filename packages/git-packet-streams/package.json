@@ -1,6 +1,6 @@
 {
   "name": "git-packet-streams",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Helper functions to work with git packet format",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

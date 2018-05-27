@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.0.2] - 2018-05-27
+
+## Fixed
+
+- When uploading (git push), the reader failed because it tried to read the PACK
+  data. It should have stopped before, and it does now.
+
 ## [2.0.1] - 2018-05-03
 
 ## Fixed
@@ -62,7 +69,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial release
 
-[Unreleased]: https://github.com/revam/node-git-service/compare/git-packet-streams-v2.0.1...HEAD
+[Unreleased]: https://github.com/revam/node-git-service/compare/git-packet-streams-v2.0.2...HEAD
+[2.0.1]: https://github.com/revam/node-git-service/compare/git-packet-streams-v2.0.1...git-packet-streams-v2.0.2
 [2.0.1]: https://github.com/revam/node-git-service/compare/git-packet-streams-v2.0.0...git-packet-streams-v2.0.1
 [2.0.0]: https://github.com/revam/node-git-service/compare/git-packet-streams-v1.1.0...git-packet-streams-v2.0.0
 [1.1.0]: https://github.com/revam/node-git-service/compare/git-packet-streams-v1.0.0...git-packet-streams-v1.1.0

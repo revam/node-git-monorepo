@@ -7,10 +7,30 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-## [1.0.0] - 2018-05-27
+## [1.0.1] - 2018-05-28
 
 ### Added
 
-- Initial release
+- Added usage example in read-me file.
+- All exports from base package are now also exported from this package
+- Linked koa context state with service request state.
 
-[Unreleased]: https://github.com/revam/koa-git-smart-proxy/compare/git-service-koa-v1.0.0...HEAD
+### Changed
+
+- Renamed `createMiddleware` to `createKoaMiddleware`, so the name does not
+  conflict with export from base package.
+- Also renamed `IMiddlewareOptions` to `IKoaMiddlewareOptions` for the same
+  reason.
+
+### Fixed
+
+- Fixed wrong package name/description in read-me file.
+
+## 1.0.0 - 2018-05-27
+
+### Added
+
+- Initial public release
+
+[Unreleased]: https://github.com/revam/koa-git-smart-proxy/compare/git-service-koa-v1.0.1...HEAD
+[1.0.1]: https://github.com/revam/koa-git-smart-proxy/compare/git-service-koa-v1.0.0...git-service-koa-v1.0.1

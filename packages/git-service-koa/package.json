@@ -1,6 +1,6 @@
 {
   "name": "git-service-koa",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Git service middleware for koa",
   "main": "lib/index.js",
   "scripts": {
@@ -35,7 +35,7 @@
     "typescript": "^2.8.3"
   },
   "dependencies": {
-    "git-service": "^1.0.0"
+    "git-service": "^1.0.1"
   },
   "jest": {
     "transform": {

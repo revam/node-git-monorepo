@@ -1,20 +1,41 @@
-# git-packet-streams
+# git-service-koa
 
-Helper functions to work with git packet format.
+Git service middleware for koa
 
 ## Install
 
 ```sh
-npm install --save git-packet-streams
+npm install --save git-service-koa
 ```
 
 ## What is this?
 
-This package contains helper functions to work with git packet buffers and streams.
+This package contains a middleware for using
+[git-service](https://npmjs.com/package/git-service) with
+[koa](https://npmjs.com/package/koa).
 
 ## Usage
 
-See tests for some usage example. ([Not a link](.))
+```js
+import { createServer } from "http";
+import { createController, createKoaMiddleware } from "git-service-koa";
+import koa from "koa";
+
+// Load variables from environment
+const { ORIGIN_ENV, PORT } = process.env;
+
+// Create controller, app and server
+const controller = createController(ORIGIN_ENV);
+const app = new koa();
+const server = createServer(app.callback());
+
+// Add middleware to application
+app.use(createMiddleware(controller));
+
+// Start server and serve git.
+server.listen(parseInt(PORT, 10) || 3000, (err)
+  => err ? console.error(err) ? console.log("Listening on port %s", PORT || 3000));
+```
 
 ## Documentation
 

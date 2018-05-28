@@ -1,9 +1,11 @@
 import { createService, LogicController } from "git-service";
 import { Middleware } from "koa";
 
-export function createMiddleware(controller: LogicController, options: IMiddlewareOptions = {}): Middleware {
+export * from "git-service";
+
+export function createKoaMiddleware(controller: LogicController, options: IKoaMiddlewareOptions = {}): Middleware {
   const keyName = options.keyName || "service";
-  const autoDeploy = options.autoDeploy || true;
+  const autoDeploy = "autoDeploy" in options ? options.autoDeploy : true;
   return async(context, next) => {
     const service = context.state[keyName] = createService(
       controller,
@@ -12,6 +14,8 @@ export function createMiddleware(controller: LogicController, options: IMiddlewa
       context.headers,
       context.req,
     );
+    // Link service state to context state.
+    service.onRequest.addOnce((request) => request.state = context.state);
     await next();
     if (autoDeploy) {
       try {
@@ -30,7 +34,7 @@ export function createMiddleware(controller: LogicController, options: IMiddlewa
   };
 }
 
-export interface IMiddlewareOptions {
+export interface IKoaMiddlewareOptions {
   /**
    * Where to store proxy in `Context.state`. Defaults to `"service"`.
    */

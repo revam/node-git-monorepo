@@ -58,6 +58,11 @@ export function createRequest(
         },
         writable: false,
       },
+      state: {
+        enumerable: true,
+        value: {},
+        writable: true,
+      },
       status: {
         value: RequestStatus.Pending,
         writable: true,
@@ -69,9 +74,7 @@ export function createRequest(
       const passthrough = createPacketReader(reader);
       passthrough.on("error", reject);
       passthrough.on("finish", () => resolve(requestData));
-      Object.defineProperty(requestData, "body", {
-        value: passthrough,
-      });
+      requestData.body = passthrough;
       body.pipe(passthrough);
     }
     else {

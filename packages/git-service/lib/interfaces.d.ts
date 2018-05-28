@@ -67,6 +67,10 @@ export interface IRequestData {
      * Returns a signature for object.
      */
     signature(): string;
+    /**
+     * Request state. Can be used by applications to store values.
+     */
+    state: any;
 }
 /**
  * Contains information of what client want to retrive from this upload-pack
@@ -170,19 +174,19 @@ export interface IProxiedMethods {
      * Return undefined, or an empty promise to fallback to default
      * implementation.
      */
-    checkForAccess?(request: IRequestData, onResponse: ReadableSignal<IResponseData>): boolean | undefined | PromiseLike<boolean | undefined>;
+    checkForAccess?(request: IRequestData, onResponse: ReadableSignal<IResponseData>): boolean | void | PromiseLike<boolean | void>;
     /**
      * Checks if service is enabled for repository.
      * Return undefined, or an empty promise to fallback to default
      * implementation.
      */
-    checkIfEnabled?(request: IRequestData, onResponse: ReadableSignal<IResponseData>): boolean | undefined | PromiseLike<boolean | undefined>;
+    checkIfEnabled?(request: IRequestData, onResponse: ReadableSignal<IResponseData>): boolean | void | PromiseLike<boolean | void>;
     /**
      * Checks if repository exists.
      * Return undefined, or an empty promise to fallback to default
      * implementation.
      */
-    checkIfExists?(request: IRequestData, onResponse: ReadableSignal<IResponseData>): boolean | undefined | PromiseLike<boolean | undefined>;
+    checkIfExists?(request: IRequestData, onResponse: ReadableSignal<IResponseData>): boolean | void | PromiseLike<boolean | void>;
 }
 /**
  * Partly response data from driver.

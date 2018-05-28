@@ -50,6 +50,11 @@ function createRequest(body, headers, isAdvertisement = false, service, path) {
                 },
                 writable: false,
             },
+            state: {
+                enumerable: true,
+                value: {},
+                writable: true,
+            },
             status: {
                 value: enums_1.RequestStatus.Pending,
                 writable: true,
@@ -61,9 +66,7 @@ function createRequest(body, headers, isAdvertisement = false, service, path) {
             const passthrough = git_packet_streams_1.createPacketReader(reader);
             passthrough.on("error", reject);
             passthrough.on("finish", () => resolve(requestData));
-            Object.defineProperty(requestData, "body", {
-                value: passthrough,
-            });
+            requestData.body = passthrough;
             body.pipe(passthrough);
         }
         else {

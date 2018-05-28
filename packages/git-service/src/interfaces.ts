@@ -68,6 +68,10 @@ export interface IRequestData {
    * Returns a signature for object.
    */
   signature(): string;
+  /**
+   * Request state. Can be used by applications to store values.
+   */
+  state: any;
 }
 
 /**
@@ -190,7 +194,7 @@ export interface IProxiedMethods {
   checkForAccess?(
     request: IRequestData,
     onResponse: ReadableSignal<IResponseData>,
-  ): boolean | undefined | PromiseLike<boolean | undefined>;
+  ): boolean | void | PromiseLike<boolean | void>;
   /**
    * Checks if service is enabled for repository.
    * Return undefined, or an empty promise to fallback to default
@@ -199,7 +203,7 @@ export interface IProxiedMethods {
   checkIfEnabled?(
     request: IRequestData,
     onResponse: ReadableSignal<IResponseData>,
-  ): boolean | undefined | PromiseLike<boolean | undefined>;
+  ): boolean | void | PromiseLike<boolean | void>;
   /**
    * Checks if repository exists.
    * Return undefined, or an empty promise to fallback to default
@@ -208,7 +212,7 @@ export interface IProxiedMethods {
   checkIfExists?(
     request: IRequestData,
     onResponse: ReadableSignal<IResponseData>,
-  ): boolean | undefined | PromiseLike<boolean | undefined>;
+  ): boolean | void | PromiseLike<boolean | void>;
 }
 
 /**

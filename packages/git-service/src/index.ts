@@ -25,7 +25,7 @@ export * from "./request";
  * @param origin Origin location (URI or rel./abs. path)
  * @param options Extra options
  */
-export function createController(origin: string, options: IGenericDriverOptions) {
+export function createController(origin: string, options?: IGenericDriverOptions) {
   const driver = createDriver(origin, options);
   return new LogicController(driver);
 }

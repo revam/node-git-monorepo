@@ -1,17 +1,8 @@
 # git-service
 
-Serve git over http(s).
+Serve git smart protocol over http(s).
 
 ## Install
-
-This is a [Node.js](https://nodejs.org/en/) module available through the
-[npm registry](https://www.npmjs.com/).
-
-Before installing, [download and install Node.js](https://nodejs.org/en/download/).
-Node.js 8 or higher is required.
-
-Installation is done using the
-[`npm install` command](https://docs.npmjs.com/getting-started/installing-npm-packages-locally):
 
 ```sh
 $ npm install --save git-service
@@ -19,13 +10,10 @@ $ npm install --save git-service
 
 ## What is this?
 
-This packages main focus is defining interfaces for a high-level git service. It also
-includes a reference implementation of the main interface, `IService`, as default export.
-All the git-heavy work is done by a driver implementing the `IServiceDriver` interface,
-and the reference implementation can be found in the seperate
-[`git-service-driver` package](.).
+This packages main focus is defining an abstraction for serving git. It
+includes several helpers for creating a git server or framework middleware.
 
-See the documentation for a full list of exported interfaces.
+See the documentation for a full list of exports.
 
 ### Motivation for this package
 
@@ -45,48 +33,52 @@ The documentation can be  found at [github](.).
 
 ## Related packages
 
-- [git-service-driver](.)
-- [git-service-http](.)
-- [git-service-koa](.)
-- [git-packet-streams](.)
+- [git-service-koa](https://www.npmjs.com/package/git-service-koa)
+- [git-packet-streams](https://www.npmjs.com/package/git-packet-streams)
 
 ## Simular projects
 
 - [pushover](https://github.com/substack/pushover)
 - [git-http-backend](https://github.com/substack/git-http-backend)
-- [git-server](.)
-- [grack](.)
+- [git-server](https://github.com/stackdot/NodeJS-Git-Server)
+- [grack](https://github.com/schacon/grack)
 
 ## Usage
-
-**Note:** It is recommended to use a function or class from a sub-package found above.
 
 Bare http server.
 
 ```js
-import { createServer, STATUS_CODES } from "http";
+import { createServer } from "http";
 import { createController, createMiddleware } from "git-service";
 import { resolve } from "path";
+
+// Load variables from environment
 const { ORIGIN_ENV = "./repos", PORT } = process.env;
-const server = createServer(createMiddleware(createController(resolve(ORIGIN_ENV))));
-server.listen(parseInt(PORT, 10) || 3000));
+
+// Create controller and server
+const controller = createController(resolve(__dirname, ORIGIN_ENV));
+const server = createServer(createMiddleware(controller));
+
+// Log errors thrown in controller
+controller.onError.add((error) => console.error(error));
+
+// Start serving git
+server.listen(parseInt(PORT, 10) || 3000, (err)
+  => err ? console.error(err) : console.log(`listening on port ${PORT || 3000}`));
 ```
 
-Minimal, but with some logging added.
+Minimal http server, but with some logging added.
 
 ```js
-import { createServer, STATUS_CODES } from "http";
+import { createServer } from "http";
 import { createController, createMiddleware } from "git-service";
 import { resolve } from "path";
 
+// Load variables from environment
 const { ORIGIN_ENV = "./repos", PORT } = process.env;
-let port = parseInt(PORT, 10);
-if (Number.isNaN(port)) {
-  port = 3000;
-}
-const origin = resolve(ORIGIN_ENV);
-const controller = createController(origin);
-controller.onError.add((error) => console.error(error));
+
+// Create controller, middleware and server
+const controller = createController(resolve(__dirname, ORIGIN_ENV));
 const middleware = createMiddleware(controller, (service) => {
   service.onRequest.addOnce((request) => {
     console.log(`SERVICE REQUEST - ${request.service} - ${request.path}`);
@@ -101,7 +93,12 @@ const server = createServer(async function(request, response) {
   console.log(`RESPONSE - ${response.statusCode} - ${response.statusMessage}`);
 });
 
-server.listen(port, () => console.log(`server is listening on port ${port}`));
+// Log errors thrown in controller
+controller.onError.add((error) => console.error(error));
+
+// Start serving git
+server.listen(parseInt(PORT, 10) || 3000, (err)
+  => err ? console.error(err) : console.log(`listening on port ${PORT || 3000}`));
 ```
 
 ## Typescript

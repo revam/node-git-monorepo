@@ -19,7 +19,7 @@ export * from "./request";
  * @param origin Origin location (URI or rel./abs. path)
  * @param options Extra options
  */
-export declare function createController(origin: string, options: IGenericDriverOptions): LogicController;
+export declare function createController(origin: string, options?: IGenericDriverOptions): LogicController;
 /**
  * Creates an IService compatible object.
  * @param driver Service driver to use

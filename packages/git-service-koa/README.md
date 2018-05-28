@@ -30,7 +30,7 @@ const app = new koa();
 const server = createServer(app.callback());
 
 // Add middleware to application
-app.use(createMiddleware(controller));
+app.use(createKoaMiddleware(controller));
 
 // Start server and serve git.
 server.listen(parseInt(PORT, 10) || 3000, (err)

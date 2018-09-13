@@ -26,6 +26,7 @@
         "allow-declarations",
         "allow-named-functions"
     ],
+    "file-name-casing": false,
 
     "one-line": [true, "check-catch", "check-finally", "check-whitespace", "check-open-brace"],
 

@@ -202,7 +202,7 @@ function waitForResponse(
     const request = (parsedUrl.protocol === "https:" ? sendSecure : send)(options, ok);
     request.once("error", error);
     if (method === "POST") {
-      body.pipe(request);
+      body!.pipe(request);
     } else {
       request.end();
     }

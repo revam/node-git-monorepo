@@ -15,16 +15,13 @@ export class Headers {
   /**
    * Number of headers in collection.
    */
-  public readonly count: number;
+  public get count(): number {
+    return this.__raw.size;
+  }
 
   private __raw: Map<string, string[]>;
 
   constructor(input?: HeadersInput) {
-    Object.defineProperty(this, "count", {
-      get(this: Headers) {
-        return this.__raw.size;
-      },
-    });
     if (input instanceof Headers) {
       this.__raw = new Map(input);
     }
@@ -67,10 +64,12 @@ export class Headers {
    * @param header   Header name
    * @param value  Header value to set
    */
-  public set(header: string, value: number | string | string[]) {
-    const saneHeader = sanitizeHeader(header);
-    this.__raw.set(saneHeader, []);
-    this.__append(saneHeader, value);
+  public set(header: string, value?: number | string | string[]) {
+    if (value !== undefined) {
+      const saneHeader = sanitizeHeader(header);
+      this.__raw.set(saneHeader, []);
+      this.__append(saneHeader, value);
+    }
   }
 
   /**
@@ -78,15 +77,18 @@ export class Headers {
    * @param header Header name
    * @param value Header value to append
    */
-  public append(header: string, value: number | string | string[]) {
-    this.__append(sanitizeHeader(header), value);
+  public append(header: string, value?: number | string | string[]) {
+    if (value !== undefined) {
+      const saneHeader = sanitizeHeader(header);
+      if (!this.__raw.has(saneHeader)) {
+        this.__raw.set(saneHeader, []);
+      }
+      this.__append(saneHeader, value);
+    }
   }
 
   private __append(saneHeader: string, value: number | string | string[]) {
-    if (!this.__raw.has(saneHeader)) {
-      this.__raw.set(saneHeader, []);
-    }
-    const values = this.__raw.get(saneHeader);
+    const values = this.__raw.get(saneHeader)!;
     if (value instanceof Array) {
       values.push(...value);
     }

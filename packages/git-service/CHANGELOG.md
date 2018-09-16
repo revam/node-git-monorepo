@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- Moved from TypeScript 2.x to 3.x, and enabled stricter options for compiler.
+  Making it somewhat easier to spot errors at design-time. Also corrected
+  existing code where the IDE complained.
+
 ## [1.0.1] - 2018-05-28
 
 ### Added

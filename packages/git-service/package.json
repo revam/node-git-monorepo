@@ -1,7 +1,7 @@
 {
   "name": "git-service",
   "version": "1.0.1",
-  "description": "Serve git smart protocol over http(s).",
+  "description": "Serve git over http(s).",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "directories": {

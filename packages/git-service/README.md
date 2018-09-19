@@ -1,11 +1,25 @@
 # git-service
 
-Serve git smart protocol over http(s).
+Serve git over http(s).
 
 ## Install
 
+From the npm register:
+
 ```sh
 $ npm install --save git-service
+```
+
+From GitHub:
+
+```sh
+$ npm install --save https://github.com/revam/node-git-service/releases/download/git-service-v$VERSION/package.tgz
+```
+
+From git.lan (internet-people can ignore this):
+
+```sh
+$ npm install --save https://git.lan/mist/node-git@git-service-v$VERSION/package.tgz
 ```
 
 ## What is this?
@@ -25,11 +39,12 @@ use.
 It's a side-project, so expect irregular updates, if any, in case you want to use it.
 Below you can find some simular projects which helped me greatly when creating this
 package. Also a great help was the technical documentation for git, which can be found
-[at github](https://github.com/git/git/blob/master/Documentation/technical).
+[here](https://git.kernel.org/pub/scm/git/git.git/tree/Documentation/technical), among other
+places.
 
 ## Documentation
 
-The documentation can be  found at [github](.).
+The documentation is not available as of yet, but if you use TypeScript, the definitions are available with some (short) descriptions. There are also some examples below for how you could use this library.
 
 ## Related packages
 
@@ -49,56 +64,221 @@ Bare http server.
 
 ```js
 import { createServer } from "http";
-import { createController, createMiddleware } from "git-service";
+import { createMiddleware } from "git-service";
 import { resolve } from "path";
 
 // Load variables from environment
-const { ORIGIN_ENV = "./repos", PORT } = process.env;
+const origin = resolve(__dirname, process.env.ORIGIN_ENV || "./repos");
+const port = parseInt(process.env.PORT, 10) || 3000;
 
-// Create controller and server
-const controller = createController(resolve(__dirname, ORIGIN_ENV));
-const server = createServer(createMiddleware(controller));
+// Create server
+const server = createServer(createMiddleware(origin));
 
-// Log errors thrown in controller
-controller.onError.add((error) => console.error(error));
-
-// Start serving git
-server.listen(parseInt(PORT, 10) || 3000, (err)
-  => err ? console.error(err) : console.log(`listening on port ${PORT || 3000}`));
+// Start server
+server.listen(port, (err) =>
+  err ? console.error(err) : console.log(`listening on port ${port}`));
 ```
 
-Minimal http server, but with some logging added.
+Some snippets for controller.
+
+```js
+// Log on complete
+controller.onComplete.add((request) => {
+  console.log(`Request for "${request.path}" completed with status: ${request.status}`);
+});
+
+// Reject all requests for invalid service types.
+controller.onUsable.add((request) => {
+  if (!request.service) {
+    return controller.reject(request, 400, "Invalid service");
+  }
+});
+
+// Reject all requests for repositories not ending with ".git" or ".git/".
+const GIT_REGEX = /\.git\/?$/;
+controller.onUsable.add((request) => {
+  if (!GIT_REGEX.test(request.path)) {
+    return controller.reject(request, 400, 'Repository path must end with ".git".');
+  }
+});
+
+// Add user to state if users credentials are valid.
+import Users from "./model/user"; // Example model from database.
+controller.onUsable.add((request) => {
+  if (request.headers.has("Authorization")) {
+    const header = request.headers.get("Authorization");
+    if (header.startsWith("Basic")) {
+      // Works even if password contain colon (:).
+      const data = Buffer.from(header.split(" ")[1] || "", "base64").toString("utf8").split(":");
+      const username = data.shift();
+      const password = data.join(":");
+      const user = username && await Users.findByUsername(username) || undefined;
+      if (user && await user.comparePassword(password)) {
+        request.state.user = user;
+      }
+    }
+  }
+});
+
+// Redirect from map
+const redirects = new Map([
+  ["test-2.git", "test-3.git"],
+]);
+controller.onUsable.add((request) => {
+  if (redirects.has(request.path)) {
+    return controller.redirect(request, redirects.get(request.path));
+  }
+})
+
+// Map public path to internal path or reject with 404.
+const pathToInternalMap = new Map([
+  ["revam/git-service.git", "5b/9d/ee4cc4e8af2864e2f34c"], // Example mapping
+]);
+controller.onUsable.add((request) => {
+  if (!pathToInternalMap.has(request.path)) {
+    return controller.reject(request, 404);
+  }
+  request.path = pathToInternalMap.get(request.path);
+});
+```
+
+Http server connected to a database for repository metadata (e.g. web hooks,
+public/internal paths, etc.) and user authorization. The database part is
+omitted here.
 
 ```js
 import { createServer } from "http";
-import { createController, createMiddleware } from "git-service";
+import { createMiddleware } from "git-service";
+import { resolve } from "path";
+
+// Example models for database
+import Users from "./model/user";
+import Repositories from "./model/repository";
+
+// Load variables from environment
+const origin = resolve(__dirname, process.env.ORIGIN_ENV || "./repos");
+const port = parseInt(process.env.PORT, 10) || 3000;
+
+const server = createServer(createMiddleware({
+  origin,
+  methods: {
+    // Check service/user access for repository.
+    checkForAccess(request, response) {
+      const repository = request.state.repository;
+      if (!repository) {
+        response.statusCode = 500;
+        return false;
+      }
+      return repository.checkForAccess(response, request.service, request.state.user);
+    },
+    // Check if repository exists in database.
+    async checkIfExists(request, response) {
+      const record = await Repositories.findByPublicPath(request.path);
+      if (!record) {
+        return false;
+      }
+      if (record.publicPath !== request.path) {
+        response.statusCode = 308;
+        response.headers.set("Location", record.publicPath);
+      }
+      request.state.repository = record;
+      request.path = record.path;
+      return true;
+    },
+  },
+}, (controller) => {
+  controller.use((request) => {
+    if (!request.service) {
+      return controller.reject(request, 400, "Invalid service");
+    }
+  });
+  const GIT_REGEX = /\.git\/?$/;
+  controller.onUsable.add((request) => {
+    if (!GIT_REGEX.test(request.path)) {
+      return controller.reject(request, 400, 'Repository must end with ".git"');
+    }
+  });
+  controller.onUsable.add((request) => {
+    if (request.headers.has("Authorization")) {
+      const header = request.headers.get("Authorization");
+      if (header.startsWith("Basic")) {
+        const data = Buffer.from(header.split(" ")[1] || "", "base64")
+          .toString("utf8")
+          .split(":");
+        const username = data.shift();
+        const password = data.join(":");
+        const user = username && await Users.findOneByUsername(username) || undefined;
+        if (user && await user.comparePassword(password)) {
+          request.state.user = user;
+        }
+      }
+    }
+  });
+}));
+
+// Start server
+server.listen(port, (err) =>
+  err ? console.error(err) : console.log(`listening on port ${port}`));
+```
+
+Manual use of controller. (Only `onError` signal is used) It is recommended to use the
+`LogicController#serve()` method, but still possible to use the controller manually.
+
+```js
+import { createServer, STATUS_CODES } from "http";
+import { createController } from "git-service";
 import { resolve } from "path";
 
 // Load variables from environment
-const { ORIGIN_ENV = "./repos", PORT } = process.env;
+const origin = resolve(__dirname, process.env.ORIGIN_ENV || "./repos");
+const port = parseInt(process.env.PORT, 10) || 3000;
 
-// Create controller, middleware and server
-const controller = createController(resolve(__dirname, ORIGIN_ENV));
-const middleware = createMiddleware(controller, (service) => {
-  service.onRequest.addOnce((request) => {
-    console.log(`SERVICE REQUEST - ${request.service} - ${request.path}`);
-  });
-  service.onResponse.addOnce((response) => {
-    console.log(`SERVICE RESPONSE - ${response.statusCode} - ${response.statusMessage}`);
-  });
-});
-const server = createServer(async function(request, response) {
-  console.log(`REQUEST - ${request.method} - ${request.url}`);
-  await middleware(request, response);
-  console.log(`RESPONSE - ${response.statusCode} - ${response.statusMessage}`);
+// Create controller and server
+const controller = createController(origin);
+const server = createServer(async (request, response) => {
+  try {
+    // Create request (and response)
+    const requestData = await controller.create(request, request.header, request.method, request.url);
+    // Logic
+    if (!await controller.checkIfExists(request)) {
+      await controller.reject(request, 404);
+    } else if (!await controller.checkForAccess(request)) {
+      await controller.reject(request, 401);
+    } else if (!await controller.checkIfEnabled(request)) {
+      await controller.reject(request, 403);
+    } else {
+      await controller.accept(request);
+    }
+    // Get response
+    const responseData = requestData.response;
+    responseData.headers.forEach((header, value) => response.setHeader(header, value));
+    response.statusCode = responseData.statusCode;
+    response.statusMessage = responseData.statusMessage;
+    await new Promise((resolve, reject) =>
+      response.write(responseData.body, (err) => err = reject(err) : resolve()));
+  } catch (error) {
+    console.error(error);
+    if (!response.headersSent) {
+      response.statusCode = error && (error.statusCode || error.status) || 500;
+      response.statusMessage = STATUS_CODES[response.statusCode];
+      response.setHeader("Content-Type", "text/plain");
+      response.setHeader("Content-Length", response.statusMessage.length);
+      response.write(response.statusMessage, "utf8");
+    }
+  } finally {
+    if (response.writable) {
+      await new Promise((resolve, reject) =>
+        response.end((err) => err ? reject(err) : resolve()));
+    }
+  }
 });
 
 // Log errors thrown in controller
 controller.onError.add((error) => console.error(error));
 
-// Start serving git
-server.listen(parseInt(PORT, 10) || 3000, (err)
-  => err ? console.error(err) : console.log(`listening on port ${PORT || 3000}`));
+// Start server
+server.listen(port, (err) =>
+  err ? console.error(err) : console.log(`listening on port ${port}`));
 ```
 
 ## Typescript

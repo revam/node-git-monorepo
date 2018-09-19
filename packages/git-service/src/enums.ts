@@ -18,6 +18,11 @@ export enum ErrorCodes {
    * Something went wrong in a listener for response data.
    */
   ERR_FAILED_RESPONSE_SIGNAL = "ERR_FAILED_RESPONSE_SIGNAL",
+  /**
+   * Response status is within the 2xx range, but contains no body. Possible
+   * driver error.
+   */
+  ERR_INVALID_BODY_FOR_2XX = "ERR_INVALID_BODY_FOR_2XX",
 }
 
 /**
@@ -39,20 +44,23 @@ export enum ServiceType {
  */
 export enum RequestStatus {
   /**
-   * Indicate the service is still pending.
+   * Indicate the request is still pending.
    */
   Pending = "Pending",
   /**
-   * Indicate the service was accepted.
+   * Indicate the request was accepted.
    */
   Accepted = "Accepted",
   /**
-   * Indocate the service was rejected.
+   * Indicate the request was rejected.
    */
   Rejected = "Rejected",
   /**
-   * Indicate the service was initially accepted, but failed to produce valid
-   * results for service.
+   * Indicate the request was initially accepted, but ended in failure.
    */
   Failure = "Failure",
+  /**
+   * Indicate the repository has moved and the request is being redirected.
+   */
+  Redirect = "Redirect",
 }

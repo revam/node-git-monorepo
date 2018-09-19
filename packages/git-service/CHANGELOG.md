@@ -7,11 +7,183 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- `IResponseData` now has a property `state` shared with its corresponding
+  `IRequestData`.
+
 ### Changed
 
 - Moved from TypeScript 2.x to 3.x, and enabled stricter options for compiler.
   Making it somewhat easier to spot errors at design-time. Also corrected
   existing code where the IDE complained.
+
+- Updated package description.
+
+- Updated multiple sections in read-me file. Added some more install options,
+  changed/updated examples and clarified there are no documentation (on the web
+  as of yet).
+
+- A sane http server should accept HEAD where it accepts GET. So HEAD will now
+  be recognised the same as GET, and no body will be sent from middleware
+  created by `createMiddleware` if the request method is HEAD.
+
+  **Example**
+
+  When running a server at localhost:3000. (Below code works with current
+  version and previous version).
+
+  ```js
+  import { createServer } from "http";
+  import { createController, createMiddleware } from "git-service";
+
+  const controller = createController(process.env.ORIGIN_ENV);
+  const middleware = createMiddlware(controller);
+  const server = createServer(middleware);
+  server.listen(3000, (err) =>
+    err ? console.error(err) : console.log("listening on port 3000"));
+  ```
+
+  Before:
+
+  ```sh
+  $ curl --verbose --head http://localhost:3000/$REPO/info/refs?service=git-upload-pack
+  *   Trying 127.0.0.1...
+  * TCP_NODELAY set
+  * Connected to localhost (127.0.0.1) port 3000 (#0)
+  > HEAD /$REPO/info/refs?service=git-upload-pack HTTP/1.1
+  > Host: localhost:3000
+  > User-Agent: curl/7.52.1
+  > Accept: */*
+  >
+  < HTTP/1.1 500 Internal Server Error
+  < Content-Type: text/plain
+  < Content-Length: 21
+  < Date: $DATE
+  < Connection: keep-alive
+  <
+  * Curl_http_done: called premature == 0
+  * Connection #0 to host localhost left intact
+  ```
+
+  Now:
+
+  ```sh
+  $ curl --verbose --head http://localhost:3000/$REPO/info/refs?service=git-upload-pack
+  *   Trying 127.0.0.1...
+  * TCP_NODELAY set
+  * Connected to localhost (127.0.0.1) port 3000 (#0)
+  > HEAD /$REPO/info/refs?service=git-upload-pack HTTP/1.1
+  > Host: localhost:3000
+  > User-Agent: curl/7.52.1
+  > Accept: */*
+  >
+  < HTTP/1.1 200 OK
+  < content-type: application/x-git-upload-pack-advertisement
+  < content-length: $CONTENT_LENGTH
+  < Date: $DATE
+  < Connection: keep-alive
+  <
+  * Curl_http_done: called premature == 0
+  * Connection #0 to host localhost left intact
+  ```
+
+- Requests and responses are now linked together, and their property `state` is
+  shared.
+
+- New requests are created from the controller, either when `controller.serve`
+  is called or explicitly through `controller.create`. Both accept the same
+  arguments, but `controller.serve` also accepts a request object as an
+  argument.
+
+  **Example**
+
+  Before:
+
+  ```js
+  import { createController, createService } from "git-service";
+  import { PassThrough } from "stream";
+
+  const controller = createController(process.env.ORIGIN_ENV);
+  const instance = createService(
+    controller,
+    "https://git.example.org/example.git/info/refs?service=git-upload-pack",
+    "GET",
+    {},
+    new PassThrough(),
+  );
+  const response = await instance.serve();
+  ```
+
+  Now:
+
+  ```js
+  import { createController } from "git-service";
+  import { PassThrough } from "stream";
+
+  const controller = createController(process.env.ORIGIN_ENV);
+  const request = controller.create(
+    new PassThrough(),
+    {},
+    "GET",
+    "https://git.example.org/example.git/info/refs?service=git-upload-pack",
+  );
+  const response = await controller.serve(request);
+  // or from request
+  const response = request.response;
+  ```
+
+  Or:
+
+  ```js
+  import { createController } from "git-service";
+  import { PassThrough } from "stream";
+
+  const controller = createController(process.env.ORIGIN_ENV);
+  const response = await controller.serve(
+    new PassThrough(),
+    {},
+    "GET",
+    "https://git.example.org/example.git/info/refs?service=git-upload-pack",
+  );
+  ```
+
+- Changed signals used. Instead of a signal for when the request is created
+  (`onRequest`) and when the response is created (`onResponse`), we now have a
+  signal for when a request is usable (`onUsable`) and a signal for when
+  processing of a request is complete (`onComplete`). Also, since the `IService`
+  interface is removed, the signals are moved onto the controller, which means
+  signals now operate on multiple requests.
+
+- Sideband messages are now unique to each instance, and are not shared across
+  instances. To send a message you must use the `sendMessage` method on the
+  response object.
+
+- All methods of `IDriver` now requires the request and response as arguments.
+
+- The `createResponse` method of `IDriver` has been replaced by `serve`, to
+  better accumulate its functionality. The serve function should not return any
+  response data, but directly set the data onto the provided response object.
+
+- Replaced the `IProxiedMethods` interface with the `ProxiedMethods` type.
+
+### Fixed
+
+- `header.set` and `header.append` did not handle `undefined` values. Which it
+  should.
+
+- Some properties on `IResponseData` was readonly when they should be
+  read/write.
+
+### Removed
+
+- Removed `IService` interface, moving its functionality into `LogicController`.
+
+- Removed method `signature` from `IRequestData` and `IResponseData`. Its better
+  for the application to determine how a signature (for an e-tag) should be
+  made.
+
+- Removed the `IDriverResponseData` interface, as it no longer has any use.
 
 ## [1.0.1] - 2018-05-28
 

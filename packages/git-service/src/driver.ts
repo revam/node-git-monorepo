@@ -8,50 +8,62 @@ import { ErrorCodes, ServiceType } from "./enums";
 import {
   IDriver,
   IDriverError,
-  IDriverResponseData,
   IGenericDriverOptions,
   IProxiedError,
-  IProxiedMethods,
 } from "./interfaces";
 
 /**
- * Creates an IGitDriver compatible object.
- * @param origin Origin location (URI or rel./abs. path)
- * @param options Extra options
+ * Creates an `IDriver` compatible object.
+ *
+ * @param options Options object. Must contain property `origin`.
  */
-export function createDriver(origin: string, options: IGenericDriverOptions = {}): IDriver {
-  let driver = /https?:\/\//.test(origin) ?
+export function createDriver(options: IGenericDriverOptions): IDriver;
+/**
+ * Creates an `IDriver` compatible object.
+ *
+ * @param origin Origin location (URI or rel./abs. path)
+ * @param options Extra options.
+ */
+export function createDriver(origin: string, options?: IGenericDriverOptions): IDriver;
+/**
+ * Creates an `IDriver` compatible object.
+ *
+ * @param originOrOptions Origin location or options
+ * @param options Extra options. Ignored if `originOrOptions` is an object.
+ */
+export function createDriver(originOrOptions: string | IGenericDriverOptions, options?: IGenericDriverOptions): IDriver;
+export function createDriver(origin: string | IGenericDriverOptions, options: IGenericDriverOptions = {}): IDriver {
+  if (typeof origin === "object") {
+    options = origin;
+    if (!options.origin) {
+      throw new TypeError("argument `origin` is expected, either as part of `options` or as first argument");
+    }
+    origin = options.origin;
+  }
+  const driver = /^https?:\/\//.test(origin) ?
     createWebDriver(origin) : createFileSystemDriver(origin, options.enabledDefaults);
   if (options.methods) {
-    driver = createProxiedDriver(driver, options.methods);
+    const methods = options.methods;
+    return new Proxy(driver, {
+      get(target, prop, receiver) {
+        if (ProxyMethods.has(prop as any) && prop in methods) {
+          return async(...args) => {
+            try {
+              const value = await methods[prop].apply(receiver, args);
+              if (value !== undefined) {
+                return value;
+              }
+            } catch (error) {
+              throw createProxiedError(error, prop as string);
+            }
+            return target[prop].apply(receiver, args);
+          };
+        }
+        return Reflect.get(target, prop, receiver);
+      },
+    });
   }
   return driver;
-}
-
-/**
- * Creates an IDriver compatible object with some proxied methods.
- * @param driver Original driver object
- * @param methods Proxy methods
- */
-export function createProxiedDriver(driver: IDriver, methods: IProxiedMethods): IDriver {
-  return new Proxy(driver, {
-    get(target, prop, receiver) {
-      if (ProxyMethods.has(prop as any) && prop in methods) {
-        return async(...args) => {
-          try {
-            const value = await methods[prop].apply(receiver, args);
-            if (value !== undefined) {
-              return value;
-            }
-          } catch (error) {
-            throw createProxiedError(error, prop as string);
-          }
-          return target[prop].apply(receiver, args);
-        };
-      }
-      return Reflect.get(target, prop, receiver);
-    },
-  });
 }
 
 /**
@@ -64,7 +76,8 @@ export function createFileSystemDriver(
   enabledDefaults: boolean | { [K in ServiceType]?: boolean; } = true,
 ): IDriver {
   return {
-    checkForAccess() {
+    // No access control built-in.
+    checkForAccess(): boolean {
       return true;
     },
     async checkIfEnabled(request): Promise<boolean> {
@@ -88,7 +101,7 @@ export function createFileSystemDriver(
       }
       throw createDriverError(exitCode, stderr);
     },
-    async checkIfExists(request) {
+    async checkIfExists(request): Promise<boolean> {
       if (request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
         return false;
       }
@@ -97,7 +110,7 @@ export function createFileSystemDriver(
       const {exitCode} = await waitForChild(child);
       return exitCode === 0;
     },
-    async createResponse(request) {
+    async serve(request, response): Promise<void> {
       if (request.service === undefined || request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
         return;
       }
@@ -111,10 +124,9 @@ export function createFileSystemDriver(
       if (exitCode !== 0) {
         throw createDriverError(exitCode, stderr);
       }
-      return {
-        body: stdout,
-        statusCode: 200,
-      };
+      response.body = stdout;
+      // ALLWAYS ignore previous status code/message
+      response.statusCode = 200;
     },
   };
 }
@@ -125,43 +137,40 @@ export function createFileSystemDriver(
  */
 export function createWebDriver(origin: string): IDriver {
   return {
-    checkForAccess() {
+    // No access control built-in.
+    checkForAccess(): boolean {
       return true;
     },
-    async checkIfEnabled(request) {
+    async checkIfEnabled(request): Promise<boolean> {
       if (request.service === undefined || request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
         return false;
       }
       const url = `${origin}/${request.path}/info/refs?service=git-${request.service}`;
-      const response = await waitForResponse(url, "GET");
-      return response.statusCode < 300 && response.statusCode >= 200;
+      const response = await waitForResponse(url, "HEAD");
+      return Boolean(response.statusCode && response.statusCode < 300 && response.statusCode >= 200);
     },
-    async checkIfExists(request) {
+    async checkIfExists(request): Promise<boolean> {
       if (request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
         return false;
       }
       const url = `${origin}/${request.path}/info/refs?service=git-upload-pack`;
-      const response = await waitForResponse(url, "GET");
-      return response.statusCode < 300 && response.statusCode >= 200;
+      const response = await waitForResponse(url, "HEAD");
+      return Boolean(response.statusCode && response.statusCode < 300 && response.statusCode >= 200);
     },
-    async createResponse(request, onResponse): Promise<IDriverResponseData> {
+    async serve(request, response): Promise<void> {
       if (request.service === undefined || request.path === undefined || RELATIVE_PATH_REGEX.test(request.path)) {
         return;
       }
       const typePrefix = request.isAdvertisement ? "info/refs?service=" : "";
       const url = `${origin}/${request.path}/${typePrefix}git-${request.service}`;
       const method = request.isAdvertisement ? "GET" : "POST";
-      const response = await waitForResponse(url, method, request.headers.toJSON(), request.body);
-      onResponse.addOnce(({headers}) => {
-        for (const [header, value] of Object.entries(response.headers)) {
-          headers.set(header, value);
-        }
-      });
-      return {
-        body: await waitForBuffer(response),
-        statusCode: response.statusCode,
-        statusMessage: response.statusMessage,
-      };
+      const message = await waitForResponse(url, method, request.headers.toJSON(), request.body);
+      for (const [header, value] of Object.entries(message.headers)) {
+        response.headers.set(header, value);
+      }
+      response.body = await waitForBuffer(message);
+      // ALLWAYS ignore previous status code/message
+      response.statusCode = message.statusCode!;
     },
   };
 }
@@ -185,9 +194,25 @@ async function waitForChild(child: ChildProcess): Promise<IExecutionResult> {
 
 function waitForResponse(
   url: string,
+  method: "GET" | "HEAD",
+): Promise<IncomingMessage>;
+function waitForResponse(
+  url: string,
+  method: "POST",
+  headers: OutgoingHttpHeaders,
+  body: NodeJS.ReadableStream,
+): Promise<IncomingMessage>;
+function waitForResponse(
+  url: string,
+  method: "GET" | "HEAD" | "POST",
+  headers?: OutgoingHttpHeaders,
+  body?: NodeJS.ReadableStream,
+): Promise<IncomingMessage>;
+function waitForResponse(
+  url: string,
   method: string,
   headers?: OutgoingHttpHeaders,
-  body?: Readable,
+  body?: NodeJS.ReadableStream,
 ): Promise<IncomingMessage> {
   return new Promise<IncomingMessage>((ok, error) => {
     const parsedUrl = parse(url);

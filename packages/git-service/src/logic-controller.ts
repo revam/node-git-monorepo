@@ -1,153 +1,346 @@
-import { createHash } from 'crypto';
 import { concatPacketBuffers } from "git-packet-streams";
 import * as encode from "git-side-band-message";
-import { STATUS_CODES } from "http";
 import { ReadableSignal, Signal } from "micro-signals";
-import { RequestStatus, ServiceType } from "./enums";
-import { Headers } from "./headers";
-import { IDriver, IDriverResponseData, IRequestData, IResponseData } from "./interfaces";
+import { createDriver } from "./driver";
+import { ErrorCodes, RequestStatus, ServiceType } from "./enums";
+import { HeadersInput } from "./headers";
+import { IDriver, IError, IGenericDriverOptions, IOuterError, IRequestData, IResponseData } from "./interfaces";
+import { createRequest } from "./request";
+
+const SymbolOnError = Symbol("on error");
+
+const SymbolOnComplete = Symbol("on complete");
+class OnCompleteSignal extends Signal<IRequestData> {
+  public async dispatchAsync(request: IRequestData): Promise<void> {
+    if (this._listeners.size && request.status !== RequestStatus.Pending) {
+      await Promise.all(Array.from(this._listeners).map(async (fn) => fn.call(void 0, request)));
+    }
+  }
+}
+
+const SymbolOnUsable = Symbol("on usable");
+class OnUsableSignal extends Signal<IRequestData> {
+  // Dispatch payload to observers one at the time, till request is not pending.
+  public async dispatchAsync(request: IRequestData): Promise<void> {
+    if (this._listeners.size && request.status === RequestStatus.Pending) {
+      for (const fn of this._listeners) {
+        await fn.call(void 0, request);
+        if (request.status !== RequestStatus.Pending) {
+          break;
+        }
+      }
+    }
+  }
+}
 
 /**
- * Controls service logic, such as
+ * Common logic shared across service instances.
  */
 export class LogicController {
+  /**
+   * The parent signal of `onComplete`.
+   * @internal
+   */
+  protected [SymbolOnComplete]: OnCompleteSignal = new OnCompleteSignal();
+
+  /**
+   * The parent signal of `onError`.
+   * @internal
+   */
+  protected [SymbolOnError]: Signal<IRequestData> = new Signal();
+
+  /**
+   * The parent signal of `onUsable`.
+   * @internal
+   */
+  protected [SymbolOnUsable]: OnUsableSignal = new OnUsableSignal();
+
   /**
    * Service driver - doing the heavy-lifting for us.
    */
   public readonly driver: IDriver;
+
   /**
-   * Dispatched when any error ocurr.
+   * Payload is distpatched to any observer after processing if request is
+   * **not** pending. If an observer returns a promise, will wait till the
+   * promise resolves before continuing.
+   *
+   * **Note:** Request or response should __not__ be tempered with here unless
+   * you know what you are doing.
    */
-  public readonly onError: Signal<any>;
+  public readonly onComplete: ReadableSignal<IRequestData> = this[SymbolOnComplete].readOnly();
 
-  private __messages: Buffer[] = [];
+  /**
+   * Payload is dispatched when any error is thrown from controller or the
+   * underlying driver.
+   */
+  public readonly onError: ReadableSignal<any> = this[SymbolOnError].readOnly();
 
+  /**
+   * Payload is dispatched to each observer in series till the (observer-)stack
+   * is empty or the request is no longer pending. If an observer returns a
+   * promise, will wait till the promise resolves before continuing.
+   */
+  public readonly onUsable: ReadableSignal<IRequestData> = this[SymbolOnUsable].readOnly();
+
+  /**
+   * Create a new `LogicController` instance.
+   *
+   * @param driver The driver to use.
+   */
   constructor(driver: IDriver) {
-    Object.defineProperties(this, {
-      driver: {
-        value: driver,
-        writable: false,
-      },
-      onError: {
-        value: new Signal(),
-        writable: false,
-      },
-    });
+    this.driver = driver;
   }
 
   /**
-   * Serves request with default behavior and rules.
+   * Creates a new `IRequestData` compliant object.
+   *
+   * @param body Request body as a stream
+   * @param headers HTTP headers
+   * @param method HTTP method used for request
+   * @param url Tailing url path fragment with querystring.
    */
+  public create(
+    body: NodeJS.ReadableStream,
+    headers: HeadersInput,
+    method: string,
+    url: string,
+  ): Promise<IRequestData> {
+    return createRequest(body, headers, method, url);
+  }
+
+  /**
+   * Serves request with sane behaviour.
+   *
+   *
+   * @param request An existing request.
+   * @throws if any observer in either `onUsable` or `onComplete` throws.
+   * @see LogicController#accept
+   * @see LogicController#reject
+   * @returns response data.
+   */
+  public serve(request: IRequestData): Promise<IResponseData>;
+  /**
+   * Serves request with sane behaviour.
+   *
+   * @param body Request body as a stream
+   * @param headers HTTP headers
+   * @param method HTTP method used for request
+   * @param url Tailing url path fragment with querystring.
+   * @throws if any input data is invalid.
+   * @throws if any observer in either `onUsable` or `onComplete` throws.
+   * @see LogicController#accept
+   * @see LogicController#reject
+   * @returns response data.
+   */
+  public serve(
+    body: NodeJS.ReadableStream,
+    headers: HeadersInput,
+    method: string,
+    url: string,
+  ): Promise<IResponseData>;
   public async serve(
-    request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
+    body: NodeJS.ReadableStream | IRequestData,
+    headers?: HeadersInput,
+    method?: string,
+    url?: string,
   ): Promise<IResponseData> {
-    if (! await this.checkIfExists(request, onResponse)) {
-      return this.reject(request, 404); // 404 Not Found
+    let request: IRequestData;
+    if (arguments.length === 1 && typeof body === "object") {
+      request = body as IRequestData;
     }
-    else if (! await this.checkForAccess(request, onResponse)) {
-      return this.reject(request, 401); // 401 Unauthorized
+    else if (arguments.length === 4) {
+      request = await this.create(body as NodeJS.ReadableStream, headers!, method!, url!);
     }
-    else if (! await this.checkIfEnabled(request, onResponse)) {
-      return this.reject(request, 403); // 403 Forbidden
+    else {
+      throw new Error(`Invalid arguments supplied to method "serve".`);
     }
-    return this.accept(request, onResponse); // 2xx-5xx HTTP status code
+    if (request.status === RequestStatus.Pending) {
+      try {
+        await this[SymbolOnUsable].dispatchAsync(request);
+      } catch (error) {
+        throw wrapError(error, ErrorCodes.ERR_FAILED_REQUEST_SIGNAL);
+      }
+      // Recheck status because an observer might have changed it.
+      if (request.status === RequestStatus.Pending) {
+        if (! await this.checkIfExists(request)) {
+          await this.reject(request, 404); // 404 Not Found
+        }
+        else if (! await this.checkForAccess(request)) {
+          await this.reject(request, 401); // 401 Unauthorized
+        }
+        else if (! await this.checkIfEnabled(request)) {
+          await this.reject(request, 403); // 403 Forbidden
+        }
+        else {
+          await this.accept(request); // 2xx-5xx HTTP status code
+        }
+      }
+      try {
+        await this[SymbolOnComplete].dispatchAsync(request);
+      } catch (error) {
+        throw wrapError(error, ErrorCodes.ERR_FAILED_RESPONSE_SIGNAL);
+      }
+    }
+    return request.response;
   }
 
   /**
    * Accepts request and asks the underlying driver for an appropriate response.
    * If driver returns a 4xx or 5xx, then the request is rejected and marked as
    * a failure.
+   *
+   * @param request An existing request.
    */
-  public async accept(
-    request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
-  ): Promise<IResponseData> {
+  public async accept(request: IRequestData): Promise<void> {
     if (request.status !== RequestStatus.Pending) {
       return;
     }
-    request.status = RequestStatus.Accepted;
+    const response = request.response;
+    // No service -> invalid input -> 404 Not Found.
     if (!request.service) {
+      request.status = RequestStatus.Failure;
+      response.statusCode = 404;
+      response.body = undefined;
+      this.createPlainBodyForResponse(response);
       return;
     }
-    let output: IDriverResponseData;
+    if (response.statusCode > 300 && response.statusCode < 400) {
+      return this.redirect(request);
+    }
+    request.status = RequestStatus.Accepted;
     try {
-      output = await this.driver.createResponse(request, onResponse);
+      await this.driver.serve(request, response);
     } catch (error) {
       this.dispatchError(error);
-      output = {
-        statusCode: 500,
-        statusMessage: error && error.message || STATUS_CODES[500],
-      };
+      response.statusCode = error && (error.status || error.statusCode) || 500;
+      response.body = undefined;
     }
-    if (output.statusCode >= 400) {
+    // If no status code is set or is below 300 with no body, reset response
+    // status and body and throw error.
+    if (response.statusCode < 300 && !response.body) {
+      const error = new Error("Response is within the 2xx range, but contains no body.") as IError;
+      error.code = ErrorCodes.ERR_INVALID_BODY_FOR_2XX;
+      this.dispatchError(error);
+      response.statusCode = 500;
+      response.body = undefined;
+    }
+    // Mark any response with a status above or equal to 400 as a failure.
+    if (response.statusCode >= 400) {
       request.status = RequestStatus.Failure;
-      return this.createRejectedResponse(output);
+      this.createPlainBodyForResponse(response);
+    }
+    // Return here if not OK
+    if (response.statusCode !== 200) {
+      return;
     }
     const packets: Buffer[] = [];
-    const headers = new Headers();
-    if (output.body) {
-      packets.push(output.body);
+    const headers = response.headers;
+    if (response.body) {
+      packets.push(response.body);
       if (request.isAdvertisement) {
         const header = AdHeaders[request.service];
-        if (!output.body.slice(0, header.length).equals(header)) {
-          packets.splice(0, 0, header);
+        // Add header to response if none was found.
+        if (!response.body.slice(0, header.length).equals(header)) {
+          packets.unshift(header);
         }
-        headers.set("Content-Type", `application/x-git-${request.service}-advertisement`);
       }
-      else {
-        packets.push(...this.__messages);
-        headers.set("Content-Type", `application/x-git-${request.service}-result`);
+      // Add messages at the end of stream
+      else if (response.messages) {
+        response.messages.forEach((message) => packets.push(encode(message)));
       }
-      headers.set("Content-Length", packets.reduce((p, c) => p + c.length, 0).toString());
     }
-    const body = concatPacketBuffers(packets, !request.isAdvertisement && this.__messages.length ? 0 : undefined);
-    return createResponse({
-      body,
-      headers,
-      statusCode: output.statusCode,
-      statusMessage: output.statusMessage || STATUS_CODES[output.statusCode],
-    });
+    response.body = concatPacketBuffers(packets, !request.isAdvertisement && response.messages.length ? 0 : undefined);
+    headers.set("Content-Type", `application/x-git-${request.service}-${request.isAdvertisement ?
+      "advertisement" : "result"}`);
+    headers.set("Content-Length", response.body.length);
   }
 
   /**
    * Rejects request with status code and an optional status message.
    * Only works with http status error codes.
-   * @param statusCode 4xx or 5xx http status code for rejection.
+   *
+   * Will redirect if statusCode is in the 3xx range.
+   *
+   * @param request An existing request.
+   * @param statusCode 3xx, 4xx or 5xx http status code.
    *                   Default is `500`.
-   * @param statusMessage Optional reason for rejection.
-   *                      Default is status message for status code.
+   *
+   *                   Code will only be set if no prior code is set.
+   * @param body Reason for rejection.
    */
-  public async reject(
-    request: IRequestData,
-    statusCode?: number,
-    statusMessage?: string,
-  ): Promise<IResponseData> {
+  public async reject(request: IRequestData, statusCode?: number, body?: string): Promise<void> {
     if (request.status !== RequestStatus.Pending) {
       return;
     }
+    const response = request.response;
+    // Redirect instead if the statusCode is in the 3xx range.
+    if (response.statusCode && response.statusCode > 300 && response.statusCode < 400) {
+      return this.redirect(request);
+    }
     request.status = RequestStatus.Rejected;
-    if (!request.service) {
+    if (response.statusCode < 400) {
+      if (!(statusCode && statusCode < 600 && statusCode >= 300)) {
+        statusCode = 500;
+      }
+      response.statusCode = statusCode;
+    }
+    this.createPlainBodyForResponse(response, body);
+  }
+
+  /**
+   * Redirects client with "Location" header. Header must be set beforehand.
+   */
+  public redirect(request: IRequestData): Promise<void>;
+  /**
+   * Redirects client to cached entry.
+   */
+  public redirect(request: IRequestData, ststuCode: 304): Promise<void>;
+  /**
+   * Redirects client with "Location" header.
+   */
+  public redirect(request: IRequestData, statusCode: number): Promise<void>;
+  /**
+   * Redirects client to `location`. Can optionally set status code of redirect.
+   * @param location The location to redirect to.
+   */
+  public redirect(request: IRequestData, location: string, statusCode?: number): Promise<void>;
+  public redirect(reqiest: IRequestData, locationOrStatus?: string | number, statusCode?: number): Promise<void>;
+  public async redirect(request: IRequestData, location?: string | number, statusCode?: number): Promise<void> {
+    if (request.status !== RequestStatus.Pending) {
       return;
     }
-    if (!(statusCode < 600 && statusCode >= 400)) {
-      statusCode = 500;
+    const response = request.response;
+    if (typeof location === "number") {
+      statusCode = location;
+      location = undefined;
     }
-    if (!(statusMessage && typeof statusMessage === "string")) {
-      statusMessage = STATUS_CODES[statusCode] || "Unknown status";
+    if (location) {
+      response.headers.set("Location", location[0] !== "/" ? `/${location}` : location);
     }
-    return this.createRejectedResponse({statusCode, statusMessage});
+    // Reject if no "Location" header is not found and status is not 304
+    if (!response.headers.has("Location") && response.statusCode !== 304) {
+      response.statusCode = 500;
+      return this.reject(request);
+    }
+    request.status = RequestStatus.Redirect;
+    if (!(response.statusCode > 300 && response.statusCode < 400)) {
+      if (!(statusCode && statusCode > 300 && statusCode < 400)) {
+        statusCode = 308;
+      }
+      response.statusCode = statusCode;
+    }
+    response.headers.delete("Content-Type");
+    response.headers.delete("Content-Length");
+    response.body = undefined;
   }
 
   /**
    * Checks if repository exists.
    */
-  public async checkIfExists(
-    request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
-  ): Promise<boolean> {
+  public async checkIfExists(request: IRequestData): Promise<boolean> {
     try {
-      return this.driver.checkIfExists(request, onResponse);
+      return this.driver.checkIfExists(request, request.response);
     } catch (error) {
       this.dispatchError(error);
     }
@@ -156,14 +349,11 @@ export class LogicController {
 
   /**
    * Checks if service is enabled.
-   * We can still *atempt* a forcefull use of service.
+   * Can still *atempt* forcefull use of service.
    */
-  public async checkIfEnabled(
-    request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
-  ): Promise<boolean> {
+  public async checkIfEnabled(request: IRequestData): Promise<boolean> {
     try {
-      return this.driver.checkIfEnabled(request, onResponse);
+      return this.driver.checkIfEnabled(request, request.response);
     } catch (error) {
       this.dispatchError(error);
     }
@@ -171,15 +361,11 @@ export class LogicController {
   }
 
   /**
-   * Checks access rights to service.
-   * Depends on driver implementation.
+   * Check for access to repository and/or service.
    */
-  public async checkForAccess(
-    request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
-  ): Promise<boolean> {
+  public async checkForAccess(request: IRequestData): Promise<boolean> {
     try {
-      return this.driver.checkForAccess(request, onResponse);
+      return this.driver.checkForAccess(request, request.response);
     } catch (error) {
       this.dispatchError(error);
     }
@@ -187,37 +373,79 @@ export class LogicController {
   }
 
   /**
-   * Inform client of message, but only if service is accepted and not a
-   * failure.
-   * @param message Message to inform client
+   * Creates a plain-text body for response, but only if no body exists.
+   *
+   * The body is populated with `data` and any additional messages from
+   * `response.messages`.
+   *
+   * @param response The response to create for
+   * @param data Defaults to `response.statusMessage`.
    */
-  public sidebandMessage(message: string | Buffer) {
-    this.__messages.push(encode(message));
-    return this;
-  }
-
-  private createRejectedResponse(payload: IDriverResponseData): IResponseData {
-    const headers = new Headers();
-    let body: Buffer;
-    if (payload.body) {
-      body = payload.body;
-    }
-    else {
-      body = Buffer.from(payload.statusMessage);
+  private createPlainBodyForResponse(
+    response: IResponseData,
+    data: string = response.statusMessage,
+  ): void {
+    if (!response.body) {
+      const messages = response.messages.slice();
+      messages.unshift(data);
+      for (const [index, value] of messages.entries()) {
+        if (!value.endsWith("\n")) {
+          messages[index] += "\n";
+        }
+      }
+      const headers = response.headers;
+      const body = response.body = Buffer.from(messages.join(""));
       headers.set("Content-Type", "text/plain; charset=utf-8");
       headers.set("Content-Length", body.length);
     }
-    return createResponse({
-      body,
-      headers,
-      statusCode: payload.statusCode,
-      statusMessage: payload.statusMessage,
-    });
   }
 
-  private dispatchError(error: any) {
-    setImmediate(() => this.onError.dispatch(error));
+  /**
+   * Dispatch error onto signal `onError`.
+   */
+  private dispatchError(error: any): void {
+    setImmediate(() => this[SymbolOnError].dispatch(error));
   }
+}
+
+/**
+ * Creates a new logic controller configured with a driver for `origin`.
+ *
+ * @param origin Origin location (URI or rel./abs. path)
+ * @param options Extra options
+ */
+export function createController(origin: string, options?: IGenericDriverOptions): LogicController;
+/**
+ * Creates a new logic controller configured with a driver.
+ *
+ * @param options Options object. Must contain property `origin`.
+ */
+export function createController(options: IGenericDriverOptions): LogicController;
+/**
+ * Creates a new logic controller configured with a driver.
+ *
+ * @param originOrOptions Origin location or options
+ * @param options Extra options. Ignored if `originOrOptions` is an object.
+ */
+export function createController(
+  originOrOptions: string | IGenericDriverOptions,
+  options?: IGenericDriverOptions,
+): LogicController;
+export function createController(
+  originOrOptions: string | IGenericDriverOptions,
+  options?: IGenericDriverOptions,
+): LogicController {
+  return new LogicController(createDriver(originOrOptions, options));
+}
+
+function wrapError(error: any, code: ErrorCodes): IOuterError {
+  const outerError: Partial<IOuterError> = new Error("Error thown from signal");
+  outerError.code = code;
+  if (error && (error.status || error.statusCode)) {
+    outerError.statusCode = error.status || error.statusCode;
+  }
+  outerError.inner = error;
+  return outerError as IOuterError;
 }
 
 /**
@@ -227,38 +455,3 @@ const AdHeaders = {
   [ServiceType.ReceivePack]: Buffer.from("001f# service=git-receive-pack\n0000"),
   [ServiceType.UploadPack]: Buffer.from("001e# service=git-upload-pack\n0000"),
 };
-
-/**
- * Creates a response data holder with signature.
- * @param data Response data
- */
-function createResponse(data: Partial<IResponseData>) {
-  return Object.create(null, {
-    __signature: {
-      enumerable: false,
-      value: undefined,
-    },
-    body: {
-      value: data.body,
-    },
-    headers: {
-      value: data.headers,
-    },
-    signature: {
-      enumerable: false,
-      value() {
-        if (this.__signature) {
-          return this.__signature;
-        }
-        return this.__signature = createHash("sha256").update(JSON.stringify(this)).digest("hex");
-      },
-      writable: false,
-    },
-    statusCode: {
-      value: data.statusCode,
-    },
-    statusMessage: {
-      value: data.statusMessage,
-    },
-  });
-}

@@ -1,32 +1,5 @@
-import { ReadableSignal } from "micro-signals";
-import { Readable } from "stream";
-import { RequestStatus, ServiceType } from './enums';
+import { RequestStatus, ServiceType } from "./enums";
 import { Headers } from "./headers";
-import { LogicController } from "./logic-controller";
-
-/**
- *
- */
-export interface IService {
-  /**
-   * Resolves when request is ready.
-   */
-  readonly onRequest: ReadableSignal<IRequestData>;
-  /**
-   * Resolves when response is ready.
-   */
-  readonly onResponse: ReadableSignal<IResponseData>;
-  /**
-   * Logic controller.
-   */
-  readonly controller: LogicController;
-  /**
-   * Serves request with default behavior and rules.
-   * Returns the final response data, which may have been altered by any
-   * observers registered on `onResponse`.
-   */
-  serve(): Promise<IResponseData>;
-}
 
 /**
  * Request data.
@@ -35,7 +8,7 @@ export interface IRequestData {
   /**
    * Stream leading to request data.
    */
-  body: Readable;
+  body: NodeJS.ReadableStream;
   /**
    * Incoming HTTP headers.
    */
@@ -55,21 +28,22 @@ export interface IRequestData {
   /**
    * Requested capebilities client support and/or want.
    */
-  readonly capabilities: Map<string, string>;
+  readonly capabilities: ReadonlyMap<string, string | undefined>;
   /**
    * Requested commands for service.
    */
-  readonly commands: Array<IUploadPackCommand | IReceivePackCommand>;
+  readonly commands: ReadonlyArray<IUploadPackCommand | IReceivePackCommand>;
   /**
    * Leading path fragment.
    */
   path: string;
   /**
-   * Returns a signature for object.
+   * The response object.
    */
-  signature(): string;
+  readonly response: IResponseData;
   /**
-   * Request state. Can be used by applications to store values.
+   * Request state. Can be used by application(s) to store state data.
+   * Shared with response.
    */
   state: any;
 }
@@ -115,57 +89,97 @@ export interface IResponseData {
   /**
    * Response body.
    */
-  body: Buffer;
+  body?: Buffer;
   /**
    * Response headers.
    */
-  headers: Headers;
+  readonly headers: Headers;
+  /**
+   * The request object.
+   */
+  readonly request: IRequestData;
   /**
    * Response status code.
    */
   statusCode: number;
   /**
-   * Response status message.
+   * Response status message as indiacted by statusCode.
    */
-  statusMessage: string;
+  readonly statusMessage: string;
   /**
-   * Returns a signature for object.
+   * Show message to client.
+   * @param message Message to show client
    */
-  signature(): string;
+  addMessage(message: string): void;
+  /**
+   * Encoded messages to show client.
+   */
+  readonly messages: ReadonlyArray<string>;
+  /**
+   * Response state. Can be used by application(s) to store state data.
+   * Shared with request.
+   */
+  state: any;
 }
 
 /**
- * Low-level interface for working with git.
+ * Low-level part of the controller for handling common actions with git.
  */
 export interface IDriver {
   /**
-   * Checks access to service (e.g. authenticate by headers).
+   * Check for access to repository and/or service. (e.g. authenticate by
+   * headers).
+   *
+   * @param request Request data to check. Any writable properties can be
+   *                modified.
+   * @param response Response data. Any writable properties can be modified.
+   * @returns True if request should gain access to repository and/or service.
    */
   checkForAccess(
     request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
+    response: IResponseData,
   ): boolean | PromiseLike<boolean>;
   /**
    * Checks if service is enabled for repository.
+   *
+   * **Note:** You can still _atempt_ forcefull use of service.
+   *
+   * @param request Request data to check. Any writable properties can be
+   *                modified.
+   * @param response Response data. Any writable properties can be modified.
+   * @returns True if service is enabled on selected repository.
    */
   checkIfEnabled(
     request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
+    response: IResponseData,
   ): boolean | PromiseLike<boolean>;
   /**
    * Checks if repository exists.
+   *
+   * @param request Request data to check. Any writable properties can be
+   *                modified.
+   * @param response Response data. Any writable properties can be modified.
+   * @returns True if repository exists.
    */
   checkIfExists(
     request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
+    response: IResponseData,
   ): boolean | PromiseLike<boolean>;
   /**
-   * Creates partly response data for request data.
+   * Fetch body and status code for request.
+   *
+   * At the bare minimum the response status-code should be set. If the request
+   * was OK than a body should also be set.
+   * If the response is set to an error code (4xx or 5xx), then it will be
+   * marked a failure by the controller.
+   *
+   * @param request Request data to use.
+   * @param response Response data to modify.
    */
-  createResponse(
+  serve(
     request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
-  ): IDriverResponseData | Promise<IDriverResponseData>;
+    response: IResponseData,
+  ): void | Promise<void>;
 }
 
 /**
@@ -179,63 +193,33 @@ export interface IGenericDriverOptions {
   /**
    * Proxied methods.
    */
-  methods?: IProxiedMethods;
+  methods?: ProxiedMethods;
+  /**
+   * Origin location as an URI or relative/abolute path.
+   */
+  origin?: string;
 }
 
 /**
- * Custom implementations of driver methods.
+ * Custom implementations for driver methods.
+ *
+ * All proxied methods should act the same as the methods they are proxying,
+ * with the exception of allowing void as a return type.
+ *
+ * When a proxied method returns undefined, or a promise-like object resolving
+ * to undefined, the proxided method will fallback to the original method
+ * implementation.
  */
-export interface IProxiedMethods {
-  /**
-   * Checks access to service (e.g. authenticate by headers).
-   * Return undefined, or an empty promise to fallback to default
-   * implementation.
-   */
-  checkForAccess?(
+export type ProxiedMethods = {
+  [P in keyof Exclude<IDriver, "createResponse">]?: (
     request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
-  ): boolean | void | PromiseLike<boolean | void>;
-  /**
-   * Checks if service is enabled for repository.
-   * Return undefined, or an empty promise to fallback to default
-   * implementation.
-   */
-  checkIfEnabled?(
-    request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
-  ): boolean | void | PromiseLike<boolean | void>;
-  /**
-   * Checks if repository exists.
-   * Return undefined, or an empty promise to fallback to default
-   * implementation.
-   */
-  checkIfExists?(
-    request: IRequestData,
-    onResponse: ReadableSignal<IResponseData>,
-  ): boolean | void | PromiseLike<boolean | void>;
-}
-
-/**
- * Partly response data from driver.
- */
-export interface IDriverResponseData {
-  /**
-   * Raw buffer response.
-   */
-  body?: Buffer;
-  /**
-   * Status code. Uses HTTP status codes for compatibility.
-   */
-  statusCode: number;
-  /**
-   * Status message. May be an error message if statusCode is an HTTP error
-   * code.
-   */
-  statusMessage?: string;
-}
+    response: IResponseData,
+  ) => ReturnType<IDriver[P]> | void | PromiseLike<void>;
+};
 
 export interface IError extends Error {
   code: string;
+  statusCode?: number;
 }
 
 export interface IOuterError extends IError {

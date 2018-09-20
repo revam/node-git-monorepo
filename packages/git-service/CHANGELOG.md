@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.0.0] - 2018-09-20
+
 ### Added
 
 - `IResponseData` now has a property `state` shared with its corresponding
@@ -213,5 +215,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial public release
 
-[Unreleased]: https://github.com/revam/koa-git-smart-proxy/compare/git-service-v1.0.1...HEAD
-[1.0.1]: https://github.com/revam/koa-git-smart-proxy/compare/git-service-v1.0.0...git-service-v1.0.1
+[Unreleased]: https://github.com/revam/node-git-service/compare/git-service-v2.0.0...HEAD
+[2.0.0]: https://github.com/revam/node-git-service/compare/git-service-v1.0.1...git-service-v2.0.0
+[1.0.1]: https://github.com/revam/node-git-service/compare/git-service-v1.0.0...git-service-v1.0.1

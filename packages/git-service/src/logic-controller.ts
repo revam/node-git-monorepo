@@ -93,6 +93,16 @@ export class LogicController {
   }
 
   /**
+   * Uses middleware with controller. Adds all elements in `middleware` to
+   * `onUsable` in accending order.
+   * @param middleware Middleware to use
+   */
+  public use(...middleware: ((this: LogicController, request: IRequestData, response: IResponseData) => any)[]): this {
+    middleware.forEach((m) => this.onUsable.add((request) => m.call(this, request, request.response)));
+    return this;
+  }
+
+  /**
    * Creates a new `IRequestData` compliant object.
    *
    * @param body Request body as a stream

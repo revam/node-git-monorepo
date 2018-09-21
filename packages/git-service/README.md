@@ -19,7 +19,7 @@ $ npm install --save https://github.com/revam/node-git-service/releases/download
 From git.lan (internet-people can ignore this):
 
 ```sh
-$ npm install --save https://git.lan/mist/node-git@git-service-v$VERSION/package.tgz
+$ npm install --save https://git.lan/mist/node-git-monorepo@git-service-v$VERSION/package.tgz
 ```
 
 ## What is this?

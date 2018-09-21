@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.1.0] - 2018-09-21
+
+### Added
+
+- Added a new method `use(...middleware)` to controller as a simpler way of
+  adding middleware (listeners on onUsable).
+
 ## [2.0.0] - 2018-09-20
 
 ### Added
@@ -215,6 +222,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial public release
 
-[Unreleased]: https://github.com/revam/node-git-service/compare/git-service-v2.0.0...HEAD
+[Unreleased]: https://github.com/revam/node-git-service/compare/git-service-v2.1.0...HEAD
+[2.1.0]: https://github.com/revam/node-git-service/compare/git-service-v2.0.0...git-service-v2.1.0
 [2.0.0]: https://github.com/revam/node-git-service/compare/git-service-v1.0.1...git-service-v2.0.0
 [1.0.1]: https://github.com/revam/node-git-service/compare/git-service-v1.0.0...git-service-v1.0.1

@@ -7,6 +7,7 @@
     // Want these
     "max-file-line-count": [true, 2000],
     // Don't want these
+    "array-type": false,
     "cyclomatic-complexity": false,
     "newline-before-return": false,
     "newline-per-chained-call": false,

@@ -2,9 +2,10 @@
 	"name": "node-git-service",
 	"private": true,
 	"scripts": {
-    "docs": "typedoc"
+		"docs": "typedoc"
 	},
 	"devDependencies": {
+		"del-cli": "^1.1.0",
 		"lerna": "^2.10.2",
 		"typedoc": "^0.11.1",
 		"typedoc-plugin-monorepo": "^0.1.0",

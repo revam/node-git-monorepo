@@ -8,8 +8,10 @@
     "test": "test"
   },
   "scripts": {
+    "cleanup": "del-cli lib",
+    "build": "tslint src/**/*.ts && del-cli lib && tsc -p .",
+    "build:dev": "tslint src/**/*.ts && tsc -p . --sourceMap true",
     "test": "tslint test/**/*.ts && jest",
-    "build": "tsc --noEmit -p . && tslint src/**/*.ts && tsc -p .",
     "prepublish": "npm run test && npm run build"
   },
   "repository": {

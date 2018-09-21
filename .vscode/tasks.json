@@ -19,7 +19,7 @@
     },
     {
       "type": "npm",
-      "script": "build",
+      "script": "build:dev",
       "path": "packages/git-service/",
       "group": {
         "kind": "build",

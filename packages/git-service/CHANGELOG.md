@@ -9,8 +9,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Added
 
-- A new (readonly) property `url` for `IRequestData`, for logging/analystics
-  purposes, but how it is used is up to the application/user.
+- Added two new (readonly) properties, `url` and `method`, on `IRequestData`,
+  for logging/analystics purposes, but how they are used is up to the
+  application.
+
+### Changed
+
+- Production builds no longer contain source maps.
+
+- Development builds now contain source maps for code and declaration files.
 
 ## [2.1.0] - 2018-09-21
 

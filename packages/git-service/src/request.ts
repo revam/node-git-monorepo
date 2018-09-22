@@ -53,6 +53,11 @@ export function createRequest(
         value: isAdvertisement,
         writable: false,
       },
+      method: {
+        enumerable: true,
+        value: method,
+        writable: false,
+      },
       path: {
         enumerable: true,
         value: path,

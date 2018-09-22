@@ -17,6 +17,7 @@
     "noUnusedParameters": true,
     "stripInternal": true,
     "declaration": true,
+    "declarationMap": false,
     "sourceMap": false,
     "lib": [
       "es5",

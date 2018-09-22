@@ -50,6 +50,10 @@ export interface IRequestData {
    * URL for request.
    */
   readonly url: string;
+  /**
+   * HTTP method used with request.
+   */
+  readonly method: string;
 }
 
 /**

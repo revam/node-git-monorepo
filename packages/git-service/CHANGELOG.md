@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## Added
 
 - A new (readonly) property `url` for `IRequestData`, for logging/analystics
-  purposes.
+  purposes, but how it is used is up to the application/user.
 
 ## [2.1.0] - 2018-09-21
 

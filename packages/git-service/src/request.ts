@@ -9,7 +9,7 @@ export function createRequest(
   body: NodeJS.ReadableStream,
   inputHeaders: HeadersInput,
   method: string,
-  fragment: string,
+  url: string,
 ): Promise<IRequestData> {
   if (typeof body !== "object" || typeof body.pipe !== "function") {
     throw new TypeError("argument `body` must be streamable");
@@ -20,39 +20,46 @@ export function createRequest(
   if (typeof method !== "string" || !method) {
     throw new TypeError("argument `method` must be of type 'string'.");
   }
-  if (typeof fragment !== "string" || !fragment) {
-    throw new TypeError("argument `fragment` must be of type 'string'.");
+  if (typeof url !== "string" || !url) {
+    throw new TypeError("argument `url` must be of type 'string'.");
   }
   const headers = new Headers(inputHeaders);
   const content_type = headers.get("Content-Type");
-  const [isAdvertisement = false, path, service] = mapInputToRequest(fragment, method, content_type);
+  const [isAdvertisement = false, path, service] = mapInputToRequest(url, method, content_type);
   return new Promise((resolve, reject) => {
     const requestData: IRequestData = Object.create(null, {
       body: {
+        enumerable: true,
         value: body,
         writable: true,
       },
       capabilities: {
+        enumerable: true,
         value: new Map(),
         writable: false,
       },
       commands: {
+        enumerable: true,
         value: new Array(),
         writable: false,
       },
       headers: {
+        enumerable: true,
         value: headers,
         writable: false,
       },
       isAdvertisement: {
+        enumerable: true,
         value: isAdvertisement,
         writable: false,
       },
       path: {
+        enumerable: true,
         value: path,
         writable: true,
       },
       service: {
+        enumerable: true,
         value: service,
         writable: false,
       },
@@ -62,8 +69,14 @@ export function createRequest(
         writable: true,
       },
       status: {
+        enumerable: true,
         value: RequestStatus.Pending,
         writable: true,
+      },
+      url: {
+        enumerable: true,
+        value: url,
+        writable: false,
       },
     });
     Object.defineProperty(requestData, "response", {
@@ -102,18 +115,22 @@ function createResponse(request: IRequestData): IResponseData {
       writable: false,
     },
     body: {
+      enumerable: true,
       value: undefined,
       writable: true,
     },
     headers: {
+      enumerable: true,
       value: new Headers(),
       writable: false,
     },
     messages: {
+      enumerable: true,
       value: [],
       writable: false,
     },
     request: {
+      enumerable: true,
       value: request,
       writable: false,
     },

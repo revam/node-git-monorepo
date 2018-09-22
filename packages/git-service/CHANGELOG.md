@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## Added
+
+- A new (readonly) property `url` for `IRequestData`, for logging/analystics
+  purposes.
+
 ## [2.1.0] - 2018-09-21
 
 ### Added

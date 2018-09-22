@@ -46,6 +46,10 @@ export interface IRequestData {
    * Shared with response.
    */
   state: any;
+  /**
+   * URL for request.
+   */
+  readonly url: string;
 }
 
 /**

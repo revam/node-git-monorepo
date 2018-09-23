@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-## Added
+## [2.2.0] - 2018-09-23
+
+### Added
 
 - Added two new (readonly) properties, `url` and `method`, on `IRequestData`,
   for logging/analystics purposes, but how they are used is up to the
@@ -253,7 +255,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial public release
 
-[Unreleased]: https://github.com/revam/node-git-service/compare/git-service-v2.1.0...HEAD
+[Unreleased]: https://github.com/revam/node-git-service/compare/git-service-v2.2.0...HEAD
+[2.2.0]: https://github.com/revam/node-git-service/compare/git-service-v2.1.0...git-service-v2.2.0
 [2.1.0]: https://github.com/revam/node-git-service/compare/git-service-v2.0.0...git-service-v2.1.0
 [2.0.0]: https://github.com/revam/node-git-service/compare/git-service-v1.0.1...git-service-v2.0.0
 [1.0.1]: https://github.com/revam/node-git-service/compare/git-service-v1.0.0...git-service-v1.0.1

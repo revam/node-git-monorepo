@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.3.0] - 2018-09-23
+
 ### Added
 
 - Added a new class `LogicControllerContext`, used as `this` in any middleware
@@ -270,7 +272,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial public release
 
-[Unreleased]: https://github.com/revam/node-git-service/compare/git-service-v2.2.0...HEAD
+[Unreleased]: https://github.com/revam/node-git-service/compare/git-service-v2.3.0...HEAD
+[2.3.0]: https://github.com/revam/node-git-service/compare/git-service-v2.2.0...git-service-v2.3.0
 [2.2.0]: https://github.com/revam/node-git-service/compare/git-service-v2.1.0...git-service-v2.2.0
 [2.1.0]: https://github.com/revam/node-git-service/compare/git-service-v2.0.0...git-service-v2.1.0
 [2.0.0]: https://github.com/revam/node-git-service/compare/git-service-v1.0.1...git-service-v2.0.0

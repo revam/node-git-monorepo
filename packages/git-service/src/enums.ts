@@ -13,11 +13,11 @@ export enum ErrorCodes {
   /**
    * Something went wrong in a listener for request data.
    */
-  ERR_FAILED_REQUEST_SIGNAL = "ERR_FAILED_REQUEST_SIGNAL",
+  ERR_FAILED_IN_USABLE_SIGNAL = "ERR_FAILED_IN_USABLE_SIGNAL",
   /**
    * Something went wrong in a listener for response data.
    */
-  ERR_FAILED_RESPONSE_SIGNAL = "ERR_FAILED_RESPONSE_SIGNAL",
+  ERR_FAILED_IN_COMPLETE_SIGNAL = "ERR_FAILED_IN_COMPLETE_SIGNAL",
   /**
    * Response status is within the 2xx range, but contains no body. Possible
    * driver error.

@@ -15,9 +15,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
-- Production builds no longer contain source maps.
+- Production builds no longer contain source maps at all.
 
 - Development builds now contain source maps for code and declaration files.
+
+### Fixed
+
+- Not all properties in request- and response object had the `enumerable` property
+  in their descriptor object.
+
+- Fixed incorrect error code for errors thrown from `onUsable`/`onComplete`
+  signals.
 
 ## [2.1.0] - 2018-09-21
 

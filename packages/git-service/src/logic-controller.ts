@@ -169,7 +169,7 @@ export class LogicController {
       try {
         await this[SymbolOnUsable].dispatchAsync(request);
       } catch (error) {
-        throw wrapError(error, ErrorCodes.ERR_FAILED_REQUEST_SIGNAL);
+        throw wrapError(error, ErrorCodes.ERR_FAILED_IN_USABLE_SIGNAL);
       }
       // Recheck status because an observer might have changed it.
       if (request.status === RequestStatus.Pending) {
@@ -189,7 +189,7 @@ export class LogicController {
       try {
         await this[SymbolOnComplete].dispatchAsync(request);
       } catch (error) {
-        throw wrapError(error, ErrorCodes.ERR_FAILED_RESPONSE_SIGNAL);
+        throw wrapError(error, ErrorCodes.ERR_FAILED_IN_COMPLETE_SIGNAL);
       }
     }
     return request.response;

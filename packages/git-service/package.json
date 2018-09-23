@@ -12,7 +12,7 @@
     "build": "tsc -p .",
     "build:dev": "tsc -p . --sourceMap true --declarationMap true",
     "lint:src": "tslint -p . src/**/*.ts",
-    "lint:test": "tslint -p . test/**/*.ts",
+    "lint:test": "tslint -p ./test test/**/*.ts",
     "test": "jest",
     "prebuild": "npm run lint:src",
     "prebuild:dev": "npm run lint:src",

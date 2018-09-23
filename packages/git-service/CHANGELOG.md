@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   non-exports. Since the exports from "src/request.ts" was only used by
   "src/logic-controller.ts".
 
+- Tweaked linting rules and npm scripts
+
 ### Fixed
 
 - Not all properties in request- and response object had the `enumerable` property
@@ -33,6 +35,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Fixed interface `IRequestData` not reflecting all possible states for
   properties `service` and `path`.
+
+- Linting warnings/errors for source/test code.
 
 ## [2.1.0] - 2018-09-21
 

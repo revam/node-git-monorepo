@@ -1,4 +1,4 @@
-import { Headers } from '../src/headers';
+import { Headers } from "../src/headers";
 
 describe("Headers", () => {
   it("should accept zero arguments", (done) => {

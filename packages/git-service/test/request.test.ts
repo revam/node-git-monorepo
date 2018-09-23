@@ -3,7 +3,7 @@ import { ServiceType } from "../src/enums";
 import { LogicController } from "../src/logic-controller";
 
 describe("LogicController#create", () => {
-  it("should map requests from <repository>/info/refs", (done) => validateData(
+  it("should map requests from <repository>/info/refs", async (done) => validateData(
     new LogicController(void 0),
     [
       // Test for path **without** leading slash.
@@ -37,7 +37,7 @@ describe("LogicController#create", () => {
     ],
     done,
   ));
-  it("should map requests from <repository>/git-<service>", (done) => validateData(
+  it("should map requests from <repository>/git-<service>", async (done) => validateData(
     new LogicController(void 0),
     [
       // Test for path **without** leading slash.
@@ -69,7 +69,7 @@ describe("LogicController#create", () => {
     ],
     done,
   ));
-  it("should ignore all other paths", (done) => validateData(
+  it("should ignore all other paths", async (done) => validateData(
     new LogicController(void 0),
     [
       // Test invalid path
@@ -106,6 +106,7 @@ async function validateData(
     expect(value).toEqual(output);
     expect(request.method).toEqual(method);
     expect(request.url).toEqual(url);
+    expect(request.headers.get("content-type")).toEqual(content_type);
   }
   done();
 }

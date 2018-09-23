@@ -4,7 +4,7 @@ import { LogicController } from "../src/logic-controller";
 
 describe("LogicController#create", () => {
   it("should map requests from <repository>/info/refs", async (done) => validateData(
-    new LogicController(void 0),
+    new LogicController(void 0 as any),
     [
       // Test for path **without** leading slash.
       [["foo/info/refs", "GET", void 0], [true, "foo", undefined]],
@@ -38,7 +38,7 @@ describe("LogicController#create", () => {
     done,
   ));
   it("should map requests from <repository>/git-<service>", async (done) => validateData(
-    new LogicController(void 0),
+    new LogicController(void 0 as any),
     [
       // Test for path **without** leading slash.
       [["foo/git-some-pack", "POST", void 0], [false, "foo", undefined]],
@@ -70,7 +70,7 @@ describe("LogicController#create", () => {
     done,
   ));
   it("should ignore all other paths", async (done) => validateData(
-    new LogicController(void 0),
+    new LogicController(void 0 as any),
     [
       // Test invalid path
       [["/foo/bar/baz", "GET", void 0], [false, undefined, undefined]],
@@ -85,7 +85,7 @@ describe("LogicController#create", () => {
 
 async function validateData(
   controller: LogicController,
-  data: Array<[[string, string, string], [boolean, string?, ServiceType?]]>,
+  data: Array<[[string, string, string?], [boolean, string?, ServiceType?]]>,
   done: () => any,
   ) {
   for (const [input, output] of data) {

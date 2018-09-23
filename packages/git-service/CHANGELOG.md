@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+- Fixed compiler errors in tests after upgrading jest.
+
 ## [2.2.0] - 2018-09-23
 
 ### Added

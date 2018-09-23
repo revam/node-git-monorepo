@@ -20,7 +20,7 @@ export interface IRequestData {
   /**
    * Service type.
    */
-  readonly service: ServiceType;
+  readonly service?: ServiceType;
   /**
    * Request status.
    */
@@ -36,7 +36,7 @@ export interface IRequestData {
   /**
    * Leading path fragment.
    */
-  path: string;
+  path?: string;
   /**
    * The response object.
    */

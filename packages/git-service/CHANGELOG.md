@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Development builds now contain source maps for code and declaration files.
 
+- Moved functionality from "src/request.ts" into "src/logic-controller.ts", as
+  non-exports. Since the exports from "src/request.ts" was only used by
+  "src/logic-controller.ts".
+
 ### Fixed
 
 - Not all properties in request- and response object had the `enumerable` property
@@ -26,6 +30,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Fixed incorrect error code for errors thrown from `onUsable`/`onComplete`
   signals.
+
+- Fixed interface `IRequestData` not reflecting all possible states for
+  properties `service` and `path`.
 
 ## [2.1.0] - 2018-09-21
 

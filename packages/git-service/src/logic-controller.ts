@@ -17,6 +17,7 @@ import {
   IUploadPackCommand,
 } from "./interfaces";
 
+const SymbolContext = Symbol("context");
 const SymbolOnError = Symbol("on error");
 
 const SymbolOnComplete = Symbol("on complete");
@@ -42,6 +43,15 @@ class OnUsableSignal extends Signal<IRequestData> {
     }
   }
 }
+
+/**
+ * Middeware for controller.
+ */
+export type LogicControllerMiddleware = (
+  this: LogicControllerContext,
+  request: IRequestData,
+  response: IResponseData,
+) => any;
 
 /**
  * Common logic shared across service instances.
@@ -103,12 +113,14 @@ export class LogicController {
   }
 
   /**
-   * Uses middleware with controller. Adds all elements in `middleware` to
-   * `onUsable` in accending order.
+   * Uses middleware with controller. Adds all elements in `middleware` as
+   * listeners to signal `onUsable`.
    * @param middleware Middleware to use
    */
-  public use(...middleware: ((this: LogicController, request: IRequestData, response: IResponseData) => any)[]): this {
-    middleware.forEach((m) => this.onUsable.add((request) => m.call(this, request, request.response)));
+  public use(...middleware: LogicControllerMiddleware[]): this {
+    middleware.forEach((m) =>
+      this.onUsable.add((request) =>
+        m.call(request[SymbolContext], request, request.response)));
     return this;
   }
 
@@ -176,11 +188,13 @@ export class LogicController {
       throw new Error('Invalid arguments supplied to method "serve".');
     }
     if (request.status === RequestStatus.Pending) {
+      request[SymbolContext] = new LogicControllerContext(this, request);
       try {
         await this[SymbolOnUsable].dispatchAsync(request);
       } catch (error) {
         throw wrapError(error, ErrorCodes.ERR_FAILED_IN_USABLE_SIGNAL);
       }
+      delete request[SymbolContext];
       // Recheck status because an observer might have changed it.
       if (request.status === RequestStatus.Pending) {
         if (! await this.checkIfExists(request)) {
@@ -425,6 +439,95 @@ export class LogicController {
    */
   private dispatchError(error: any): void {
     setImmediate(() => this[SymbolOnError].dispatch(error));
+  }
+}
+
+class LogicControllerContext {
+  /* @internal */
+  private [SymbolContext]: LogicController;
+
+  /**
+   * Request data.
+   */
+  public readonly request: IRequestData;
+
+  /**
+   * Response data.
+   */
+  public readonly response: IResponseData;
+
+  public constructor(controller: LogicController, request: IRequestData) {
+    this[SymbolContext] = controller;
+    this.request = request;
+    this.response = request.response;
+  }
+
+  /**
+   * Accepts request and asks the underlying driver for an appropriate response.
+   * If driver returns a 4xx or 5xx, then the request is rejected and marked as
+   * a failure.
+   */
+  public async accept(): Promise<void> {
+    return this[SymbolContext].accept(this.request);
+  }
+
+  /**
+   * Rejects request with status code and an optional status message.
+   * Only works with http status error codes.
+   *
+   * Will redirect if statusCode is in the 3xx range.
+   *
+   * @param statusCode 3xx, 4xx or 5xx http status code.
+   *                   Default is `500`.
+   *
+   *                   Code will only be set if no prior code is set.
+   * @param body Reason for rejection.
+   */
+  public async reject(statusCode?: number, body?: string): Promise<void> {
+    return this[SymbolContext].reject(this.request, statusCode, body);
+  }
+
+  /**
+   * Redirects client with "Location" header. Header must be set beforehand.
+   */
+  public redirect(): Promise<void>;
+  /**
+   * Redirects client to cached entry.
+   */
+  public redirect(ststuCode: 304): Promise<void>;
+  /**
+   * Redirects client with "Location" header.
+   */
+  public redirect(statusCode: number): Promise<void>;
+  /**
+   * Redirects client to `location`. Can optionally set status code of redirect.
+   * @param location The location to redirect to.
+   */
+  public redirect(location: string, statusCode?: number): Promise<void>;
+  public async redirect(location?: string | number, statusCode?: number): Promise<void> {
+    return this[SymbolContext].redirect(this.request, location, statusCode);
+  }
+
+  /**
+   * Check for access to repository and/or service.
+   */
+  public async checkForAccess(): Promise<boolean> {
+    return this[SymbolContext].checkForAccess(this.request);
+  }
+
+  /**
+   * Checks if service is enabled.
+   * Can still *atempt* forcefull use of service.
+   */
+  public async checkIfEnabled(): Promise<boolean> {
+    return this[SymbolContext].checkIfEnabled(this.request);
+  }
+
+  /**
+   * Checks if repository exists.
+   */
+  public async checkIfExists(): Promise<boolean> {
+    return this[SymbolContext].checkIfExists(this.request);
   }
 }
 

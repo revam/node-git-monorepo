@@ -82,23 +82,59 @@ server.listen(port, (err) =>
 Some snippets for controller.
 
 ```js
-// Log on complete
+// Some simple logging
+let int = 0;
+controller.onUsable.add((request) => {
+  request.state.ticket = `#${(int++).toString().padStart(4, "0")}`;
+  if (int > 9999) { int = 0; }
+  console.log(
+    '%s - Request %s %s (url: "%s", method: %s)',
+    request.state.ticket,
+    request.path || "<unknown>",
+    request.service || "Unknown",
+    request.url,
+    request.method,
+  );
+});
 controller.onComplete.add((request) => {
-  console.log(`Request for "${request.path}" completed with status: ${request.status}`);
+  console.log(
+    ' %s - Response %s %s (status: %s)',
+    request.state.ticket,
+    request.response.statusCode,
+    request.response.statusMessage,
+    request.status,
+  );
+});
+
+// Restrict HTTP methods to known methods for server
+const METHODS = new Set(["HEAD", "GET", "POST"]);
+// LogicController#use gives us a context for request, with bound methods for
+// controller.
+controller.use(function (request, response) {
+  if (!METHODS.has(request.method)) {
+    return this.reject(501);
+  }
+});
+
+// Reject request for resource "/favicon.ico"
+controller.use(function (request) {
+  if (request.url === "/favicon.ico") {
+    return this.reject(404);
+  }
 });
 
 // Reject all requests for invalid service types.
-controller.onUsable.add((request) => {
+controller.use(function (request) {
   if (!request.service) {
-    return controller.reject(request, 400, "Invalid service");
+    return this.reject(400, "Invalid service");
   }
 });
 
 // Reject all requests for repositories not ending with ".git" or ".git/".
 const GIT_REGEX = /\.git\/?$/;
-controller.onUsable.add((request) => {
+controller.use(function (request) {
   if (!GIT_REGEX.test(request.path)) {
-    return controller.reject(request, 400, 'Repository path must end with ".git".');
+    return this.reject(400, 'Repository path must end with ".git".');
   }
 });
 
@@ -124,19 +160,19 @@ controller.onUsable.add((request) => {
 const redirects = new Map([
   ["test-2.git", "test-3.git"],
 ]);
-controller.onUsable.add((request) => {
+controller.use(function (request) {
   if (redirects.has(request.path)) {
-    return controller.redirect(request, redirects.get(request.path));
+    return this.redirect(redirects.get(request.path));
   }
-})
+});
 
 // Map public path to internal path or reject with 404.
 const pathToInternalMap = new Map([
   ["revam/git-service.git", "5b/9d/ee4cc4e8af2864e2f34c"], // Example mapping
 ]);
-controller.onUsable.add((request) => {
+controller.use(function (request) {
   if (!pathToInternalMap.has(request.path)) {
-    return controller.reject(request, 404);
+    return this.reject(404);
   }
   request.path = pathToInternalMap.get(request.path);
 });

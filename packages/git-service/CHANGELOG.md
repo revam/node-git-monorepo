@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- Added a new class `LogicControllerContext`, used as `this` in any middleware
+  that registers with `LogicController#use`. Has almost the same methods as
+  controller, but you don't need to add the request object for every call.
+  See usage examples for how to use.
+
+### Changed
+
+- Updated snippets in readme.
+
+### Fixed
+
 - Fixed compiler errors in tests after upgrading jest.
 
 ## [2.2.0] - 2018-09-23

@@ -1,3 +1,3 @@
-# node-git-service monorepo
+# node-git-monorepo
 
-Mono repository for `git-service` package and related packages.
+Mono-repository for packages related to the `git-service` package on npm.

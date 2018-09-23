@@ -583,6 +583,7 @@ async function createRequest(
   if (typeof inputHeaders !== "object") {
     throw new TypeError("argument `inputHeaders` must be of type 'object'.");
   }
+  method = method && method.trim().toUpperCase();
   if (typeof method !== "string" || !method) {
     throw new TypeError("argument `method` must be of type 'string'.");
   }

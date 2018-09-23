@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- Accepted method is now sanetized to upper-case, so `LogicController#create`
+  and `LogicController#serve` now also accept methods in lower-case or a mix of
+  lower- and upper-case.
+
 ## [2.3.0] - 2018-09-23
 
 ### Added

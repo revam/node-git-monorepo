@@ -5,14 +5,14 @@ import { RequestStatus, ServiceType } from "./enums";
 import { Headers, HeadersInput } from "./headers";
 import { IReceivePackCommand, IRequestData, IResponseData, IUploadPackCommand } from "./interfaces";
 
-export function createRequest(
+export async function createRequest(
   body: NodeJS.ReadableStream,
   inputHeaders: HeadersInput,
   method: string,
   url: string,
 ): Promise<IRequestData> {
-  if (typeof body !== "object" || typeof body.pipe !== "function") {
-    throw new TypeError("argument `body` must be streamable");
+  if (typeof body !== "object") {
+    throw new TypeError("argument `body` must be of type 'object'.");
   }
   if (typeof inputHeaders !== "object") {
     throw new TypeError("argument `inputHeaders` must be of type 'object'.");
@@ -26,80 +26,75 @@ export function createRequest(
   const headers = new Headers(inputHeaders);
   const content_type = headers.get("Content-Type");
   const [isAdvertisement = false, path, service] = mapInputToRequest(url, method, content_type);
-  return new Promise((resolve, reject) => {
-    const requestData: IRequestData = Object.create(null, {
-      body: {
-        enumerable: true,
-        value: body,
-        writable: true,
-      },
-      capabilities: {
-        enumerable: true,
-        value: new Map(),
-        writable: false,
-      },
-      commands: {
-        enumerable: true,
-        value: new Array(),
-        writable: false,
-      },
-      headers: {
-        enumerable: true,
-        value: headers,
-        writable: false,
-      },
-      isAdvertisement: {
-        enumerable: true,
-        value: isAdvertisement,
-        writable: false,
-      },
-      method: {
-        enumerable: true,
-        value: method,
-        writable: false,
-      },
-      path: {
-        enumerable: true,
-        value: path,
-        writable: true,
-      },
-      service: {
-        enumerable: true,
-        value: service,
-        writable: false,
-      },
-      state: {
-        enumerable: true,
-        value: {},
-        writable: true,
-      },
-      status: {
-        enumerable: true,
-        value: RequestStatus.Pending,
-        writable: true,
-      },
-      url: {
-        enumerable: true,
-        value: url,
-        writable: false,
-      },
-    });
-    Object.defineProperty(requestData, "response", {
-      value: createResponse(requestData),
+  const requestData: IRequestData = Object.create(null, {
+    body: {
+      enumerable: true,
+      value: body,
+      writable: true,
+    },
+    capabilities: {
+      enumerable: true,
+      value: new Map(),
       writable: false,
-    });
-    if (service && !isAdvertisement) {
-      const middleware = ServiceReaders.get(service)!;
-      const passthrough = createPacketReader(middleware(requestData));
-      passthrough.on("error", reject);
-      passthrough.on("finish", () => resolve(requestData));
-      requestData.body = passthrough;
-      body.pipe(passthrough);
-    }
-    else {
-      resolve(requestData);
-    }
+    },
+    commands: {
+      enumerable: true,
+      value: new Array(),
+      writable: false,
+    },
+    headers: {
+      enumerable: true,
+      value: headers,
+      writable: false,
+    },
+    isAdvertisement: {
+      enumerable: true,
+      value: isAdvertisement,
+      writable: false,
+    },
+    method: {
+      enumerable: true,
+      value: method,
+      writable: false,
+    },
+    path: {
+      enumerable: true,
+      value: path,
+      writable: true,
+    },
+    service: {
+      enumerable: true,
+      value: service,
+      writable: false,
+    },
+    state: {
+      enumerable: true,
+      value: {},
+      writable: true,
+    },
+    status: {
+      enumerable: true,
+      value: RequestStatus.Pending,
+      writable: true,
+    },
+    url: {
+      enumerable: true,
+      value: url,
+      writable: false,
+    },
   });
+  Object.defineProperty(requestData, "response", {
+    value: createResponse(requestData),
+    writable: false,
+  });
+  if (service && !isAdvertisement) {
+    const middleware = ServiceReaders.get(service)!;
+    const passthrough = createPacketReader(middleware(requestData));
+    requestData.body = passthrough;
+    body.pipe(passthrough);
+    await new Promise((ok, nok) => passthrough.on("error", nok).on("finish", ok));
+  }
+  return requestData;
 }
 
 /**
@@ -110,12 +105,8 @@ function createResponse(request: IRequestData): IResponseData {
   return Object.create(null, {
     addMessage: {
       enumerable: false,
-      value(message: string | Buffer | Uint8Array): void {
-        if (!(message instanceof Buffer)) {
-          message = Buffer.from(message as string);
-        }
-        this.messages.push(message);
-        return;
+      value(this: IResponseData, message: string): void {
+        (this.messages as string[]).push(message);
       },
       writable: false,
     },
@@ -141,10 +132,10 @@ function createResponse(request: IRequestData): IResponseData {
     },
     state: {
       enumerable: true,
-      get(): any {
+      get(this: IResponseData): any {
         return this.request.state;
       },
-      set(value: any) {
+      set(this: IResponseData, value: any) {
         this.request.state = value;
       },
     },
@@ -155,11 +146,11 @@ function createResponse(request: IRequestData): IResponseData {
     },
     statusMessage: {
       enumerable: true,
-      get(): string {
-        return this.statusCode && STATUS_CODES[this.statusCode] || "";
+      get(this: IResponseData): string {
+        return STATUS_CODES[this.statusCode] || "";
       },
     },
-  });
+  }) as IResponseData;
 }
 
 /**
@@ -213,12 +204,12 @@ export function mapInputToRequest(
 function reader(
   commands: Array<IUploadPackCommand | IReceivePackCommand>,
   capabilities: Map<string, string | undefined>,
-  resrt: string,
+  result: string,
   metadata: IUploadPackCommand | IReceivePackCommand,
 ) {
   commands.push(metadata);
-  if (resrt) {
-    for (const c of resrt.trim().split(" ")) {
+  if (result) {
+    for (const c of result.trim().split(" ")) {
       if (/=/.test(c)) {
         const [k, v] = c.split("=");
         capabilities.set(k, v);
@@ -244,10 +235,10 @@ const ServiceReaders = new Map<ServiceType, (s: IRequestData) => (b: Buffer) => 
         const results = regex.exec(value);
         if (results) {
           let kind: "create" | "delete" | "update";
-          if ("0000000000000000000000000000000000000000" === results[1]) {
+          if (results[1] === "0000000000000000000000000000000000000000") {
             kind = "create";
           }
-          else if ("0000000000000000000000000000000000000000" === results[2]) {
+          else if (results[2] === "0000000000000000000000000000000000000000") {
             kind = "delete";
           }
           else {

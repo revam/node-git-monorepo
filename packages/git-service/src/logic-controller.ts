@@ -88,7 +88,7 @@ export class LogicController {
    *
    * @param driver The driver to use.
    */
-  constructor(driver: IDriver) {
+  public constructor(driver: IDriver) {
     this.driver = driver;
   }
 
@@ -110,7 +110,7 @@ export class LogicController {
    * @param method HTTP method used for request
    * @param url Tailing url path fragment with querystring.
    */
-  public create(
+  public async create(
     body: NodeJS.ReadableStream,
     headers: HeadersInput,
     method: string,
@@ -163,7 +163,7 @@ export class LogicController {
       request = await this.create(body as NodeJS.ReadableStream, headers!, method!, url!);
     }
     else {
-      throw new Error(`Invalid arguments supplied to method "serve".`);
+      throw new Error('Invalid arguments supplied to method "serve".');
     }
     if (request.status === RequestStatus.Pending) {
       try {
@@ -256,7 +256,7 @@ export class LogicController {
         }
       }
       // Add messages at the end of stream
-      else if (response.messages) {
+      else if (response.messages.length) {
         response.messages.forEach((message) => packets.push(encode(message)));
       }
     }

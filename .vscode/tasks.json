@@ -32,7 +32,10 @@
         "panel": "shared"
       },
       "label": "git-service build",
-      "problemMatcher": []
+      "problemMatcher": [
+        "$tslint5",
+        "$tsc"
+      ]
     }
   ]
 }

@@ -66,21 +66,22 @@ export function createMiddleware(
     try {
       const responseData = await controller.serve(request, request.headers, request.method!, request.url!);
       responseData.headers.forEach((header, value) => response.setHeader(header, value));
-      response.statusCode = responseData.statusCode!;
-      response.statusMessage = responseData.statusMessage!;
+      response.statusCode = responseData.statusCode;
+      response.statusMessage = responseData.statusMessage;
       const body = request.method !== "HEAD" && responseData.body || undefined;
-      if (body) {
+      if (body && body.length) {
         await new Promise((resolve, reject) =>
           response.write(body, (err) => err ? reject(err) : resolve()));
       }
     } catch (error) {
+      // tslint:disable-next-line:no-console Log errors not caught in controller
       console.error(error);
       if (!response.headersSent) {
         response.statusCode = error && (error.status || error.statusCode) || 500;
         response.statusMessage = STATUS_CODES[response.statusCode]!;
         response.setHeader("Content-Type", "text/plain");
         response.setHeader("Content-Length", response.statusMessage.length);
-        response.write(STATUS_CODES[response.statusCode]!, "utf8");
+        response.write(response.statusMessage, "utf8");
       }
     } finally {
       if (response.writable) {

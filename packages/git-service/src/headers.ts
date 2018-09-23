@@ -19,9 +19,9 @@ export class Headers {
     return this.__raw.size;
   }
 
-  private __raw: Map<string, string[]>;
+  private readonly __raw: Map<string, string[]>;
 
-  constructor(input?: HeadersInput) {
+  public constructor(input?: HeadersInput) {
     if (input instanceof Headers) {
       this.__raw = new Map(input);
     }
@@ -44,7 +44,7 @@ export class Headers {
    * Returns the first value for header.
    * @param header Header name
    */
-  public get(header) {
+  public get(header: string) {
     const values = this.getAll(header);
     if (values) {
       return values[0];
@@ -55,7 +55,7 @@ export class Headers {
    * Returns all values for header.
    * @param header Header name
    */
-  public getAll(header) {
+  public getAll(header: string) {
     return this.__raw.get(sanitizeHeader(header));
   }
 
@@ -118,7 +118,7 @@ export class Headers {
    * @param fn Callback
    * @param thisArg Value of `this` in `fn`
    */
-  public forEach<T = undefined>(fn: (this: T, header: string, value: string[]) => any, thisArg?: T) {
+  public forEach<T = never>(fn: (this: T, header: string, value: string[]) => any, thisArg?: T) {
     this.__raw.forEach((v, k) => fn.call(thisArg, k, v));
   }
 

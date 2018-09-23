@@ -4,70 +4,14 @@
   },
   "extends": "tslint:all",
   "rules": {
-    // Want these
-    "max-file-line-count": [true, 2000],
-    // Don't want these
-    "array-type": false,
-    "cyclomatic-complexity": false,
-    "newline-before-return": false,
-    "newline-per-chained-call": false,
-    "no-parameter-properties": false,
-    "no-parameter-reassignment": false,
-    "no-unused-variable": false,
-    "no-default-export": false,
-    "no-bitwise": false,
-    // TODO: Enable stricter options for these
-    "comment-format": [
-        true,
-        "check-space"
-    ],
-    "member-access": true,
-    "only-arrow-functions": [
-        true,
-        "allow-declarations",
-        "allow-named-functions"
-    ],
-    "file-name-casing": false,
-
-    "one-line": [true, "check-catch", "check-finally", "check-whitespace", "check-open-brace"],
-
-    // TODO: Enable these
-    "completed-docs": false,
-    "no-any": false,
-    "no-magic-numbers": false,
-    "no-implicit-dependencies": [true, "dev"],
-    "no-non-null-assertion": false,
-    "no-null-keyword": false,
-    "no-require-imports": true,
-    "no-unbound-method": false,
-    "no-unnecessary-qualifier": false,
-    "no-use-before-declare": false,
-    "no-void-expression": false,
-    "prefer-function-over-method": false,
-    "strict-type-predicates": false,
-    "triple-equals": [true, "allow-undefined-check"],
-    "typedef": false,
-
-    "binary-expression-operand-order": false,
-    "unified-signatures": false,
-    "space-before-function-paren": false,
-
-    "ban": [true,
-      ["describe", "only"],
-      ["it", "only"]
-    ],
-
-    "interface-name": false,
-    "file-header": false,
-    "max-classes-per-file": false,
+    // Enabled
     "max-line-length": [true, 120],
-    "member-ordering": true,
-    "no-console": {
-      "options": ["log"]
-    },
-    "no-switch-case-fall-through": true,
-    "strict-boolean-expressions": [true, "allow-boolean-or-undefined"],
-    "switch-default": false,
+    "max-file-line-count": [true, 1000],
+    "file-name-casing": [true, "kebab-case"],
+    "prefer-const": true,
+    "prefer-template": true,
+    "prefer-for-of": true,
+    "prefer-readonly": [true],
     "variable-name": [true,
       "ban-keywords",
       "check-format",
@@ -75,6 +19,118 @@
       "allow-pascal-case",
       "allow-snake-case"
     ],
-    "quotemark": false
+    "member-access": [
+      true,
+      "check-accessor",
+      "check-constructor",
+      "check-parameter-property"
+    ],
+    "member-ordering": [
+      true,
+      "static-private-field",
+      "static-protected-field",
+      "static-public-field",
+      "private-instance-field",
+      "protected-instance-field",
+      "public-instance-field",
+      "private-contstructor",
+      "protected-constructor",
+      "public-constructor",
+      "public-instance-method",
+      "protected-instance-methd",
+      "private-instance-method",
+      "static-public-method",
+      "static-protected-method",
+      "static-private-method"
+    ],
+    "quotemark": [
+      true,
+      "double",
+      "avoid-escape",
+      "avoid-template"
+    ],
+    "only-arrow-functions": [
+        true,
+        "allow-declarations",
+        "allow-named-functions"
+    ],
+    "whitespace": [
+      true,
+      "check-branch",
+      "check-decl",
+      "check-operator",
+      "check-module",
+      "check-separator",
+      "check-rest-spread",
+      "check-type",
+      "check-typecast",
+      "check-type-operator",
+      "check-preblock"
+    ],
+    "one-line": [
+      true,
+      "check-catch",
+      "check-finally",
+      "check-whitespace",
+      "check-open-brace"
+    ],
+    "promise-function-async": [
+      true,
+      "check-function-declaration",
+      "check-function-expression",
+      "check-arrow-function",
+      "check-method-declaration"
+    ],
+    "triple-equals": [
+      true,
+      "allow-undefined-check"
+    ],
+    "comment-format": [
+        true,
+        "check-space"
+    ],
+    "ban-comma-operator": true,
+    "ban": [true,
+      ["describe", "only"],
+      ["it", "only"]
+    ],
+    "no-bitwise": true,
+    "binary-expression-operand-order": true,
+    "no-implicit-dependencies": [true, "dev"],
+    "no-require-imports": true,
+    "no-for-in-array": [true],
+    "no-unbound-method": [true, "ignore-static"],
+    "no-console": true,
+    "no-switch-case-fall-through": true,
+
+    // Disabled
+    "strict-boolean-expressions": false,
+    "switch-default": false,
+    "array-type": false,
+    "cyclomatic-complexity": [true, 20],
+    "interface-name": false,
+    "max-classes-per-file": false,
+    "newline-before-return": false,
+    "newline-per-chained-call": false,
+    "no-default-export": false,
+    "no-magic-numbers": false,
+    "no-parameter-properties": false,
+    "no-parameter-reassignment": false,
+    "no-unused-variable": false,
+    "typedef": false,
+    "completed-docs": false,
+    "no-any": false,
+    "no-unsafe-any": false,
+    "no-inferred-empty-object-type": false,
+    "no-non-null-assertion": false,
+    "no-null-keyword": false,
+    "no-unnecessary-qualifier": false,
+    "no-use-before-declare": false,
+    "no-void-expression": false,
+    "prefer-function-over-method": false,
+    "strict-type-predicates": false,
+    "unified-signatures": false,
+    "space-before-function-paren": false,
+    "file-header": false
   }
 }

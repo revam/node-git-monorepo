@@ -94,10 +94,10 @@ export function createFileSystemDriver(
       }
       // Return default value for setting when not found in configuration
       if (!stdout.length) {
-        if (typeof enabledDefaults === "boolean") {
-          return enabledDefaults;
+        if (typeof enabledDefaults === "object") {
+          return enabledDefaults[request.service] || true;
         }
-        return enabledDefaults && enabledDefaults[request.service] || true;
+        return enabledDefaults;
       }
       throw createDriverError(exitCode, stderr);
     },
@@ -179,13 +179,12 @@ export function createWebDriver(origin: string): IDriver {
 // https://github.com/Microsoft/vscode/blob/2288e7cecd10bfaa491f6e04faf0f45ffa6adfc3/extensions/git/src/git.ts
 // Copyright (c) 2017-2018 Microsoft Corporation. MIT License
 async function waitForChild(child: ChildProcess): Promise<IExecutionResult> {
-  const result = Promise.all([
-    new Promise<number>((_, r) => child.once("error", r).once("exit", _)),
-    waitForBuffer(child.stdout),
-    waitForBuffer(child.stderr).then((buffer) => buffer.toString("utf8")),
-  ]);
   try {
-    const [exitCode, stdout, stderr] = await result;
+    const [exitCode, stdout, stderr] = await Promise.all([
+      new Promise<number>((_, r) => child.once("error", r).once("exit", _)),
+      waitForBuffer(child.stdout),
+      waitForBuffer(child.stderr).then((buffer) => buffer.toString("utf8")),
+    ]);
     return { exitCode, stdout, stderr };
   } catch (error) {
     return { exitCode: -1, stdout: Buffer.alloc(0), stderr: error && error.message || "Unkonwn error" };
@@ -208,7 +207,7 @@ function waitForResponse(
   headers?: OutgoingHttpHeaders,
   body?: NodeJS.ReadableStream,
 ): Promise<IncomingMessage>;
-function waitForResponse(
+async function waitForResponse(
   url: string,
   method: string,
   headers?: OutgoingHttpHeaders,
@@ -256,7 +255,7 @@ interface IExecutionResult {
   stderr: string;
 }
 
-function waitForBuffer(readable: Readable): Promise<Buffer> {
+async function waitForBuffer(readable: Readable): Promise<Buffer> {
   return new Promise<Buffer>((ok, error) => {
     const buffers: Buffer[] = [];
     readable.once("error", error);

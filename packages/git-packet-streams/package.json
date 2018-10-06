@@ -8,9 +8,16 @@
     "test": "test"
   },
   "scripts": {
-    "test": "tslint test/**/*.ts && jest",
-    "build": "tsc --noEmit -p . && tslint src/**/*.ts && tsc -p .",
-    "prepublish": "npm run test && npm run build"
+    "cleanup": "del-cli lib",
+    "build": "tsc -p .",
+    "build:dev": "tsc -p . --sourceMap true --declarationMap true",
+    "lint:src": "tslint -p . src/**/*.ts",
+    "lint:test": "tslint -p ./test test/**/*.ts",
+    "test": "jest",
+    "prebuild": "npm run lint:src",
+    "prebuild:dev": "npm run lint:src",
+    "prepublish": "npm run test && npm run cleanup && npm run build",
+    "pretest": "npm run lint:test"
   },
   "repository": {
     "type": "git",
@@ -29,12 +36,13 @@
   },
   "homepage": "https://github.com/revam/node-git-service#readme",
   "devDependencies": {
-    "@types/jest": "^22.2.3",
-    "@types/node": "^10.0.8",
-    "jest": "^22.4.3",
-    "ts-jest": "^22.4.5",
-    "tslint": "^5.10.0",
-    "typescript": "^2.8.3"
+    "@types/jest": "^23.3.3",
+    "@types/node": "^10.11.4",
+    "del-cli": "^1.1.0",
+    "jest": "^23.6.0",
+    "ts-jest": "^23.10.3",
+    "tslint": "^5.11.0",
+    "typescript": "^3.1.1"
   },
   "jest": {
     "transform": {

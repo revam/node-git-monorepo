@@ -5,7 +5,7 @@
   "tasks": [
     {
       "type": "npm",
-      "script": "build",
+      "script": "build:dev",
       "path": "packages/git-packet-streams/",
       "group": "build",
       "presentation": {
@@ -14,8 +14,27 @@
         "focus": false,
         "panel": "shared"
       },
-      "label": "git-packet-streams build",
-      "problemMatcher": []
+      "label": "build git-packet-streams",
+      "problemMatcher": [
+        "$tslint5",
+        "$tsc"
+      ]
+    },
+    {
+      "type": "npm",
+      "script": "test",
+      "path": "packages/git-packet-streams/",
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "never",
+        "focus": false,
+        "panel": "shared"
+      },
+      "label": "test git-packet-streams",
+      "problemMatcher": [
+        "$tslint5"
+      ]
     },
     {
       "type": "npm",
@@ -31,10 +50,62 @@
         "focus": false,
         "panel": "shared"
       },
-      "label": "git-service build",
+      "label": "build git-service",
       "problemMatcher": [
         "$tslint5",
         "$tsc"
+      ]
+    },
+    {
+      "type": "npm",
+      "script": "test",
+      "path": "packages/git-service/",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "never",
+        "focus": false,
+        "panel": "shared"
+      },
+      "label": "test git-service",
+      "problemMatcher": [
+        "$tslint5"
+      ]
+    },
+    {
+      "type": "npm",
+      "script": "build:dev",
+      "path": "packages/git-service-koa/",
+      "group": "build",
+      "presentation": {
+        "echo": true,
+        "reveal": "never",
+        "focus": false,
+        "panel": "shared"
+      },
+      "label": "build git-service-koa",
+      "problemMatcher": [
+        "$tslint5",
+        "$tsc"
+      ]
+    },
+    {
+      "type": "npm",
+      "script": "test",
+      "path": "packages/git-service-koa/",
+      "group": "test",
+      "presentation": {
+        "echo": true,
+        "reveal": "never",
+        "focus": false,
+        "panel": "shared"
+      },
+      "label": "test git-service-koa",
+      "problemMatcher": [
+        "$tslint5"
       ]
     }
   ]

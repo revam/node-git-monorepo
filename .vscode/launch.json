@@ -1,0 +1,48 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+
+    {
+      "type": "node",
+      "name": "Test package: git-packet-streams (debug)",
+      "request": "launch",
+      "preLaunchTask": "build git-packet-streams",
+      "program": "${workspaceFolder}/packages/git-packet-streams/node_modules/jest/bin/jest",
+      "args": [
+        "--runInBand"
+      ],
+      "cwd": "${workspaceFolder}/packages/git-packet-streams",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "type": "node",
+      "name": "Test package: git-service (debug)",
+      "request": "launch",
+      "preLaunchTask": "build git-service",
+      "program": "${workspaceFolder}/packages/git-service/node_modules/jest/bin/jest",
+      "args": [
+        "--runInBand"
+      ],
+      "cwd": "${workspaceFolder}/packages/git-service",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+    {
+      "type": "node",
+      "name": "Test package: git-service-koa (debug)",
+      "request": "launch",
+      "preLaunchTask": "build git-service-koa",
+      "program": "${workspaceFolder}/packages/git-service-koa/node_modules/jest/bin/jest",
+      "args": [
+        "--runInBand"
+      ],
+      "cwd": "${workspaceFolder}/packages/git-service-koa",
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    }
+  ]
+}

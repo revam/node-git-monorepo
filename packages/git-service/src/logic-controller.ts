@@ -1,4 +1,4 @@
-import { concatPacketBuffers, createPacketReader } from "git-packet-streams";
+import { concatPacketBuffers, PacketReader } from "git-packet-streams";
 import * as encode from "git-side-band-message";
 import { STATUS_CODES } from "http";
 import { ReadableSignal, Signal } from "micro-signals";
@@ -656,10 +656,9 @@ async function createRequest(
   });
   if (service && !isAdvertisement) {
     const middleware = ServiceReaders.get(service)!;
-    const passthrough = createPacketReader(middleware(requestData));
+    const passthrough = new PacketReader(middleware(requestData));
     requestData.body = passthrough;
-    body.pipe(passthrough);
-    await new Promise((ok, nok) => passthrough.on("error", nok).on("finish", ok));
+    await new Promise((ok, nok) => body.pipe(passthrough).on("error", nok).on("packet-done", ok));
   }
   return requestData;
 }
@@ -791,27 +790,30 @@ const ServiceReaders = new Map<ServiceType, (s: IRequestData) => (b: Buffer) => 
   [
     ServiceType.ReceivePack,
     (request) => {
+      const pre_check = /[0-9a-f]{40} [0-9a-f]{40}/;
       const regex =
-      /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
+      /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
       return (buffer) => {
-        const value = buffer.toString("utf8");
-        const results = regex.exec(value);
-        if (results) {
-          let kind: "create" | "delete" | "update";
-          if (results[1] === "0000000000000000000000000000000000000000") {
-            kind = "create";
+        if (pre_check.test(buffer.slice(4, 85).toString("utf8"))) {
+          const value = buffer.toString("utf8");
+          const results = regex.exec(value);
+          if (results) {
+            let kind: "create" | "delete" | "update";
+            if (results[1] === "0000000000000000000000000000000000000000") {
+              kind = "create";
+            }
+            else if (results[2] === "0000000000000000000000000000000000000000") {
+              kind = "delete";
+            }
+            else {
+              kind = "update";
+            }
+            reader(request.commands as any, request.capabilities as any, results[4], {
+              commits: [results[1], results[2]],
+              kind,
+              reference: results[3],
+            });
           }
-          else if (results[2] === "0000000000000000000000000000000000000000") {
-            kind = "delete";
-          }
-          else {
-            kind = "update";
-          }
-          reader(request.commands as any, request.capabilities as any, results[4], {
-            commits: [results[1], results[2]],
-            kind,
-            reference: results[3],
-          });
         }
       };
     },
@@ -819,15 +821,18 @@ const ServiceReaders = new Map<ServiceType, (s: IRequestData) => (b: Buffer) => 
   [
     ServiceType.UploadPack,
     (request) => {
-      const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n$/;
+      const pre_check = /want|have/;
+      const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
       return (buffer) => {
-        const value = buffer.toString("utf8");
-        const results = regex.exec(value);
-        if (results) {
-          reader(request.commands as any, request.capabilities as any, results[3], {
-            commits: [results[2]],
-            kind: results[1] as ("want" | "have"),
-          });
+        if (pre_check.test(buffer.slice(4, 8).toString("utf8"))) {
+          const value = buffer.toString("utf8");
+          const results = regex.exec(value);
+          if (results) {
+            reader(request.commands as any, request.capabilities as any, results[3], {
+              commits: [results[2]],
+              kind: results[1] as ("want" | "have"),
+            });
+          }
         }
       };
     },

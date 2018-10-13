@@ -2,6 +2,11 @@
 
 Serve git over http(s).
 
+## Prerequirements
+
+This package requires that [git](https://git.kernel.org/pub/scm/git/git.git/) is
+installed and available either locally or in the path.
+
 ## Install
 
 From the npm register:

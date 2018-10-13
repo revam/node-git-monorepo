@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   and `LogicController#serve` now also accept methods in lower-case or a mix of
   lower- and upper-case.
 
+### Fixed
+
+- POST requests won't ever finish.
+
 ## [2.3.0] - 2018-09-23
 
 ### Added

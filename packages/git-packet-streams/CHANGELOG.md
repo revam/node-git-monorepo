@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
-- Headlines in changelog
+- Wrong headline size in changelog for some previous verions.
 
 - `concatPacketBuffers` was not passing its defined tests. Corrected code so it
   passes all valid tests.

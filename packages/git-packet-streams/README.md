@@ -4,8 +4,22 @@ Helper functions to work with git packet format.
 
 ## Install
 
+From npm:
+
 ```sh
-npm install --save git-packet-streams
+$ npm install --save git-packet-streams
+```
+
+From GitHub:
+
+```sh
+$ npm install --save https://github.com/revam/node-git-monorepo/releases/download/git-packet-streams/v$VERSION/package.tgz
+```
+
+From git.lan (internet-people can ignore this):
+
+```sh
+$ npm install --save https://git.lan/mist@node/git@git-packet-streams/v$VERSION/package.tgz
 ```
 
 ## What is this?
@@ -14,7 +28,8 @@ This package contains helper functions to work with git packet buffers and strea
 
 ## Usage
 
-See tests for some usage example. ([Not a link](.))
+See [tests](./test/index.test.ts) to get some ideas of how to use. (Not
+available in packed versions)
 
 ## Documentation
 

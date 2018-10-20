@@ -7,11 +7,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.4.0] - 2018-10-20
+
 ### Changed
 
 - Accepted method is now sanetized to upper-case, so `LogicController#create`
   and `LogicController#serve` now also accept methods in lower-case or a mix of
   lower- and upper-case.
+
+- Update readme to reflect better what this package/library is, what you would
+  need before using, and update the usage examples.
 
 - Check if repository is enabled before client has access to it in the logic
   controller. Because this seems more sane to do.
@@ -286,9 +291,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial public release
 
-[Unreleased]: https://github.com/revam/node-git-service/compare/git-service-v2.3.0...HEAD
-[2.3.0]: https://github.com/revam/node-git-service/compare/git-service-v2.2.0...git-service-v2.3.0
-[2.2.0]: https://github.com/revam/node-git-service/compare/git-service-v2.1.0...git-service-v2.2.0
-[2.1.0]: https://github.com/revam/node-git-service/compare/git-service-v2.0.0...git-service-v2.1.0
-[2.0.0]: https://github.com/revam/node-git-service/compare/git-service-v1.0.1...git-service-v2.0.0
-[1.0.1]: https://github.com/revam/node-git-service/compare/git-service-v1.0.0...git-service-v1.0.1
+[Unreleased]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.4.0...HEAD
+[2.4.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.3.0...git-service/v2.4.0
+[2.3.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.2.0...git-service/v2.3.0
+[2.2.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.1.0...git-service/v2.2.0
+[2.1.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.0.0...git-service/v2.1.0
+[2.0.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v1.0.1...git-service/v2.0.0
+[1.0.1]: https://github.com/revam/node-git-monorepo/compare/git-service/v1.0.0...git-service/v1.0.1

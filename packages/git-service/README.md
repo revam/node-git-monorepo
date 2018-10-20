@@ -9,7 +9,7 @@ installed and available either locally or in the path.
 
 ## Install
 
-From the npm register:
+From npm:
 
 ```sh
 $ npm install --save git-service
@@ -18,45 +18,51 @@ $ npm install --save git-service
 From GitHub:
 
 ```sh
-$ npm install --save https://github.com/revam/node-git-service/releases/download/git-service-v$VERSION/package.tgz
+$ npm install --save https://github.com/revam/node-git-monorepo/releases/download/git-service/v$VERSION/package.tgz
 ```
 
 From git.lan (internet-people can ignore this):
 
 ```sh
-$ npm install --save https://git.lan/mist/node-git-monorepo@git-service-v$VERSION/package.tgz
+$ npm install --save https://git.lan/mist@node/git@git-service/v$VERSION/package.tgz
 ```
 
 ## What is this?
 
-This packages main focus is defining an abstraction for serving git. It
-includes several helpers for creating a git server or framework middleware.
+It is meant as an substitude for server-side git hooks implemented in
+typescript. This allows for more dynamic controll of requests as opposed to a
+static hook, in my opinion, as it allows an application to controll any and all
+syncronization between the itself and its clients.
 
-See the documentation for a full list of exports.
+It exports some high-level and some low-level functions, some interfaces and some
+classes used as part of the logic. It is reccomended to use the high-level
+functions and interfaces, unless your requirements require some low-level
+changes than cannot be implemented at a high-level.
 
-### Motivation for this package
+It is adviced to see the source-code for a full list of exports, or the usage
+examples below, as the documentation is not available yet.
+
+### Motivation for this library
+
+As I was not familiar with git hooks, and wanted control over what goes in and
+out of my local git server, I set out to create a library to handle the git-
+functionality of a http git server.
 
 I am not a fan of events used in a middleware-driven workflow, as it breaks the
-middleware-pattern, so I made this library which, in my eyes, is better suited for such
-uses. I also made it framework independent so it can be fit for any framework you want to
-use.
+pattern, so I made this library which, in my eyes, is better suited in a
+middleware-driven workflow. I also wanted it to be framework independent, so it
+can adapt to any framework you want to use.
 
-It's a side-project, so expect irregular updates, if any, in case you want to use it.
-Below you can find some simular projects which helped me greatly when creating this
-package. Also a great help was the technical documentation for git, which can be found
-[here](https://git.kernel.org/pub/scm/git/git.git/tree/Documentation/technical), among other
-places.
+It's a side-project, so expect irregular updates, if you plan to use it in any
+of your projects. [Below](#simular-projects) you can find some simular projects
+with different approches to this , and in which
+helped me greatly when creating this library.
 
-## Documentation
+Also a great help was the technical documentation for git, which can be found
+[here](https://git.kernel.org/pub/scm/git/git.git/tree/Documentation/technical),
+among other places (such at github).
 
-The documentation is not available as of yet, but if you use TypeScript, the definitions are available with some (short) descriptions. There are also some examples below for how you could use this library.
-
-## Related packages
-
-- [git-service-koa](https://www.npmjs.com/package/git-service-koa)
-- [git-packet-streams](https://www.npmjs.com/package/git-packet-streams)
-
-## Simular projects
+### Simular projects
 
 - [pushover](https://github.com/substack/pushover)
 - [git-http-backend](https://github.com/substack/git-http-backend)
@@ -96,7 +102,7 @@ controller.onUsable.add((request) => {
     '%s - Request %s %s (url: "%s", method: %s)',
     request.state.ticket,
     request.path || "<unknown>",
-    request.service || "Unknown",
+    request.service || "<unknown>",
     request.url,
     request.method,
   );
@@ -163,8 +169,8 @@ controller.onUsable.add((request) => {
 
 // Redirect from map
 const redirects = new Map([
-  ["test-2.git", "test-3.git"],
-]);
+  ["test-1.git", "test-2.git"], // Example mapping
+  ]);
 controller.use(function (request) {
   if (redirects.has(request.path)) {
     return this.redirect(redirects.get(request.path));
@@ -173,7 +179,7 @@ controller.use(function (request) {
 
 // Map public path to internal path or reject with 404.
 const pathToInternalMap = new Map([
-  ["revam/git-service.git", "5b/9d/ee4cc4e8af2864e2f34c"], // Example mapping
+  ["root/git.git", "5b/9d/ee4cc4e8af2864e2f34c"], // Example mapping
 ]);
 controller.use(function (request) {
   if (!pathToInternalMap.has(request.path)) {
@@ -184,12 +190,14 @@ controller.use(function (request) {
 ```
 
 Http server connected to a database for repository metadata (e.g. web hooks,
-public/internal paths, etc.) and user authorization. The database part is
+public/internal paths, etc.) and user authorization. The database/models part is
 omitted here.
+
+**Note:** For simplicity's sake do all functions run in sync.
 
 ```js
 import { createServer } from "http";
-import { createMiddleware } from "git-service";
+import { createMiddleware, ServiceType } from "git-service";
 import { resolve } from "path";
 
 // Example models for database
@@ -203,42 +211,88 @@ const port = parseInt(process.env.PORT, 10) || 3000;
 const server = createServer(createMiddleware({
   origin,
   methods: {
-    // Check service/user access for repository.
+    // Check if user (logged-in or anonymus) has access to service at repository.
     checkForAccess(request, response) {
       const repository = request.state.repository;
       if (!repository) {
-        response.statusCode = 500;
-        return false;
+        throw new Error("Repository missing from request state");
       }
-      return repository.checkForAccess(response, request.service, request.state.user);
+      // Check for access
+      if (checkForAccess(repository, request.service, user)) {
+        return true;
+      }
+      if (user) {
+        // Repository is forbidden for user.
+        response.statusCode = 403;
+      } else {
+        // Unauthorized atempt for a retricted repository
+        response.headers.set("WWW-Authenticate", "Basic");
+        response.statusCode = 401;
+      }
+      return false;
     },
-    // Check if repository exists in database.
-    async checkIfExists(request, response) {
-      const record = await Repositories.findByPublicPath(request.path);
-      if (!record) {
+    // Check if repository is enabled.
+    checkIfEnabled(request, response) {
+      const repository = request.state.repository;
+      if (!repository) {
+        throw new Error("Repository missing from request state");
+      }
+      // Reject if repository is archived and the requested service is receive-pack.
+      if (repository.isArchived && request.service === ServiceType.ReceivePack) {
+        response.addMessage("Repository is archived and will not accept any new changes.");
         return false;
       }
-      if (record.publicPath !== request.path) {
-        response.statusCode = 308;
-        response.headers.set("Location", record.publicPath);
+      return true;
+    },
+    // Check if repository exists in database (and on disk).
+    checkIfExists(request, response) {
+      // Find the first match that is NOT marked as deleted.
+      const record = Repositories.findOne({ href: request.path, isDeleted: false });
+      // We check for redirects when no repository was found.
+      if (!record) {
+        const redirect = Repositories.checkForRedirect(request.path);
+        if (redirect) {
+          request.response.statusCode = 308;
+          request.response.headers.set("Location", redirect);
+        }
+        return false;
       }
       request.state.repository = record;
-      request.path = record.path;
+      request.path = repository.path;
       return true;
     },
   },
 }, (controller) => {
-  controller.use((request) => {
+  // Basic guards (combined from above snippets) (with cache control)
+  const GIT_REGEX = /\.git$/;
+  const METHODS = new Set(["HEAD", "GET", "POST"]);
+  controller.use(function (request, response) {
+    // Reject unsupported methods for this server.
+    if (!METHODS.has(request.method)) {
+      return this.reject(501);
+    }
+    // Browsers like to ask servers for favicons. We don't like to repeat
+    // ourself very often.
+    if (request.url === "/favicon.ico") {
+      response.headers.set("Cache-Control", "public, max-age=31536000");
+      return this.reject(404);
+    }
+    // But always ask us for the latest version of everything other then a fav-
+    // icon.
+    response.headers.set("Cache-Control", "no-cache, no-store");
+    // Reject if no service has been set for request. A typical invalid service.
     if (!request.service) {
-      return controller.reject(request, 400, "Invalid service");
+      return this.reject(400, "Invalid Service");
     }
-  });
-  const GIT_REGEX = /\.git\/?$/;
-  controller.onUsable.add((request) => {
-    if (!GIT_REGEX.test(request.path)) {
-      return controller.reject(request, 400, 'Repository must end with ".git"');
+    if (!GIT_REGEX.test(request.path!)) {
+      return this.reject(400, 'Repository must end with ".git"');
     }
+    // The hrefs in the database does not contain ".git" at the end, but this
+    // basic server only has the logic for the git clients, hench the above
+    // guard and this slicing.
+    request.path = request.path!.slice(0, -4);
   });
+  // Authenticate users
   controller.onUsable.add((request) => {
     if (request.headers.has("Authorization")) {
       const header = request.headers.get("Authorization");
@@ -248,14 +302,39 @@ const server = createServer(createMiddleware({
           .split(":");
         const username = data.shift();
         const password = data.join(":");
-        const user = username && await Users.findOneByUsername(username) || undefined;
-        if (user && await user.comparePassword(password)) {
+        const user = username && Users.findOneByUsername(username) || undefined;
+        if (user && user.comparePassword(password)) {
           request.state.user = user;
         }
       }
     }
   });
 }));
+
+function checkRepositoryForAccess(repository, service, user) {
+  // A user can have special access rights
+  if (user) {
+    // Hard-code repository owner access rights.
+    if (repository.ownerId === user.id) {
+      return true;
+    }
+    // Check for an entry for user
+    const entry = findUserAccessLevel(repository, user);
+    if (entry) {
+      if (service === ServiceType.ReceivePack) {
+        return entry.canPush;
+      }
+      return entry.canFetchOrView;
+    }
+  }
+  // Check if service is upload-pack and repository is public.
+  return service === ServiceType.UploadPack && repository.isPublic;
+}
+
+// For simplicity's sake are the levels a part of the repository model.
+function findUserAccessLevel(repository, user) {
+  return repository.accessLevelEntries.find((e) => e.userId === user.id);
+}
 
 // Start server
 server.listen(port, (err) =>
@@ -321,6 +400,12 @@ controller.onError.add((error) => console.error(error));
 server.listen(port, (err) =>
   err ? console.error(err) : console.log(`listening on port ${port}`));
 ```
+
+## Documentation
+
+The documentation is not available as of yet, but if you use TypeScript, the
+definitions are available with some (short) descriptions. There are also some
+examples below for how you could use this library.
 
 ## Typescript
 

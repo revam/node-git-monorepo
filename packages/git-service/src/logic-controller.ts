@@ -200,11 +200,11 @@ export class LogicController {
         if (! await this.checkIfExists(request)) {
           await this.reject(request, 404); // 404 Not Found
         }
-        else if (! await this.checkForAccess(request)) {
-          await this.reject(request, 401); // 401 Unauthorized
-        }
         else if (! await this.checkIfEnabled(request)) {
           await this.reject(request, 403); // 403 Forbidden
+        }
+        else if (! await this.checkForAccess(request)) {
+          await this.reject(request, 401); // 401 Unauthorized
         }
         else {
           await this.accept(request); // 2xx-5xx HTTP status code

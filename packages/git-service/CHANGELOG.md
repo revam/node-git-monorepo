@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   and `LogicController#serve` now also accept methods in lower-case or a mix of
   lower- and upper-case.
 
+- Check if repository is enabled before client has access to it in the logic
+  controller. Because this seems more sane to do.
+
 ### Fixed
 
 - POST requests won't ever finish.

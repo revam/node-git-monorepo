@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
-- POST requests won't ever finish.
+- POST requests take waaay too long to prepare the request. Required an update
+  of dependency git-packet-streams.
 
 ## [2.3.0] - 2018-09-23
 

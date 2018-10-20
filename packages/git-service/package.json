@@ -46,7 +46,7 @@
     "typescript": "^3.0.3"
   },
   "dependencies": {
-    "git-packet-streams": "^2.0.2",
+    "git-packet-streams": "^2.1.0",
     "git-side-band-message": "0.0.3",
     "micro-signals": "^2.0.0"
   },

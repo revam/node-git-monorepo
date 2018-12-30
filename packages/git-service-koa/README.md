@@ -4,8 +4,34 @@ Git service middleware for koa
 
 ## Install
 
+### From npm
+
 ```sh
-npm install --save git-service-koa
+$ npm install --save git-service-koa
+```
+
+### From GitHub
+
+### Spesific release:
+
+```sh
+$ npm install --save https://github.com/revam/node-git-monorepo/releases/download/git-service-koa/v$VERSION/package.tgz
+```
+
+### From git.lan
+
+Internet people can ignore this.
+
+#### Latest release:
+
+```sh
+$ npm install --save http://git.lan/mist@node/git@git-service-koa/latest/npm-pack.tgz
+```
+
+#### Spesific release:
+
+```sh
+$ npm install --save http://git.lan/mist@node/git@git-service-koa/v$VERSION/npm-pack.tgz
 ```
 
 ## What is this?
@@ -16,30 +42,31 @@ This package contains a middleware for using
 
 ## Usage
 
+Bare server.
+
 ```js
-import { createServer } from "http";
-import { createController, createKoaMiddleware } from "git-service-koa";
+import createKoaMiddleware from "git-service-koa";
 import koa from "koa";
+import { resolve } from "path";
 
 // Load variables from environment
-const { ORIGIN_ENV, PORT } = process.env;
+const origin = resolve(process.env.REPOSITORY_ROOT || "./repositories");
+const port = parseInt(process.env.NODE_PORT || "", 10) || 3000;
 
-// Create controller, app and server
-const controller = createController(ORIGIN_ENV);
+// Create application and attach middleware
 const app = new koa();
-const server = createServer(app.callback());
+app.use(createKoaMiddleware(ORIGIN_ENV));
 
-// Add middleware to application
-app.use(createKoaMiddleware(controller));
-
-// Start server and serve git.
-server.listen(parseInt(PORT, 10) || 3000, (err)
-  => err ? console.error(err) ? console.log("Listening on port %s", PORT || 3000));
+// Start server
+app.listen(port, (err)
+  => err ? console.error(err) ? console.log("Listening on port %s", port));
 ```
 
 ## Documentation
 
-The documentation is not yet available.
+The documentation is not available as of yet, but if you use TypeScript, the
+definitions are available with some (short) descriptions. There are also some
+examples below for how you could use this library.
 
 ## Typescript
 

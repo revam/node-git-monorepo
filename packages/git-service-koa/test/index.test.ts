@@ -1,8 +1,8 @@
-import { createMiddleware } from '../src/index';
+import { createKoaMiddleware } from "../src/index";
 
-describe("createMiddleware", () => {
+describe("createKoaMiddleware", () => {
   it("should return a function", (done) => {
-    const fn = createMiddleware(void 0);
+    const fn = createKoaMiddleware(__dirname);
     expect(typeof fn).toBe("function");
     done();
   });

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.1.1] - 2018-12-30
+
+### Fixed
+
+- Fixed potential security vulnerability in the merge dependency.
+
 ## [2.1.0] - 2018-10-20
 
 ### Added
@@ -96,7 +102,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial release
 
-[Unreleased]: https://github.com/revam/node-git-monorepo/compare/git-packet-streams-v2.1.0...HEAD
+[Unreleased]: https://github.com/revam/node-git-monorepo/compare/git-packet-streams-v2.1.1...HEAD
+[2.1.1]: https://github.com/revam/node-git-monorepo/compare/git-packet-streams-v2.1.0...git-packet-streams-v2.1.1
 [2.1.0]: https://github.com/revam/node-git-monorepo/compare/git-packet-streams-v2.0.2...git-packet-streams-v2.1.0
 [2.0.2]: https://github.com/revam/node-git-monorepo/compare/git-packet-streams-v2.0.1...git-packet-streams-v2.0.2
 [2.0.1]: https://github.com/revam/node-git-monorepo/compare/git-packet-streams-v2.0.0...git-packet-streams-v2.0.1

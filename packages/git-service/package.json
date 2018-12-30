@@ -1,6 +1,6 @@
 {
   "name": "git-service",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "description": "Serve git over http(s).",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -13,7 +13,7 @@
     "build:dev": "tsc -p . --sourceMap true --declarationMap true",
     "lint:src": "tslint -p . src/**/*.ts",
     "lint:test": "tslint -p ./test test/**/*.ts",
-    "test": "jest",
+    "test": "jest --runInBand",
     "prebuild": "npm run lint:src",
     "prebuild:dev": "npm run lint:src",
     "prepublish": "npm run test && npm run cleanup && npm run build",
@@ -46,7 +46,7 @@
     "typescript": "^3.0.3"
   },
   "dependencies": {
-    "git-packet-streams": "^2.1.0",
+    "git-packet-streams": "^2.1.1",
     "git-side-band-message": "0.0.3",
     "micro-signals": "^2.0.0"
   },

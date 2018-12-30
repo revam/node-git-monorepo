@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.4.1] - 2018-12-30
+
+### Fixed
+
+- Fixed potential security vulnerability in the merge dependency.
+
 ## [2.4.0] - 2018-10-20
 
 ### Changed
@@ -291,7 +297,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial public release
 
-[Unreleased]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.4.0...HEAD
+[Unreleased]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.4.1...HEAD
+[2.4.1]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.4.0...git-service/v2.4.1
 [2.4.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.3.0...git-service/v2.4.0
 [2.3.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.2.0...git-service/v2.3.0
 [2.2.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.1.0...git-service/v2.2.0

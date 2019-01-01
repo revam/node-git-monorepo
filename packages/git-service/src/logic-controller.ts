@@ -19,6 +19,7 @@ import {
 
 const SymbolContext = Symbol("context");
 const SymbolOnError = Symbol("on error");
+const SymbolPacketsRead = Symbol("packets read");
 
 const SymbolOnComplete = Symbol("on complete");
 class OnCompleteSignal extends Signal<IRequestData> {
@@ -125,6 +126,15 @@ export class LogicController {
   }
 
   /**
+   * Waits till request body is fully inspected and request is ready for use
+   * before resolving the promise.
+   * @param request The request object.
+   */
+  public async await(request: IRequestData): Promise<void> {
+    await LogicController.await(request);
+  }
+
+  /**
    * Creates a new `IRequestData` compliant object.
    *
    * @param body Request body as a stream
@@ -132,12 +142,12 @@ export class LogicController {
    * @param method HTTP method used for request
    * @param url Tailing url path fragment with querystring.
    */
-  public async create(
+  public create(
     body: NodeJS.ReadableStream,
     headers: HeadersInput,
     method: string,
     url: string,
-  ): Promise<IRequestData> {
+  ): IRequestData {
     return createRequest(body, headers, method, url);
   }
 
@@ -182,11 +192,12 @@ export class LogicController {
       request = body as IRequestData;
     }
     else if (arguments.length === 4) {
-      request = await this.create(body as NodeJS.ReadableStream, headers!, method!, url!);
+      request = this.create(body as NodeJS.ReadableStream, headers!, method!, url!);
     }
     else {
       throw new Error('Invalid arguments supplied to method "serve".');
     }
+    await this.await(request);
     if (request.status === RequestStatus.Pending) {
       request[SymbolContext] = new LogicControllerContext(this, request);
       try {
@@ -440,6 +451,17 @@ export class LogicController {
   private dispatchError(error: any): void {
     setImmediate(() => this[SymbolOnError].dispatch(error));
   }
+
+  /**
+   * Waits till request body is fully inspected and request is ready for use
+   * before resolving the promise.
+   * @param request The request object.
+   */
+  public static async await(request: IRequestData): Promise<void> {
+    if (SymbolPacketsRead in request) {
+      await request[SymbolPacketsRead];
+    }
+  }
 }
 
 class LogicControllerContext {
@@ -571,12 +593,12 @@ function wrapError(error: any, code: ErrorCodes): IOuterError {
   return outerError as IOuterError;
 }
 
-async function createRequest(
+function createRequest(
   body: NodeJS.ReadableStream,
   inputHeaders: HeadersInput,
   method: string,
   url: string,
-): Promise<IRequestData> {
+): IRequestData {
   if (typeof body !== "object") {
     throw new TypeError("argument `body` must be of type 'object'.");
   }
@@ -658,7 +680,9 @@ async function createRequest(
     const middleware = ServiceReaders.get(service)!;
     const passthrough = new PacketReader(middleware(requestData));
     requestData.body = passthrough;
-    await new Promise((ok, nok) => body.pipe(passthrough).on("error", nok).on("packet-done", ok));
+    requestData[SymbolPacketsRead] = new Promise(
+      (ok, nok) => body.pipe(passthrough).on("error", nok).on("packet-done", ok),
+    );
   }
   return requestData;
 }

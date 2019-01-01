@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- Added two new methods `LogicController.await` and `LogicController#await` to
+  wait till request body is fully inspected and request is ready for use.
+
+### Changed
+
+- `LogicController#create` is now a sync method.
+
+  **Note:** Before using the request object manually it is recommended to call
+  either `LogicController.await` or `LogicController#await`, to be sure the
+  request is ready for use. This is done in the `LogicController#serve` method,
+  and is not needed if you use that instead.
+
 ## [2.4.1] - 2018-12-30
 
 ### Fixed

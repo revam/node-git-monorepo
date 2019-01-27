@@ -92,7 +92,7 @@ async function validateData(
     const [url, method, content_type] = input;
     const passThrough = new PassThrough();
     passThrough.end();
-    const request = await controller.create(
+    const request = controller.create(
       passThrough,
       { "content-type": content_type },
       method,

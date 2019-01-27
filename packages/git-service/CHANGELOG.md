@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.5.0] - 27-01-2019
+
 ### Added
 
 - Added two new methods `LogicController.await` and `LogicController#await` to
@@ -367,7 +369,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - Initial public release
 
-[Unreleased]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.4.1...HEAD
+[Unreleased]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.5.0...HEAD
+[2.5.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.4.1...git-service/v2.5.0
 [2.4.1]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.4.0...git-service/v2.4.1
 [2.4.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.3.0...git-service/v2.4.0
 [2.3.0]: https://github.com/revam/node-git-monorepo/compare/git-service/v2.2.0...git-service/v2.3.0

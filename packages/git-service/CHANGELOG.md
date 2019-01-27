@@ -12,14 +12,70 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Added two new methods `LogicController.await` and `LogicController#await` to
   wait till request body is fully inspected and request is ready for use.
 
+- Added a new class `GenericDriver` implementing the `IDriver` interface for
+  both file system access and forwarding to other http(s) servers. It is also
+  now possible to pass a full URI to `GenericDriver#serve`, to serve from
+  another remote origin regardless of driver-set origin.
+
+  **Note**
+
+  The input path is sanetized and prepended with "`/`" when a new request is
+  created with `LogicController#create`.
+  So no need to worry if any users supply a path starting with an uri protocol
+  (e.g. `"https://example.org/https://foo.bar/baz"` -> request.path =
+  `"/https://foo.bar/baz"`), as it will **always** be prepended.
+  To forward to another origin you need to set the path manually, preferrably
+  in a proxied `checkIfExists`, to a path starting with a http or https protocol
+  (e.g. `"https://foo.bar/baz"`). See example below.
+
+  ```js
+  import { LogicController } from "git-service";
+
+  /**
+   * Some magical function to map input path to its corresponding origin.
+   * @param {string} path
+   * @return {string|undefined} Mirrored path or {@link undefined}.
+   */
+  function findMirrorForPath(path) { /* m a g i c */ }
+
+  const controller = new LogicController({
+    // Default mirror
+    origin: "https://mirror1.git.local/r/",
+    methods: {
+      checkIfExists(request) {
+        if (!request.service || !request.path) {
+          return false;
+        }
+        const mirror = findMirrorForPath(request.path);
+        if (mirror) {
+          request.path = mirror;
+        }
+        // Let the base method handle the rest.
+      }
+    }
+  });
+  ```
+
 ### Changed
 
-- `LogicController#create` is now a sync method.
+- Built javascript files no longer contain any comments, only code. Their
+  corresponding declaration files still contain any relevant comments.
+
+- `LogicController#create` is now a sync method, and will not return a promise.
 
   **Note:** Before using the request object manually it is recommended to call
-  either `LogicController.await` or `LogicController#await`, to be sure the
-  request is ready for use. This is done in the `LogicController#serve` method,
-  and is not needed if you use that instead.
+  either `LogicController.await` or `LogicController#await`, to be sure all
+  processing is done and the request is ready for use.
+  If you use `LogicController#serve` to serve your request, then this is not
+  necessary.
+
+- Deprecated the following exports, to-be-removed in next mayor update:
+  - `IGenericDriverOptions` & `ProxiedMethods`: Use new namespaced exports from
+    `GenericDriver` export.
+  - `createDriver`, `createFSDriver` & `createHttpDriver`: Replaced by class
+    `GenericDriver`.
+  - `LogicControllerMiddleware`: Use new namespaced exports from
+    `LogicController` export.
 
 ## [2.4.1] - 2018-12-30
 

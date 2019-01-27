@@ -1,4 +1,5 @@
 import { RequestStatus, ServiceType } from "./enums";
+import { GenericDriver } from "./generic-driver";
 import { Headers } from "./headers";
 
 /**
@@ -192,38 +193,20 @@ export interface IDriver {
 
 /**
  * Generic driver options.
+ *
+ * Remains for backwards compatability.
+ * @deprecated
  */
-export interface IGenericDriverOptions {
-  /**
-   * Default values for enabled-check with file-system driver.
-   */
-  enabledDefaults?: boolean | { [K in ServiceType]?: boolean; };
-  /**
-   * Proxied methods.
-   */
-  methods?: ProxiedMethods;
-  /**
-   * Origin location as an URI or relative/abolute path.
-   */
-  origin?: string;
-}
+// tslint:disable-next-line:no-empty-interface
+export interface IGenericDriverOptions extends GenericDriver.Options {}
 
 /**
  * Custom implementations for driver methods.
  *
- * All proxied methods should act the same as the methods they are proxying,
- * with the exception of allowing void as a return type.
- *
- * When a proxied method returns undefined, or a promise-like object resolving
- * to undefined, the proxided method will fallback to the original method
- * implementation.
+ * Remains for backwards compatability.
+ * @deprecated
  */
-export type ProxiedMethods = {
-  [P in keyof Exclude<IDriver, "createResponse">]?: (
-    request: IRequestData,
-    response: IResponseData,
-  ) => ReturnType<IDriver[P]> | void | PromiseLike<void>;
-};
+export type ProxiedMethods = GenericDriver.ProxiedMethods;
 
 export interface IError extends Error {
   code: string;

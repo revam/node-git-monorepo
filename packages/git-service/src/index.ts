@@ -5,10 +5,12 @@
  * Copyright (c) 2018 Mikal Stordal <mikalstordal@gmail.com>
  */
 import { IncomingMessage, ServerResponse, STATUS_CODES } from "http";
-import { IGenericDriverOptions } from "./interfaces";
-import { createController, LogicController } from "./logic-controller";
+import { ServiceType } from "./enums";
+import { GenericDriver } from "./generic-driver";
+import { IDriver } from "./interfaces";
+import { LogicController } from "./logic-controller";
 
-export * from "./driver";
+export * from "./generic-driver";
 export * from "./enums";
 export * from "./interfaces";
 export * from "./logic-controller";
@@ -30,7 +32,7 @@ export function createMiddleware(
  * @param setup Setup controller before use.
  */
 export function createMiddleware(
-  optionsOrOrigin: string | IGenericDriverOptions,
+  optionsOrOrigin: string | GenericDriver.Options,
   setup?: (controller: LogicController) => any,
 ): (request: IncomingMessage, response: ServerResponse) => Promise<void>;
 /**
@@ -42,11 +44,11 @@ export function createMiddleware(
  *              instead of an existing controller.
  */
 export function createMiddleware(
-  controllerOrOptions: LogicController | IGenericDriverOptions | string,
+  controllerOrOptions: LogicController | GenericDriver.Options | string,
   setup?: (controller: LogicController) => any,
 ): (request: IncomingMessage, response: ServerResponse) => Promise<void>;
 export function createMiddleware(
-  controllerOrOptions: LogicController | IGenericDriverOptions | string,
+  controllerOrOptions: LogicController | GenericDriver.Options | string,
   setup?: (controller: LogicController) => any,
 ): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
   let controller: LogicController;
@@ -86,8 +88,92 @@ export function createMiddleware(
     } finally {
       if (response.writable) {
         await new Promise((resolve, reject) =>
-          response.end((err) => err ? reject(err) : resolve()));
+          response.end((err: any) => err ? reject(err) : resolve()));
       }
     }
   };
+}
+
+/**
+ * Creates a new logic controller configured with a driver for `origin`.
+ *
+ * @param origin Origin location (URI or rel./abs. path)
+ * @param options Extra options
+ */
+export function createController(origin: string, options?: GenericDriver.Options): LogicController;
+/**
+ * Creates a new logic controller configured with a driver.
+ *
+ * @param options Options object. Must contain property `origin`.
+ */
+export function createController(options: GenericDriver.Options): LogicController;
+/**
+ * Creates a new logic controller configured with a driver.
+ *
+ * @param originOrOptions Origin location or options
+ * @param options Extra options. Ignored if `originOrOptions` is an object.
+ */
+export function createController(
+  originOrOptions: string | GenericDriver.Options,
+  options?: GenericDriver.Options,
+): LogicController;
+export function createController(
+  originOrOptions: string | GenericDriver.Options,
+  options?: GenericDriver.Options,
+): LogicController {
+  return new LogicController(new GenericDriver(originOrOptions, options));
+}
+
+/**
+ * Creates an `IDriver` compatible object.
+ *
+ * @deprecated
+ * @param options Options object. Must contain property `origin`.
+ */
+export function createDriver(options: GenericDriver.Options): IDriver;
+/**
+ * Creates an `IDriver` compatible object.
+ *
+ * @deprecated
+ * @param origin Origin location (URI or rel./abs. path)
+ * @param options Extra options.
+ */
+export function createDriver(origin: string, options?: GenericDriver.Options): IDriver;
+/**
+ * Creates an `IDriver` compatible object.
+ *
+ * @deprecated
+ * @param originOrOptions Origin location or options
+ * @param options Extra options. Ignored if `originOrOptions` is an object.
+ */
+export function createDriver(originOrOptions: string | GenericDriver.Options, options?: GenericDriver.Options): IDriver;
+/**
+ * @deprecated
+ */
+export function createDriver(origin: string | GenericDriver.Options, options: GenericDriver.Options = {}): IDriver {
+  return new GenericDriver(origin, options);
+}
+
+/**
+ * Creates an IDriver compatible object for use on the file system.
+ *
+ * @deprecated
+ * @param origin Repositories root folder
+ * @param enabledDefaults Service usage defaults
+ */
+export function createFileSystemDriver(
+  origin: string,
+  enabledDefaults: boolean | Partial<Record<ServiceType, boolean>> = true,
+): IDriver {
+  return new GenericDriver(origin, { enabledDefaults});
+}
+
+/**
+ * Creates an IDriver compatible object for use over http(s).
+ *
+ * @deprecated
+ * @param origin Origin location URL
+ */
+export function createWebDriver(origin: string): IDriver {
+  return new GenericDriver(origin);
 }

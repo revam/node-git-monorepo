@@ -3,13 +3,11 @@ import * as encode from "git-side-band-message";
 import { STATUS_CODES } from "http";
 import { ReadableSignal, Signal } from "micro-signals";
 import { URL } from "url";
-import { createDriver } from "./driver";
 import { ErrorCodes, RequestStatus, ServiceType } from "./enums";
 import { Headers, HeadersInput } from "./headers";
 import {
   IDriver,
   IError,
-  IGenericDriverOptions,
   IOuterError,
   IReceivePackCommand,
   IRequestData,
@@ -47,12 +45,9 @@ class OnUsableSignal extends Signal<IRequestData> {
 
 /**
  * Middeware for controller.
+ * @deprecated
  */
-export type LogicControllerMiddleware = (
-  this: LogicControllerContext,
-  request: IRequestData,
-  response: IResponseData,
-) => any;
+export type LogicControllerMiddleware = LogicController.Middleware;
 
 /**
  * Common logic shared across service instances.
@@ -118,7 +113,7 @@ export class LogicController {
    * listeners to signal `onUsable`.
    * @param middleware Middleware to use
    */
-  public use(...middleware: LogicControllerMiddleware[]): this {
+  public use(...middleware: LogicController.Middleware[]): this {
     middleware.forEach((m) =>
       this.onUsable.add((request) =>
         m.call(request[SymbolContext], request, request.response)));
@@ -464,6 +459,18 @@ export class LogicController {
   }
 }
 
+export namespace LogicController {
+  /**
+   * Middeware for controller.
+   */
+  export type Middleware = (
+    this: LogicControllerContext,
+    request: IRequestData,
+    response: IResponseData,
+  ) => any;
+
+}
+
 class LogicControllerContext {
   /* @internal */
   private [SymbolContext]: LogicController;
@@ -551,36 +558,6 @@ class LogicControllerContext {
   public async checkIfExists(): Promise<boolean> {
     return this[SymbolContext].checkIfExists(this.request);
   }
-}
-
-/**
- * Creates a new logic controller configured with a driver for `origin`.
- *
- * @param origin Origin location (URI or rel./abs. path)
- * @param options Extra options
- */
-export function createController(origin: string, options?: IGenericDriverOptions): LogicController;
-/**
- * Creates a new logic controller configured with a driver.
- *
- * @param options Options object. Must contain property `origin`.
- */
-export function createController(options: IGenericDriverOptions): LogicController;
-/**
- * Creates a new logic controller configured with a driver.
- *
- * @param originOrOptions Origin location or options
- * @param options Extra options. Ignored if `originOrOptions` is an object.
- */
-export function createController(
-  originOrOptions: string | IGenericDriverOptions,
-  options?: IGenericDriverOptions,
-): LogicController;
-export function createController(
-  originOrOptions: string | IGenericDriverOptions,
-  options?: IGenericDriverOptions,
-): LogicController {
-  return new LogicController(createDriver(originOrOptions, options));
 }
 
 function wrapError(error: any, code: ErrorCodes): IOuterError {
@@ -816,7 +793,7 @@ const ServiceReaders = new Map<ServiceType, (s: IRequestData) => (b: Buffer) => 
     (request) => {
       const pre_check = /[0-9a-f]{40} [0-9a-f]{40}/;
       const regex =
-      /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
+        /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
       return (buffer) => {
         if (pre_check.test(buffer.slice(4, 85).toString("utf8"))) {
           const value = buffer.toString("utf8");

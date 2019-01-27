@@ -9,14 +9,16 @@
   },
   "scripts": {
     "cleanup": "del-cli lib",
-    "build": "tsc -p .",
-    "build:dev": "tsc -p . --sourceMap true --declarationMap true",
+    "build": "npm run build:bare && npm run build:types",
+    "build:types": "tsc -p . --removeComments false --declaration true --emitDeclarationOnly true --sourceMap false --declarationMap false",
+    "build:bare": "tsc -p . --removeComments true --declaration false --emitDeclarationOnly false --sourceMap false --declarationMap false",
+    "build:dev": "tsc -p . --removeComments false --declaration true --emitDeclarationOnly false --sourceMap true --declarationMap true",
     "lint:src": "tslint -p . src/**/*.ts",
     "lint:test": "tslint -p ./test test/**/*.ts",
     "test": "jest --runInBand",
-    "prebuild": "npm run lint:src",
+    "prebuild": "npm run cleanup && npm run lint:src",
     "prebuild:dev": "npm run lint:src",
-    "prepublish": "npm run test && npm run cleanup && npm run build",
+    "prepare": "npm run test && npm run build",
     "pretest": "npm run lint:test"
   },
   "repository": {

@@ -1,7 +1,7 @@
 import { ChildProcess, spawn } from "child_process";
 import { IncomingMessage, OutgoingHttpHeaders, request as send, RequestOptions } from "http";
 import { request as sendSecure } from "https";
-import { join } from "path";
+import { isAbsolute, join, resolve } from "path";
 import { Readable } from "stream";
 import { parse } from "url";
 import { ErrorCodes, ServiceType } from "./enums";
@@ -14,41 +14,57 @@ import { IDriver, IDriverError, IProxiedError, IRequestData, IResponseData } fro
  * All public `check*` methods can be proxied through `options.methods`.
  */
 export class GenericDriver implements IDriver {
-  protected readonly origin: string;
   protected readonly enabledDefaults: Readonly<Record<ServiceType, boolean>>;
-  protected readonly hasHTTPOrigin: boolean;
+  protected readonly origin?: string;
+  protected readonly originIsHttp: boolean;
 
   /**
    * Creates a new instance of {@link GenericDriver}.
+   */
+  public constructor();
+  /**
+   * Creates a new instance of {@link GenericDriver}.
    *
-   * @param options Options object. Must contain property `origin`.
+   * @param options Driver options.
    */
   public constructor(options: GenericDriver.Options);
   /**
    * Creates a new instance of {@link GenericDriver}.
    *
-   * @param origin Origin location (URI or rel./abs. path)
-   * @param options Extra options.
+   * @param origin Default repository storage location (rel./abs. path or url)
+   * @param options Driver options. Property `origin` will be ignored.
    */
   public constructor(origin: string, options?: GenericDriver.Options);
   /**
    * Creates a new instance of {@link GenericDriver}.
    *
-   * @param originOrOptions Origin location or options
-   * @param options Extra options. Ignored if `originOrOptions` is an object.
+   * @param originOrOptions Origin string or options object
+   * @param options Driver options. Ignored if `originOrOptions` is an object.
    */
-  public constructor(originOrOptions: string | GenericDriver.Options, options?: GenericDriver.Options);
+  public constructor(originOrOptions?: string | GenericDriver.Options, options?: GenericDriver.Options);
   public constructor(origin?: string | GenericDriver.Options, options: GenericDriver.Options = {}) {
     if (typeof origin === "object") {
       options = origin;
       origin = options.origin;
       delete options.origin;
     }
-    if (typeof origin !== "string" || origin.length === 0) {
-      throw new TypeError("argument `origin` is expected, either as part of `options` or as first argument");
+    if (typeof origin === "string" && origin.length > 0) {
+      const isHttp = hasHttpProtocol(origin);
+      // Resolve path if it is not an url and not absolute.
+      if (!isHttp && !isAbsolute(origin)) {
+        origin = resolve(origin);
+      }
+      // Strip trailing slash if found
+      if (origin.length > 1 && origin.endsWith("/")) {
+        origin = origin.substring(0, origin.length - 1);
+      }
+      this.origin = origin;
+      this.originIsHttp = isHttp;
     }
-    this.origin = origin;
-    this.hasHTTPOrigin = hasHttpProtocol(origin);
+    else {
+      this.origin = undefined;
+      this.originIsHttp = false;
+    }
     this.enabledDefaults = {
       "receive-pack": true,
       "upload-pack": true,
@@ -94,23 +110,41 @@ export class GenericDriver implements IDriver {
     }
   }
 
-  protected prepareHttpOrigin(request: IRequestData, isHttp?: boolean): string | undefined {
-    if (request.path) {
-      let path = request.path;
-      if (!path.length) {
-        path = "/";
+  protected preparePath(request: IRequestData): { isValid: boolean; isHttp: boolean } {
+    let path = request.path;
+    let isValid = false;
+    let isHttp = false;
+    // Path must be provided and not contain any segments equal to "." or "..".
+    if (typeof path === "string" && !RELATIVE_PATH_REGEX.test(path)) {
+      // urls has first priority
+      if (hasHttpProtocol(path)) {
+        isValid = isHttp = true;
       }
-      else if (path.length > 1 && path.endsWith("/")) {
-        path = path.substring(0, path.length - 1);
-      }
-      if (path[0] !== "/") {
-        if (isHttp || isHttp === undefined && hasHttpProtocol(request.path)) {
-          return path;
+      else if (this.origin) {
+        // Sanetize input
+        if (!path.length) {
+          path = "/";
         }
-        path = `/${path}`;
+        else if (path.length > 1 && path.endsWith("/")) {
+          path = path.substring(0, path.length - 1);
+        }
+        if (this.originIsHttp) {
+          if (path[0] !== "/") {
+            path = `/${path}`;
+          }
+          isHttp = true;
+          path = this.origin + path;
+        }
+        else {
+          path = join(this.origin, path);
+        }
+        isValid = true;
       }
-      return this.origin + path;
+      else if (isAbsolute(path)) {
+        isValid = true;
+      }
     }
+    return { isHttp, isValid };
   }
 
   public checkForAccess(): Promise<boolean> | boolean {
@@ -119,27 +153,24 @@ export class GenericDriver implements IDriver {
   }
 
   public async checkIfEnabled(request: IRequestData): Promise<boolean> {
-    if (!request.service || !request.path || RELATIVE_PATH_REGEX.test(request.path)) {
-      return false;
+    if (request.service) {
+      const { isValid, isHttp } = this.preparePath(request);
+      if (isValid) {
+        return isHttp ? this.checkHTTPIfEnabled(request) : this.checkFSIfEnabled(request);
+      }
     }
-    let isHttp: boolean | undefined;
-    if (this.hasHTTPOrigin || (isHttp = hasHttpProtocol(request.path))) {
-      return this.checkHTTPIfEnabled(request, isHttp);
-    }
-    return this.checkFSIfEnabled(request);
+    return false;
   }
 
-  protected async checkHTTPIfEnabled(request: IRequestData, isHttp: boolean = false): Promise<boolean> {
-    const origin = this.prepareHttpOrigin(request, isHttp);
-    const url = `${origin}/info/refs?service=git-${request.service}`;
+  protected async checkHTTPIfEnabled(request: IRequestData): Promise<boolean> {
+    const url = `${request.path!}/info/refs?service=git-${request.service}`;
     const response = await waitForResponse(url, "HEAD");
     return Boolean(response.statusCode && response.statusCode < 300 && response.statusCode >= 200);
   }
 
   protected async checkFSIfEnabled(request: IRequestData): Promise<boolean> {
-    const fullpath = join(this.origin, request.path!);
     const command = request.service!.replace("-", "");
-    const child = spawn("git", ["-C", fullpath, "config", "--bool", `deamon.${command}`]);
+    const child = spawn("git", ["-C", request.path!, "config", "--bool", `deamon.${command}`]);
     const {exitCode, stdout, stderr} = await waitForChild(child);
     if (exitCode === 0) {
       const output = stdout.toString("utf8");
@@ -153,45 +184,36 @@ export class GenericDriver implements IDriver {
   }
 
   public async checkIfExists(request: IRequestData): Promise<boolean> {
-    if (!request.path || RELATIVE_PATH_REGEX.test(request.path)) {
-      return false;
+    const { isValid, isHttp } = this.preparePath(request);
+    if (isValid) {
+      return isHttp ? this.checkHTTPIfExists(request) : this.checkFSIfExists(request);
     }
-    let isHttp: boolean | undefined;
-    if (this.hasHTTPOrigin || (isHttp = hasHttpProtocol(request.path))) {
-      return this.checkHTTPIfExists(request, isHttp);
-    }
-    return this.checkFSIfExists(request);
+    return false;
   }
 
-  protected async checkHTTPIfExists(request: IRequestData, isHttp: boolean = false): Promise<boolean> {
-    const origin = this.prepareHttpOrigin(request, isHttp);
-    const url = `${origin}/${request.path}/info/refs?service=git-upload-pack`;
+  protected async checkHTTPIfExists(request: IRequestData): Promise<boolean> {
+    const url = `${request.path!}/info/refs?service=git-upload-pack`;
     const response = await waitForResponse(url, "HEAD");
     return Boolean(response.statusCode && response.statusCode < 300 && response.statusCode >= 200);
   }
 
   protected async checkFSIfExists(request: IRequestData): Promise<boolean> {
-    const fullpath = join(this.origin, request.path!);
-    const child = spawn("git", ["ls-remote", fullpath, "HEAD"], {stdio: ["ignore", null, null]});
+    const child = spawn("git", ["ls-remote", request.path!, "HEAD"], {stdio: ["ignore", null, null]});
     const {exitCode} = await waitForChild(child);
     return exitCode === 0;
   }
 
   public async serve(request: IRequestData, response: IResponseData): Promise<void> {
-    if (!request.service || !request.path || RELATIVE_PATH_REGEX.test(request.path)) {
-      return;
+    if (request.service) {
+      const { isValid, isHttp } = this.preparePath(request);
+      if (isValid) {
+        return isHttp ? this.serveHTTP(request, response) : this.serveFS(request, response);
+      }
     }
-    let isHttp: boolean | undefined;
-    if (this.hasHTTPOrigin || (isHttp = hasHttpProtocol(request.path))) {
-      return this.serveHTTP(request, response, isHttp);
-    }
-    return this.serveFS(request, response);
   }
 
-  protected async serveHTTP(request: IRequestData, response: IResponseData, isHttp: boolean = false): Promise<void> {
-    const typePrefix = request.isAdvertisement ? "info/refs?service=" : "";
-    const origin = this.prepareHttpOrigin(request, isHttp);
-    const url = `${origin}/${request.path}/${typePrefix}git-${request.service}`;
+  protected async serveHTTP(request: IRequestData, response: IResponseData): Promise<void> {
+    const url = `${request.path!}/${request.isAdvertisement ? "info/refs?service=" : ""}git-${request.service}`;
     const method = request.isAdvertisement ? "GET" : "POST";
     const message = await waitForResponse(url, method, request.headers.toJSON(), request.body);
     for (const [header, value] of Object.entries(message.headers)) {
@@ -203,9 +225,8 @@ export class GenericDriver implements IDriver {
   }
 
   protected async serveFS(request: IRequestData, response: IResponseData): Promise<void> {
-    const fullpath = join(this.origin, request.path!);
     const option = request.isAdvertisement ? "--advertise-refs" : "--stateless-rpc";
-    const child = spawn("git", ["-C", fullpath, request.service!, option, "."]);
+    const child = spawn("git", ["-C", request.path!, request.service!, option, "."]);
     if (!request.isAdvertisement) {
       request.body.pipe(child.stdin);
     }

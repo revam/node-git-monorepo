@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- Class `GenericDriver` now allows an empty origin, but will require every
+  request to provide `request.path` as an absolute path or an url to the
+  repository storage location. Also, no error will be thrown if `request.path`
+  fails to meet the above criteria, and the driver will simply return a negative
+  (or no) response. This is subject-to-change in a future version.
+
+  Provided origin will now be resolved from the working directory if found to be
+  a relative path.
+
 ## [2.5.0] - 27-01-2019
 
 ### Added

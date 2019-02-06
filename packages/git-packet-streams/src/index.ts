@@ -1,6 +1,7 @@
 import { Readable, Transform } from "stream";
+import { TextDecoder } from "util";
 
-export type PacketReaderFunction = (packet: Buffer) => any;
+export type PacketReaderFunction = (packet: Uint8Array) => any;
 
 /**
  * Error codes thrown by this package.
@@ -32,7 +33,7 @@ export function createPacketReader(fn?: PacketReaderFunction): Transform {
 
 export class PacketReader extends Transform {
   private done = false;
-  private underflow?: Buffer;
+  private underflow?: Uint8Array;
 
   public constructor(fn?: PacketReaderFunction, done?: () => any) {
     super();
@@ -49,7 +50,7 @@ export class PacketReader extends Transform {
       this.push(buffer);
       return next();
     }
-    let iterableBuffer: Buffer;
+    let iterableBuffer: Uint8Array;
     if (this.underflow) {
       iterableBuffer = Buffer.concat([this.underflow, buffer]);
       this.underflow = undefined;
@@ -58,7 +59,7 @@ export class PacketReader extends Transform {
     }
     try {
       const iterator = createPacketIterator(iterableBuffer, true, true);
-      let result: IteratorResult<Buffer>;
+      let result: IteratorResult<Uint8Array>;
       do {
         result = iterator.next();
         if (result.value) {
@@ -177,16 +178,17 @@ export interface PacketReader {
   prependOnceListener(event: "packet-done", listener: () => void): this;
 }
 
+const DECODER = new TextDecoder("utf8", { fatal: true, ignoreBOM: true });
 /**
  * Reads next packet length after `offset`.
  * @param buffer Packet buffer
  * @param offset Start offset
  */
-export function readPacketLength(buffer: Buffer, offset: number = 0) {
+export function readPacketLength(buffer: Uint8Array, offset: number = 0) {
   if (buffer.length - offset < 4) {
     return -1;
   }
-  const input = buffer.toString("utf8", offset, offset + 4);
+  const input = DECODER.decode(buffer.slice(offset, offset + 4));
   if (!/^[0-9a-f]{4}$/.test(input)) {
     return -1;
   }
@@ -200,12 +202,12 @@ export function readPacketLength(buffer: Buffer, offset: number = 0) {
  * @param splitBufferAtIndex Index of buffer to split
  */
 export function concatPacketBuffers(
-  buffers?: Buffer[],
+  buffers?: Uint8Array[],
   splitBufferAtIndex: number = -1,
   offset?: number,
-): Buffer {
+): Uint8Array {
   if (!buffers || !buffers.length) {
-    return Buffer.alloc(0);
+    return new Uint8Array(0);
   }
   buffers = buffers.slice();
   if (splitBufferAtIndex >= 0 && splitBufferAtIndex < buffers.length) {
@@ -226,7 +228,7 @@ export function concatPacketBuffers(
  * @throws {IError}
  */
 function findNextZeroPacketInBuffer(
-  buffer: Buffer,
+  buffer: Uint8Array,
   offset: number = 0,
 ): number {
   if (!buffer || !buffer.length) {
@@ -263,10 +265,10 @@ function findNextZeroPacketInBuffer(
  * @throws {IError}
  */
 export function *createPacketIterator(
-  buffer: Buffer,
+  buffer: Uint8Array,
   breakOnZeroLength: boolean = false,
   breakOnIncompletePacket: boolean = false,
-): IterableIterator<Buffer> {
+): IterableIterator<Uint8Array> {
   if (!buffer.length) {
     return undefined;
   }

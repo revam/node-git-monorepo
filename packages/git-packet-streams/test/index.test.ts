@@ -15,8 +15,8 @@ const incompletePacket = Buffer.from("0018an incompl-");
 // an invalid packet
 const invalidPacket = Buffer.from("an invalid packet");
 
-function expectBuffersToMatch(actual: Buffer, expected: Buffer) {
-  expect(actual).toEqual(expected);
+function expectBuffersToMatch(actual: Uint8Array, expected: Uint8Array) {
+  expect(new Uint8Array(actual)).toEqual(new Uint8Array(expected));
   // ok(expected.equals(actual), "Actual value of buffer does not match expected result");
 }
 
@@ -273,7 +273,7 @@ describe("createPacketIterator", () => {
   });
 });
 
-async function waitForErrorOrFinish(buffers: Buffer[], fn?: (p: Buffer) => any): Promise<IError> {
+async function waitForErrorOrFinish(buffers: Buffer[], fn?: (p: Uint8Array) => any): Promise<IError> {
   const iterator = buffers[Symbol.iterator]();
   const output = new Readable({
     read() {

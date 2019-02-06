@@ -1,6 +1,6 @@
 {
   "name": "git-packet-streams",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "Helper functions to work with git packet format",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -13,10 +13,10 @@
     "build:dev": "tsc -p . --sourceMap true --declarationMap true",
     "lint:src": "tslint -p . src/**/*.ts",
     "lint:test": "tslint -p ./test test/**/*.ts",
-    "test": "jest",
+    "test": "jest --runInBand",
     "prebuild": "npm run lint:src",
     "prebuild:dev": "npm run lint:src",
-    "prepublish": "npm run test && npm run cleanup && npm run build",
+    "prepare": "npm run test && npm run cleanup && npm run build",
     "pretest": "npm run lint:test"
   },
   "repository": {

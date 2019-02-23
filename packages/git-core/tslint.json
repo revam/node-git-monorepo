@@ -2,6 +2,9 @@
   "lintOptions": {
     "typeCheck": true
   },
+  "linterOptions": {
+    "exclude": ["**/*.mjs"]
+  },
   "extends": "tslint:all",
   "rules": {
     // Enabled
@@ -113,6 +116,7 @@
     "no-switch-case-fall-through": true,
 
     // Disabled
+    "await-promise": false,
     "no-redundant-jsdoc": false,
     "strict-boolean-expressions": false,
     "switch-default": false,

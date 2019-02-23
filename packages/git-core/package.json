@@ -1,0 +1,79 @@
+{
+  "name": "@revam/git-core",
+  "description": "Core library for other git packages",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "module": "index.mjs",
+  "types": "index.d.ts",
+  "license": "ISC",
+  "author": "Mikal Stordal <mikalstordal@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/revam/node-git-service.git"
+  },
+  "homepage": "https://github.com/revam/node-git-service/tree/master/packages/revam/git-core#readme",
+  "bugs": {
+    "url": "https://github.com/revam/node-git-service/issues"
+  },
+  "keywords": [
+    "core",
+    "core-utils",
+    "git",
+    "git-utils",
+    "typescript"
+  ],
+  "files": [
+    "index.js",
+    "index.mjs"
+  ],
+  "dependencies": {
+    "micro-signals": "^2.0.0",
+    "node-fetch": "^2.3.0"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "^6.3.0",
+    "@types/jest": "^24.0.6",
+    "@types/node": "^11.9.5",
+    "@types/node-fetch": "^2.1.6",
+    "jest": "^24.1.0",
+    "read-pkg": "^4.0.1",
+    "rollup": "^1.2.3",
+    "rollup-plugin-copy": "^0.2.3",
+    "ts-jest": "^24.0.0",
+    "tslint": "^5.12.1",
+    "typescript": "^3.3.3",
+    "write-pkg": "^3.2.0"
+  },
+  "scripts": {
+    "api-extractor": "api-extractor run --typescript-compiler-folder node_modules/typescript",
+    "build": "npm run cleanup && npm run lint && npm run api-extractor && npm run test && npm run rollup && npm pack ./dist/package",
+    "cleanup": "rm -rf dist",
+    "lint": "tslint -p . src/**/*.ts",
+    "preapi-extractor": "npm run tsc:declaration",
+    "prerollup": "npm run tsc:lib",
+    "rollup": "rollup -c",
+    "test": "jest --runInBand",
+    "tsc": "npm run tsc:lib && npm run tsc:declaration",
+    "tsc:declaration": "tsc -p . --removeComments false --sourceMap false --declaration true --declarationMap true --emitDeclarationOnly true",
+    "tsc:lib": "tsc -p . --removeComments true --sourceMap true --declaration false --declarationMap false --emitDeclarationOnly false"
+  },
+  "jest": {
+    "transform": {
+      "^.+\\.tsx?$": "ts-jest"
+    },
+    "testPathIgnorePatterns": [
+      "node_modules",
+      "dist"
+    ],
+    "testRegex": "(/__tests__/.*|(\\.|/)(test|spec))\\.(jsx?|tsx?)$",
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js",
+      "jsx",
+      "json",
+      "node"
+    ]
+  }
+}

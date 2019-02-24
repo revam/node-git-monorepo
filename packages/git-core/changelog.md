@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-## 0.1.0 - 2019-02-23
+## [0.1.1] - 2019-02-25
+
+### Changed
+
+- Updated package.json to reflect more accurate info.
+
+## 0.1.0 - 2019-02-25
 
 ### Added
 
 - Initial release of package, based upon git-service v2.5.
 
-[Unreleased]: https://github.com/revam/node-git-monorepo/compare/revam/git-core/v0.1.0...HEAD
+[Unreleased]: https://github.com/revam/node-git-monorepo/compare/revam/git-core/v0.1.1...HEAD
+[0.1.1]: https://github.com/revam/node-git-monorepo/compare/revam/git-core/v0.1.0...git-core/v0.1.1

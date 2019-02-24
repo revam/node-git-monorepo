@@ -1,26 +1,30 @@
 {
   "name": "@revam/git-core",
   "description": "Core library for other git packages",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "main": "index.js",
   "module": "index.mjs",
   "types": "index.d.ts",
   "license": "ISC",
   "author": "Mikal Stordal <mikalstordal@gmail.com>",
+  "engines": {
+    "node": ">=10"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/revam/node-git-service.git"
+    "url": "git+https://github.com/revam/node-git-monorepo.git"
   },
-  "homepage": "https://github.com/revam/node-git-service/tree/master/packages/revam/git-core#readme",
+  "homepage": "https://github.com/revam/node-git-monorepo/tree/master/packages/git-core#readme",
   "bugs": {
-    "url": "https://github.com/revam/node-git-service/issues"
+    "url": "https://github.com/revam/node-git-monorepo/issues"
   },
   "keywords": [
     "core",
     "core-utils",
     "git",
     "git-utils",
+    "module",
     "typescript"
   ],
   "files": [

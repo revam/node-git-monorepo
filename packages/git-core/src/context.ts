@@ -61,6 +61,7 @@ export class Context {
     string?,
     Service?
   ]) {
+    // tslint:disable:cyclomatic-complexity
     // url and method must be provided at the same time.
     const url = rest.length >= 1 ? rest[0] : "/";
     if (typeof url !== "string") {
@@ -74,13 +75,26 @@ export class Context {
       throw new TypeError(`argument \`method\` must be one of the following HTTP verbs: '${Array.from(AllowedMethods).join("', '")}'`);
     }
     let body = rest.length >= 3 ? asyncIterator(rest[2]) : emptyIterable();
-    if (rest.length >= 4 && typeof rest[3] !== "object") {
+    if (rest.length >= 4 && (rest[3] === null || typeof rest[3] !== "object")) {
       throw new TypeError("argument `headers` must be of type 'object'.");
     }
     const headers = new Headers(rest[3]);
-    // And advertisement, path and service are optionally provided, and can be inferred.
-    const [advertisement = false, path, service]: [boolean?, string?, Service?] =
-      (rest.length >= 5 ? rest.slice(4) as any : mapInputToRequest(url, method, headers.get("Content-Type")));
+    let advertisement = rest.length >= 5 ? rest[4] : false;
+    if (typeof advertisement !== "boolean") {
+      throw new TypeError("argument `advertisement`must be of type 'boolean'.");
+    }
+    let path = rest.length >= 6 ? rest[5] : undefined;
+    if (!(path === undefined || typeof path === "string")) {
+      throw new TypeError("argument `path` must be undefined or of type 'string'.");
+    }
+    let service = rest.length >= 7 ? rest[6] : undefined;
+    if (!(service === undefined || typeof service === "string" && checkEnum(service, Service))) {
+      throw new TypeError("argument `service` must be a value from enum Service.");
+    }
+    // Advertisement, path and service is inferred if none of them is supplied.
+    if (rest.length < 5) {
+      [advertisement, path, service] = mapInputToRequest(url, method, headers.get("Content-Type"));
+    }
     // Read and analyse packets if we have a valid service and requester does **not** want advertisement.
     if (service && !advertisement) {
       const middleware = ServiceReaders.get(service)!;
@@ -105,6 +119,7 @@ export class Context {
       headers: new Headers(),
       status: 200,
     };
+    // tslint:enable:cyclomatic-complexity
   }
 
   //#endregion constructor
@@ -537,6 +552,21 @@ export interface Response {
   body: Body;
   headers: Headers;
   status: number;
+}
+
+/**
+ * Check if `value` is part of `enumConst`.
+ *
+ * @param value - Value to check.
+ * @param enumConst - Enumerable object.
+ */
+function checkEnum<TEnum extends Record<string, any>>(value: string | number, enumConst: TEnum): value is TEnum[keyof TEnum] {
+  for (const v of Object.values(enumConst)) {
+    if (value === v) {
+      return true;
+    }
+  }
+  return false;
 }
 
 async function *emptyIterable(): AsyncIterableIterator<Uint8Array> { return; }

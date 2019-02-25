@@ -5,7 +5,7 @@ import { isAbsolute, join, resolve } from "path";
 import { PassThrough, Readable } from "stream";
 import { promisify } from "util";
 import { Context } from "./context";
-import { ErrorCodes, Service } from "./enums";
+import { ErrorCodes, Service } from "./enum";
 import { IError, IOuterError, ServiceDriver } from "./main";
 
 const stat = promisify(STAT);

@@ -1,4 +1,4 @@
-import * as enums from "./enums";
+import * as enums from "./enum";
 
 test("Should only export objects with strings as keys and strings as values (string enums)", () => {
   for (const [k1, v1] of Object.entries(enums)) {

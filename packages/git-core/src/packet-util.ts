@@ -1,5 +1,5 @@
 import { TextDecoder, TextEncoder } from "util";
-import { ErrorCodes } from "./enums";
+import { ErrorCodes } from "./enum";
 
 export type PacketReaderFunction = (packet: Uint8Array) => any;
 
@@ -23,6 +23,62 @@ export function encodePacket(type: PacketType, message: string): Uint8Array {
     message += "\n";
   }
   return ENCODER.encode((message.length + 4).toString(16).padStart(4, "0") + message);
+}
+
+/**
+ * Prepares packets for `reader` from `iterable`.
+ *
+ * @remarks
+ *
+ * `iterable` should iterate packets, either iterable in a buffered array or
+ * iterable seperatly.
+ *
+ * @param iterable - Async packet iterable.
+ * @param reader - Packet reader.
+ */
+export async function *readPackets(
+  iterable: AsyncIterableIterator<Uint8Array>,
+  reader: (array: Uint8Array) => any,
+): AsyncIterableIterator<Uint8Array> {
+  //#region init
+  const backhaul: Uint8Array[] = [];
+  let array: Uint8Array | undefined;
+  let done = false;
+  do {
+    const r = await iterable.next();
+    if (r.done) {
+      break;
+    }
+    if (array) {
+      r.value = concatBuffers([array, r.value]);
+      array = undefined;
+    }
+    done = r.done;
+    const iterator = createPacketIterator(r.value, true, true);
+    let result: IteratorResult<Uint8Array>;
+    do {
+      result = iterator.next();
+      if (result.value) {
+        if (result.done) {
+          const length = readPacketLength(result.value);
+          if (length === 0) {
+            done = true;
+          } else {
+            array = result.value;
+          }
+        } else {
+          await reader(result.value);
+        }
+      }
+    } while (!done);
+    backhaul.push(r.value);
+  } while (array);
+  yield new Uint8Array(0);
+  //#endregion init
+  yield* backhaul;
+  if (!done) {
+    yield* iterable;
+  }
 }
 
 const ENCODER = new TextEncoder();

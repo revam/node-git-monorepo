@@ -1,9 +1,9 @@
 import { STATUS_CODES } from "http";
 import { ReadableSignal, Signal } from "micro-signals";
 import { Context } from "./context";
-import { ErrorCodes, Status } from "./enums";
+import { ErrorCodes, Status } from "./enum";
 import { IError, IOuterError, ServiceDriver } from "./main";
-import { encodeString } from "./packet-utils";
+import { encodeString } from "./packet-util";
 
 const SymbolContext = Symbol("context");
 const SymbolOnError = Symbol("on error");

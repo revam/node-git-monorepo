@@ -1,12 +1,12 @@
 import { Headers } from "node-fetch";
 import * as lib from "./context";
-import { Service } from "./enums";
-import { concatBuffers } from "./packet-utils";
+import { Service } from "./enum";
+import { concatBuffers } from "./packet-util";
 
 type ClassTypeArgs<T extends new (...args: any[]) => any> = T extends new (...args: infer R) => any ? R : any;
 
-describe("Context", () => {
-  describe("constructing", () => {
+describe("class Context", () => {
+  describe("constructor arguments", () => {
 
     async function*asyncIterable() { return; }
 
@@ -575,4 +575,10 @@ describe("Context", () => {
         ),
     ]));
   });
+
+  describe("own properties and methods", () => undefined);
+
+  describe("request delegation", () => undefined);
+
+  describe("response delegation", () => undefined);
 });

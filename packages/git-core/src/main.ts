@@ -116,7 +116,7 @@ export function checkServiceDriver(target: unknown): target is ServiceDriver {
   // tslint:enable:no-string-literal
 }
 
-export * from "./enums";
+export * from "./enum";
 export * from "./context";
 export * from "./generic-driver";
 export * from "./logic-controller";

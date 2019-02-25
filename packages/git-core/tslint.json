@@ -3,7 +3,7 @@
     "typeCheck": true
   },
   "linterOptions": {
-    "exclude": ["**/*.mjs"]
+    "exclude": ["**/*.mjs", "**/*.api.ts"]
   },
   "extends": "tslint:all",
   "rules": {

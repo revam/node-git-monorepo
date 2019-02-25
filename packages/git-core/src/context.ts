@@ -1,9 +1,10 @@
 import { Headers } from "node-fetch";
 import { Readable } from "stream";
-import { URL } from "url";
 import { TextDecoder } from "util";
-import { Service, Status } from "./enums";
-import { concatBuffers, createPacketIterator, encodePacket, encodeString, PacketType, readPacketLength } from "./packet-utils";
+import { addHeaderToIterable, addMessagesToIterable, createAsyncIterator, createReadable, inferValues } from "./context-util";
+import { Service, Status } from "./enum";
+import { checkEnum } from "./enum-util";
+import { encodePacket, encodeString, PacketType, readPackets } from "./packet-util";
 
 const SymbolPromise = Symbol("promise");
 
@@ -93,7 +94,7 @@ export class Context {
     }
     // Advertisement, path and service is inferred if none of them is supplied.
     if (rest.length < 5) {
-      [advertisement, path, service] = mapInputToRequest(url, method, headers.get("Content-Type"));
+      [advertisement, path, service] = inferValues(url, method, headers.get("Content-Type"));
     }
     // Read and analyse packets if we have a valid service and requester does **not** want advertisement.
     if (service && !advertisement) {
@@ -111,7 +112,7 @@ export class Context {
       service,
       url,
       toReadable() {
-        return bodyToReadable(this.body);
+        return createReadable(this.body);
       },
     };
     this.response = {
@@ -325,7 +326,7 @@ export class Context {
    * instances(?) of the same message.
    */
   public toAsyncIterator(): AsyncIterableIterator<Uint8Array> {
-    let body = bodyToAsyncIterator(this.response.body);
+    let body = createAsyncIterator(this.response.body);
     // Check if body and service is truthy
     if (this.response.body && this.request.service && this.type) {
       // Add header or messages if content type is the expected type.
@@ -333,14 +334,14 @@ export class Context {
       if (this.type === content_type) {
         // Add header if none found
         if (this.advertisement) {
-          body = addHeader(AdHeaders[this.request.service], body);
+          body = addHeaderToIterable(this.request.service, body);
         }
         // Add messages
         else if (this.__messages.length) {
           // Consume messages
           const packedMessages = this.__messages.map(([t, m]) => encodePacket(t, m));
           this.__messages.length = 0;
-          body = addMessages(packedMessages, body);
+          body = addMessagesToIterable(packedMessages, body);
         }
       }
       // Or add messages if type is "text/plain".
@@ -348,7 +349,7 @@ export class Context {
         // Consume messages
         const messages = this.__messages.map(([t, m]) => `${t === PacketType.Message ? "Error" : "Message"}: ${m}\n`).map(encodeString);
         this.__messages.length = 0;
-        body = addMessages(messages, body);
+        body = addMessagesToIterable(messages, body);
       }
     }
     // Set body
@@ -359,7 +360,7 @@ export class Context {
    * Create a {@link stream#Readable | readable} for {@link Response.body | response body}.
    */
   public toReadable(): Readable {
-    return bodyToReadable(this.toAsyncIterator());
+    return createReadable(this.toAsyncIterator());
   }
 
   //#endregion own properties and methods
@@ -554,21 +555,6 @@ export interface Response {
   status: number;
 }
 
-/**
- * Check if `value` is part of `enumConst`.
- *
- * @param value - Value to check.
- * @param enumConst - Enumerable object.
- */
-function checkEnum<TEnum extends Record<string, any>>(value: string | number, enumConst: TEnum): value is TEnum[keyof TEnum] {
-  for (const v of Object.values(enumConst)) {
-    if (value === v) {
-      return true;
-    }
-  }
-  return false;
-}
-
 async function *emptyIterable(): AsyncIterableIterator<Uint8Array> { return; }
 
 function asyncIterator<T>(iterable?: AsyncIterable<T> | AsyncIterableIterator<T>): AsyncIterableIterator<T> {
@@ -576,98 +562,6 @@ function asyncIterator<T>(iterable?: AsyncIterable<T> | AsyncIterableIterator<T>
     throw new TypeError("argument `iterable` must be an async iterable.");
   }
   return iterable[Symbol.asyncIterator]() as AsyncIterableIterator<T>;
-}
-
-async function *readPackets(
-  read: AsyncIterableIterator<Uint8Array>,
-  fn: (buffer: Uint8Array) => any,
-): AsyncIterableIterator<Uint8Array> {
-  //#region init
-  const backhaul: Uint8Array[] = [];
-  let buffer: Uint8Array | undefined;
-  let done = false;
-  do {
-    const r = await read.next();
-    if (r.done) {
-      break;
-    }
-    if (buffer) {
-      r.value = concatBuffers([buffer, r.value]);
-      buffer = undefined;
-    }
-    done = r.done;
-    const iterator = createPacketIterator(r.value, true, true);
-    let result: IteratorResult<Uint8Array>;
-    do {
-      result = iterator.next();
-      if (result.value) {
-        if (result.done) {
-          const length = readPacketLength(result.value);
-          if (length === 0) {
-            done = true;
-          } else {
-            buffer = result.value;
-          }
-        } else {
-          await fn(result.value);
-        }
-      }
-    } while (!done);
-    backhaul.push(r.value);
-  } while (buffer);
-  yield new Uint8Array(0);
-  //#endregion init
-  yield* backhaul;
-  if (!done) {
-    yield* read;
-  }
-}
-/**
- * Maps vital request properties to vital service properties.
- * @param fragment Tailing url path fragment with querystring.
- * @param method HTTP method used with incoming request.
- * @param content_type Incoming content-type header.
- * @internal
- */
-function mapInputToRequest(
-  fragment: string,
-  method: string,
-  content_type?: string | undefined | null,
-): [boolean, string?, Service?] {
-  const url = new URL(fragment, "https://127.0.0.1/");
-  // Get advertisement from service
-  let results: RegExpExecArray | null = /^\/?(.*?)\/info\/refs$/.exec(url.pathname);
-  if (results) {
-    const path = results[1];
-    if (!(method === "GET" || method === "HEAD") || !url.searchParams.has("service")) {
-      return [true, path];
-    }
-    const serviceName = url.searchParams.get("service")!;
-    results = /^git-((?:receive|upload)-pack)$/.exec(serviceName);
-    if (!results) {
-      return [true, path];
-    }
-    return [true, path, results[1] as Service];
-  }
-  // Use service directly
-  results = /^\/?(.*?)\/(git-[\w\-]+\w)$/.exec(url.pathname);
-  if (results) {
-    const path = results[1];
-    const serviceName = results[2];
-    if (method !== "POST" || !content_type) {
-      return [false, path];
-    }
-    results = /^git-((?:receive|upload)-pack)$/.exec(serviceName);
-    if (!results) {
-      return [false, path];
-    }
-    const service = results[1];
-    if (content_type !== `application/x-git-${service}-request`) {
-      return [false, path];
-    }
-    return [false, path, service as Service];
-  }
-  return [false];
 }
 
 function reader(
@@ -693,7 +587,8 @@ function reader(
 const DECODER = new TextDecoder("utf8", { fatal: true, ignoreBOM: true });
 
 /**
- * Maps RequestType to a valid packet reader for request body.
+ * Maps {@link Service} to a valid packet reader for
+ * {@link Request.body | request body}.
  */
 const ServiceReaders = new Map<Service, (...args: [Capabilities, Commands]) => (b: Uint8Array) => any>([
   [
@@ -747,83 +642,3 @@ const ServiceReaders = new Map<Service, (...args: [Capabilities, Commands]) => (
     },
   ],
 ]);
-
-function bodyToReadable(iterable?: AsyncIterableIterator<Uint8Array>): Readable {
-  if (iterable && Symbol.asyncIterator in iterable) {
-    const it: AsyncIterableIterator<Uint8Array> = iterable[Symbol.asyncIterator]();
-    return new Readable({
-      async read() {
-        const {value, done} = await it.next();
-        if (value) {
-          this.push(value);
-        }
-        if (done) {
-          this.push(null);
-        }
-      },
-    });
-  }
-  return new Readable({ read() { this.push(null); } });
-}
-
-async function *bodyToAsyncIterator(body: Body): AsyncIterableIterator<Uint8Array> {
-  if (body) {
-    if (body instanceof Uint8Array || "then" in body) {
-      yield body;
-    }
-    else if (Symbol.asyncIterator in body || Symbol.iterator in body) {
-      yield* body;
-    }
-  }
-}
-
-/**
- * Add `header` to response if not found.
- *
- * @param header - Header to check for and add.
- * @param iterable - Iterable to check.
- */
-async function *addHeader(header: Uint8Array, iterable: AsyncIterableIterator<Uint8Array>): AsyncIterableIterator<Uint8Array> {
-  const result = await iterable.next();
-  if (!result.done && result.value) {
-    if (!bufferEquals(result.value.slice(0, header.length))) {
-      yield header;
-    }
-    yield* iterable;
-  }
-}
-
-async function *addMessages(
-  messages: Iterable<Uint8Array> | IterableIterator<Uint8Array>,
-  iterable: AsyncIterableIterator<Uint8Array>,
-): AsyncIterableIterator<Uint8Array> {
-  yield* messages;
-  yield* iterable;
-}
-
-// http://codahale.com/a-lesson-in-timing-attacks/
-function bufferEquals(buf1?: Uint8Array, buf2?: Uint8Array): boolean {
-  if (buf1 === undefined && buf2 === undefined) {
-    return true;
-  }
-  if (buf1 === undefined || buf2 === undefined) {
-    return false;
-  }
-  if (buf1.length !== buf2.length) {
-      return false;
-  }
-  let result = 0;
-  // Don't short circuit
-  for (let i = 0; i < buf1.byteLength; i += 1) {
-    result |= buf1[i] ^ buf2[i]; // tslint:disable-line:no-bitwise
-  }
-  return result === 0;
-}
-
-/**
- * Advertisement Headers for response
- */
-const AdHeaders = {
-  [Service.ReceivePack]: encodeString("001f# service=git-receive-pack\n0000"),
-  [Service.UploadPack]: encodeString("001e# service=git-upload-pack\n0000"),
-};

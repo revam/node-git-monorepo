@@ -71,7 +71,7 @@ export class Context {
     if (!url.length || url[0] !== "/") {
       throw new TypeError("argument `url` must start with '/'.");
     }
-    const method = rest.length >= 2 ? (rest[1] && rest[1].trim().toUpperCase()) : "GET";
+    const method = rest.length >= 2 ? (rest[1] && rest[1].toUpperCase()) : "GET";
     if (!(typeof method === "string" && AllowedMethods.has(method))) {
       throw new TypeError(`argument \`method\` must be one of the following HTTP verbs: '${Array.from(AllowedMethods).join("', '")}'`);
     }

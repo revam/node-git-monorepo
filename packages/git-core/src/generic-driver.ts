@@ -1,15 +1,15 @@
-import { ChildProcess, spawn } from "child_process";
-import { PathLike, stat as STAT } from "fs";
+import { spawn } from "child_process";
+import { STATUS_CODES } from "http";
 import fetch from "node-fetch";
 import { isAbsolute, join, resolve } from "path";
-import { PassThrough, Readable } from "stream";
-import { promisify } from "util";
+import { Readable } from "stream";
 import { Context } from "./context";
 import { ErrorCodes, Service } from "./enum";
+import { fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, waitForChild } from "./generic-driver-util";
 import { IError, IOuterError, ServiceDriver } from "./main";
+import { encodeString } from "./packet-util";
 
-const stat = promisify(STAT);
-const isDirectory = async (path: PathLike): Promise<boolean> => stat(path).then((s) => s.isDirectory()).catch(() => false);
+const RELATIVE_PATH_REGEX = /(^|[/\\])\.{1,2}[/\\]/;
 
 /**
  * A generic implementation of the {@link ServiceDriver} interface for both
@@ -224,7 +224,10 @@ export class GenericDriver implements ServiceDriver {
       else if (isAbsolute(path)) {
         isValid = true;
       }
-      context.path = path;
+      // Set path, but only if it is valid.
+      if (isValid) {
+        context.path = path;
+      }
     }
     return { isHttp, isValid };
   }
@@ -285,9 +288,11 @@ export class GenericDriver implements ServiceDriver {
   }
 
   protected async checkFSIfExists(context: Context): Promise<boolean> {
-    if (!context.path || !(await isDirectory(context.path))) {
+    // Check if repository exists on disk AND is
+    if (!context.path || (await fsStatusCode(context.path)) === 404) {
       return false;
     }
+    // Check if context.path is a git repository
     const child = spawn("git", ["ls-remote", context.path, "HEAD"], { stdio: ["ignore", null, null] });
     const { exitCode } = await waitForChild(child);
     return exitCode === 0;
@@ -313,28 +318,27 @@ export class GenericDriver implements ServiceDriver {
       method: context.advertisement ? "GET" : "POST",
     });
     context.statusCode = response.status;
-    context.body = response.body.pipe(new PassThrough())[Symbol.asyncIterator]();
+    context.body = (response.body as Readable)[Symbol.asyncIterator]();
     for (const [header, value] of response.headers) {
       context.set(header, value);
     }
   }
 
   protected async serveFS(context: Context): Promise<void> {
-    // Short-circut if directory don't exist.
-    if (await isDirectory(context.path!)) {
+    const statusCode = context.statusCode = await fsStatusCode(context.path);
+    if (statusCode === 200) {
       const option = context.advertisement ? "--advertise-refs" : "--stateless-rpc";
       const child = spawn("git", ["-C", context.path!, context.service!, option, "."]);
       if (!context.advertisement) {
         context.request.toReadable().pipe(child.stdin);
       }
-      context.statusCode = 200;
       context.body = child.stdout[Symbol.asyncIterator]();
       context.type = `application/x-git-${context.service}-${context.advertisement ? "advertisement" : "result"}`;
     }
     else {
-      context.statusCode = 404;
-      context.body = undefined;
-      context.type = undefined;
+      const body = context.body = encodeString(STATUS_CODES[statusCode]!);
+      context.type = "text/plain; charset=utf-8";
+      context.length = body.length;
     }
   }
 }
@@ -415,30 +419,6 @@ type ProxiedMethods = {
   ) => ReturnType<ServiceDriver[P]> | void | PromiseLike<void>;
 };
 
-function hasHttpsProtocol(uriOrPath?: string): boolean {
-  return Boolean(uriOrPath && /^https:\/\//.test(uriOrPath));
-}
-
-function hasHttpOrHttpsProtocol(uriOrPath?: string): boolean {
-  return Boolean(uriOrPath && /^https?:\/\//.test(uriOrPath));
-}
-
-// Based on function exec() from
-// https://github.com/Microsoft/vscode/blob/2288e7cecd10bfaa491f6e04faf0f45ffa6adfc3/extensions/git/src/git.ts
-// Copyright (c) 2017-2018 Microsoft Corporation. MIT License
-async function waitForChild(child: ChildProcess): Promise<IExecutionResult> {
-  try {
-    const [exitCode, stdout, stderr] = await Promise.all([
-      new Promise<number>((_, r) => child.once("error", r).once("exit", _)),
-      waitForBuffer(child.stdout),
-      waitForBuffer(child.stderr).then((buffer) => buffer.toString("utf8")),
-    ]);
-    return { exitCode, stdout, stderr };
-  } catch (error) {
-    return { exitCode: -1, stdout: Buffer.alloc(0), stderr: error && error.message || "Unkonwn error" };
-  }
-}
-
 function createProcessError(exitCode: number, stderr: string): ProcessError {
   const error: Partial<ProcessError> = new Error("Failed to execute git");
   error.code = ErrorCodes.ERR_FAILED_GIT_EXECUTION;
@@ -455,20 +435,3 @@ function createProxiedError(innerError: Error, methodName: string) {
   error.stack = innerError.stack;
   throw error as ProxyError;
 }
-
-interface IExecutionResult {
-  exitCode: number;
-  stdout: Buffer;
-  stderr: string;
-}
-
-async function waitForBuffer(readable: Readable): Promise<Buffer> {
-  return new Promise<Buffer>((ok, error) => {
-    const buffers: Buffer[] = [];
-    readable.once("error", error);
-    readable.on("data", (b: Buffer) => buffers.push(b));
-    readable.once("close", () => ok(Buffer.concat(buffers)));
-  });
-}
-
-const RELATIVE_PATH_REGEX = /(^|[/\\])\.{1,2}[/\\]/;

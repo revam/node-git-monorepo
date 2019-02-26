@@ -61,6 +61,7 @@ const options: RollupOptions = {
         "readme.md",
         ["dist/tsdoc-metadata.json", "tsdoc-metadata.json"],
       ],
+      verbose: true,
     }),
   ],
 };
@@ -163,8 +164,10 @@ function generateBanner(): Plugin {
   };
 }
 
-function copyAssets(opts: { files: Array<string | [string, string]> }): Plugin {
+function copyAssets(opts: { files: Array<string | [string, string]>; verbose?: boolean; force?: boolean }): Plugin {
   const files = opts.files || [];
+  const verbose = opts.verbose || false;
+  const force = opts.force || false;
   const inputFolder = resolve();
   const outputFolders = new Set<string>();
   return {
@@ -177,9 +180,17 @@ function copyAssets(opts: { files: Array<string | [string, string]> }): Plugin {
         if (await isDirectory(outputFolder)) {
           await Promise.all(files.map(async (a) => {
             const i = join(inputFolder, relative(inputFolder, a instanceof Array ? a[0] : a));
-            const o = join(outputFolder, relative(inputFolder, a instanceof Array ? a[1] : a));
-            if (!(await isFile(o))) {
-              await writeFile(o, await readFile(i));
+            if (await isFile(i)) {
+              const o = join(outputFolder, relative(inputFolder, a instanceof Array ? a[1] : a));
+              if (!(await isFile(o)) || force) {
+                await writeFile(o, await readFile(i));
+              }
+              else if (verbose) {
+                this.warn(`Could not write file to path "${o}".`);
+              }
+            }
+            else if (verbose) {
+              this.warn(`Could not find file at path "${i}".`);
             }
           }));
         }

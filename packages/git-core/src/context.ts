@@ -1,9 +1,9 @@
 import { Headers } from "node-fetch";
 import { Readable } from "stream";
 import { TextDecoder } from "util";
-import { addHeaderToIterable, addMessagesToIterable, createAsyncIterator, createReadable, inferValues } from "./context-util";
+import { addHeaderToIterable, addMessagesToIterable, createAsyncIterator, createReadable, inferValues } from "./context.private";
 import { Service, Status } from "./enum";
-import { checkEnum } from "./enum-util";
+import { checkEnum } from "./enum.private";
 import { encodePacket, encodeString, PacketType, readPackets } from "./packet-util";
 
 const SymbolPromise = Symbol("promise");
@@ -11,6 +11,12 @@ const SymbolPromise = Symbol("promise");
 const AllowedMethods = new Set(["GET", "HEAD", "PATCH", "POST", "PUT"]);
 
 /**
+ * Generic context for use with an implementation of {@link ServiceController}.
+ *
+ * @remarks
+ *
+ * Can be extended for framework spesific functionality, or used directly.
+ *
  * @public
  */
 export class Context {
@@ -140,7 +146,7 @@ export class Context {
    *
    * @remarks
    *
-   * Can only be set through {@link (Context:class).updateStatus}.
+   * Can only be set through {@link Context.updateStatus}.
    */
   public get status(): Status {
     return this.__status;
@@ -154,12 +160,12 @@ export class Context {
   }
 
   /**
-   * Current
+   * See {@link Context.status}.
    */
   private __status: Status = Status.Pending;
 
   /**
-   * Update {@link (Context:class).status | status} of request.
+   * Update {@link Context.status | status} of request.
    *
    * @remarks
    *
@@ -171,7 +177,7 @@ export class Context {
     if (this.__status === Status.Pending) {
       this.__status = status;
     }
-    // except for failures, which can only be set after `Status.Accepted`.
+    // except for failures, which can still be set if status is `Status.Accepted`.
     else if (this.__status === Status.Accepted && status === Status.Failure) {
       this.__status = Status.Failure;
     }
@@ -444,6 +450,8 @@ export class Context {
 }
 
 /**
+ * Requested capebilities client support and want to use with this request.
+ *
  * @public
  */
 export type Capabilities = Map<string, string | undefined>;
@@ -487,6 +495,8 @@ export interface CommandUploadPack {
 }
 
 /**
+ * Contains commands for {@link Service | service} used.
+ *
  * @public
  */
 export type Commands = Array<CommandReceivePack | CommandUploadPack>;
@@ -497,6 +507,8 @@ export type Commands = Array<CommandReceivePack | CommandUploadPack>;
 export type ReadonlyCommands = ReadonlyArray<Readonly<CommandReceivePack | CommandUploadPack>>;
 
 /**
+ *
+ *
  * @public
  */
 export type Body =
@@ -522,7 +534,11 @@ export interface Request {
    */
   readonly body: AsyncIterableIterator<Uint8Array>;
   /**
-   * Request body as a readable stream.
+   * Request body as a {@link stream#Readable | readable stream}.
+   *
+   * @remarks
+   *
+   * For compatibility with other libraries using standard node streams.
    */
   toReadable(): Readable;
   /**

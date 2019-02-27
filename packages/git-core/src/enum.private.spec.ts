@@ -1,4 +1,4 @@
-import * as lib from "./enum-util";
+import * as lib from "./enum.private";
 
 enum A1 {
   a = 0,

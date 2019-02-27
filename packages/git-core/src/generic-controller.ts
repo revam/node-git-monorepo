@@ -5,31 +5,37 @@ import { isAbsolute, join, resolve } from "path";
 import { Readable } from "stream";
 import { Context } from "./context";
 import { ErrorCodes, Service } from "./enum";
-import { fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, waitForChild } from "./generic-driver-util";
-import { IError, IOuterError, ServiceDriver } from "./main";
+import { fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, waitForChild } from "./generic-controller.private";
+import { ServiceController } from "./main";
+import { IError, IOuterError } from "./main.private";
 import { encodeString } from "./packet-util";
 
 const RELATIVE_PATH_REGEX = /(^|[/\\])\.{1,2}[/\\]/;
 
 /**
- * A generic implementation of the {@link ServiceDriver} interface for both
- * file-system access and/or forwarding to other remote http(s) servers.
+ * A basic implementation of the {@link ServiceController} interface for both
+ * the file-system and/or forwarding to other remote servers.
  *
  * @remarks
  *
+ *
  * All public `check*` methods can be proxied through `options.methods`.
+ *
+ * @privateRemarks
+ *
+ * Should not contain any extra 'suger', only the most basic and generic
+ * implementation for extending classes to build upon.
  *
  * @public
  */
-export class GenericDriver implements ServiceDriver {
+export class Controller implements ServiceController {
   /**
-   * Defaults for {@link GenericDriver.checkFSIfEnabled}.
+   * Defaults for {@link GenericController.checkFSIfEnabled}.
    *
    * @remarks
    *
-   * When no default is set for {@link Service | given service}
-   * in the repository configuration, the corresponding value from this object
-   * is used.
+   * When no default is set for {@link Service | service} in the repository
+   * configuration, the corresponding value from this object is used.
    */
   protected readonly enabledDefaults: Readonly<Record<Service, boolean>>;
 
@@ -47,12 +53,14 @@ export class GenericDriver implements ServiceDriver {
   protected readonly origin?: string;
 
   /**
-   * Indicate if origin is a remote location.
+   * Indicates {@link GenericController.origin | origin} points to a remote
+   * location (is an URL).
    *
-   * @remarks
+   * @privateRemarks
    *
-   * Is true if {@link GenericDriver.origin | origin} is defined and
-   * {@link GenericDriver.originIsRemote} evaluates to true.
+   * Is `true` if {@link GenericController.origin | origin} is defined and
+   * {@link GenericController.originIsRemote} evaluates to `true`, otherwise
+   * `false`.
    */
   protected readonly originIsRemote: boolean;
 
@@ -82,27 +90,15 @@ export class GenericDriver implements ServiceDriver {
   private readonly getRemoteTail: (service: Service, advertise: boolean) => string;
 
   /**
-   * Creates a new instance of {@link GenericDriver}.
+   * Creates a new instance of {@link GenericController}.
    *
    * @param options - {@link GenericDriverOptions | Optional options}.
    */
-  public constructor(options?: GenericDriverOptions);
-  /**
-   * Creates a new instance of {@link GenericDriver}.
-   *
-   * @param origin - Default repository storage location, given as a relative path,
-   *                 absolute path, or URL to a remote server.
-   * @param options - {@link GenericDriverOptions | Optional options}.
-   *                  Property {@link GenericDriverOptions.origin | `origin`}
-   *                  will be ignored, because it is supplied seperatly.
-   */
-  public constructor(origin: string, options?: GenericDriverOptions);
-  public constructor(origin?: string | GenericDriverOptions, options: GenericDriverOptions = {}) {
-    if (typeof origin === "object") {
-      options = origin;
-      origin = options.origin;
-      delete options.origin;
+  public constructor(options: GenericControllerOptions | undefined | null = {}) {
+    if (!(options === undefined || typeof options === "object" && options !== null)) {
+      throw new TypeError("argument `options` must be of type 'object'.");
     }
+    let origin = options.origin;
     this.isURL = options.httpsOnly ? hasHttpsProtocol : hasHttpOrHttpsProtocol;
     this.getRemoteTail = options.remoteTail ? options.remoteTail.bind(undefined)
       : ((s, a) => a ? `/info/refs?service=git-${s}` : `/git-${s}`);
@@ -144,32 +140,10 @@ export class GenericDriver implements ServiceDriver {
         }
       }
     }
-    if (typeof options.methods === "object") {
-      const proxyMethods = new Set(["checkForAccess", "checkIfExists", "checkIfEnabled"]);
-      const methods = options.methods;
-      return new Proxy(this, {
-        get(target, prop: string, receiver) {
-          if (proxyMethods.has(prop) && prop in methods) {
-            return async (...args: any[]): Promise<any> => {
-              try {
-                const value = await methods[prop].apply(methods, args);
-                if (value !== undefined) {
-                  return value;
-                }
-              } catch (error) {
-                throw createProxiedError(error, prop);
-              }
-              return target[prop].apply(receiver, args);
-            };
-          }
-          return Reflect.get(target, prop, receiver);
-        },
-      });
-    }
   }
 
   /**
-   * Combine `baseURL` with the result of `GenericDriver.getRemoteTail`.
+   * Combine `baseURL` with the result of `GenericController.getRemoteTail`.
    *
    * @param baseURL - Remote repository location as a URL without trailing slash.
    * @param service - {@link Service | service} to use.
@@ -233,15 +207,7 @@ export class GenericDriver implements ServiceDriver {
   }
 
   /**
-   * {@inheritdoc ServiceDriver.checkForAuth}
-   */
-  public checkForAuth(): Promise<boolean> | boolean {
-    // No built-in access control.
-    return true;
-  }
-
-  /**
-   * {@inheritdoc ServiceDriver.checkIfEnabled}
+   * {@inheritdoc ServiceController.checkIfEnabled}
    */
   public async checkIfEnabled(context: Context): Promise<boolean> {
     if (context.service) {
@@ -299,7 +265,7 @@ export class GenericDriver implements ServiceDriver {
   }
 
   /**
-   * {@inheritdoc ServiceDriver.serve}
+   * {@inheritdoc ServiceController.serve}
    */
   public async serve(context: Context): Promise<void> {
     if (context.service) {
@@ -344,13 +310,13 @@ export class GenericDriver implements ServiceDriver {
 }
 
 /**
- * Options for {@link GenericDriver}.
+ * Options for {@link GenericController}.
  *
  * @public
  */
-export interface GenericDriverOptions {
+export interface GenericControllerOptions {
   /**
-   * Default values for enabled-check with file-system driver.
+   * Default values for .
    */
   enabledDefaults?: boolean | Partial<Record<Service, boolean>>;
   /**
@@ -358,24 +324,22 @@ export interface GenericDriverOptions {
    */
   httpsOnly?: boolean;
   /**
-   * Custom implementations (overrides) of driver methods.
+   * Default repository storage location.
    *
-   * All proxied methods should act the same as the methods they are proxying,
-   * with the exception of allowing void as a return type.
+   * @remarks
    *
-   * When a proxied method returns undefined, or a promise-like object resolving
-   * to undefined, the proxided method will fallback to the original method
-   * implementation.
-   */
-  methods?: ProxiedMethods;
-  /**
-   * Origin location as an URI or relative/abolute path.
+   * Should be one of 1) a relative path, 2) an absolute path, 3) an URL leading
+   * to a remote repository server, or 4) `undefined`.
+   *
+   * Relative paths are resolved from working directory.
    */
   origin?: string;
   /**
    * Create the tailing part of the remote URL.
    *
    * @remarks
+   *
+   * For use with custom endpoints on remote servers.
    *
    * @param service - {@link Service | service} to use.
    * @param advertise - Should look for advertisement.
@@ -403,35 +367,10 @@ export interface ProcessError extends IError {
   stderr: string;
 }
 
-/**
- * Custom implementations (overrides) of driver methods.
- *
- * All proxied methods should act the same as the methods they are proxying,
- * with the exception of allowing void as a return type.
- *
- * When a proxied method returns undefined, or a promise-like object resolving
- * to undefined, the proxided method will fallback to the original method
- * implementation.
- */
-type ProxiedMethods = {
-  [P in keyof Exclude<ServiceDriver, "serve">]?: (
-    context: Context,
-  ) => ReturnType<ServiceDriver[P]> | void | PromiseLike<void>;
-};
-
 function createProcessError(exitCode: number, stderr: string): ProcessError {
   const error: Partial<ProcessError> = new Error("Failed to execute git");
   error.code = ErrorCodes.ERR_FAILED_GIT_EXECUTION;
   error.exitCode = exitCode;
   error.stderr = stderr;
   return error as ProcessError;
-}
-
-function createProxiedError(innerError: Error, methodName: string) {
-  const error: Partial<ProxyError> = new Error(`Proxied method ${methodName} failed: ${innerError.message}`);
-  error.code = ErrorCodes.ERR_FAILED_PROXY_METHOD;
-  error.inner = innerError;
-  error.methodName = methodName;
-  error.stack = innerError.stack;
-  throw error as ProxyError;
 }

@@ -1,5 +1,6 @@
 import { TextDecoder, TextEncoder } from "util";
 import { ErrorCodes } from "./enum";
+import { IError } from "./main.private";
 
 export type PacketReaderFunction = (packet: Uint8Array) => any;
 
@@ -156,14 +157,14 @@ export function findNextZeroPacketInBuffer(
       if (offset + length <= buffer.length) {
         offset += length;
       } else {
-        const error: IError = new Error(
+        const error: Partial<IError> = new Error(
           `Incomplete packet ending at position ${offset + length} in buffer (${buffer.length})`,
         );
         error.code = ErrorCodes.ERR_INCOMPLETE_PACKET;
         throw error;
       }
     } else {
-      const error: IError = new Error(
+      const error: Partial<IError> = new Error(
         `Invalid packet starting at position ${offset} in buffer (${buffer.length})`,
       );
       error.code = ErrorCodes.ERR_INVALID_PACKET;
@@ -205,7 +206,7 @@ export function *createPacketIterator(
         if (breakOnIncompletePacket) {
           return buffer.slice(offset);
         } else {
-          const error: IError = new Error(
+          const error: Partial<IError> = new Error(
             `Incomplete packet ending at position ${packetEnd} in buffer (${buffer.length})`,
           );
           error.code = ErrorCodes.ERR_INCOMPLETE_PACKET;
@@ -213,15 +214,11 @@ export function *createPacketIterator(
         }
       }
     } else {
-      const error: IError = new Error(
+      const error: Partial<IError> = new Error(
         `Invalid packet starting at position ${offset} in buffer (${buffer.length})`,
       );
       error.code = ErrorCodes.ERR_INVALID_PACKET;
       throw error;
     }
   } while (offset < buffer.length);
-}
-
-export interface IError extends Error {
-  code?: string;
 }

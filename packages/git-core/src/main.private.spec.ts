@@ -1,4 +1,4 @@
-import * as lib from "./main";
+import * as lib from "./main.private";
 
 describe("checkServiceDriver", () => {
   test("unallowed values", () => {

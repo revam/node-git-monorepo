@@ -1,11 +1,11 @@
 // @public (undocumented)
 declare type Body = Uint8Array | Promise<Uint8Array> | PromiseLike<Uint8Array> | IterableIterator<Uint8Array> | AsyncIterableIterator<Uint8Array> | undefined | null;
 
-// @public (undocumented)
+// @public
 declare type Capabilities = Map<string, string | undefined>;
 
 // @public
-declare function checkServiceDriver(target: unknown): target is ServiceDriver;
+declare function checkServiceDriver(target: unknown): target is ServiceController;
 
 // @public
 interface CommandReceivePack {
@@ -14,7 +14,7 @@ interface CommandReceivePack {
     reference: string;
 }
 
-// @public (undocumented)
+// @public
 declare type Commands = Array<CommandReceivePack | CommandUploadPack>;
 
 // @public
@@ -23,7 +23,7 @@ interface CommandUploadPack {
     kind: "want" | "have";
 }
 
-// @public (undocumented)
+// @public
 declare class Context {
     // (undocumented)
     constructor();
@@ -75,23 +75,8 @@ declare class Context {
 }
 
 // @public
-declare enum ErrorCodes {
-    ERR_FAILED_GIT_EXECUTION = "ERR_FAILED_GIT_EXECUTION",
-    ERR_FAILED_IN_COMPLETE_SIGNAL = "ERR_FAILED_IN_COMPLETE_SIGNAL",
-    ERR_FAILED_IN_USABLE_SIGNAL = "ERR_FAILED_IN_USABLE_SIGNAL",
-    ERR_FAILED_PROXY_METHOD = "ERR_FAILED_PROXY_METHOD",
-    ERR_INCOMPLETE_PACKET = "ERR_INCOMPLETE_PACKET",
-    ERR_INVALID_ARG_TYPE = "ERR_INVALID_ARG_TYPE",
-    ERR_INVALID_BODY_FOR_2XX = "ERR_INVALID_BODY_FOR_2XX",
-    ERR_INVALID_PACKET = "ERR_INVALID_PACKET_START"
-}
-
-// @public
-declare class GenericDriver implements ServiceDriver {
-    constructor(options?: GenericDriverOptions);
-    constructor(origin: string, options?: GenericDriverOptions);
-    // (undocumented)
-    checkForAuth(): Promise<boolean> | boolean;
+declare class Controller implements ServiceController {
+    constructor(options?: GenericControllerOptions | undefined | null);
     // (undocumented)
     protected checkFSIfEnabled(context: Context): Promise<boolean>;
     // (undocumented)
@@ -123,39 +108,35 @@ declare class GenericDriver implements ServiceDriver {
 }
 
 // @public
-interface GenericDriverOptions {
+declare enum ErrorCodes {
+    ERR_FAILED_GIT_EXECUTION = "ERR_FAILED_GIT_EXECUTION",
+    ERR_FAILED_IN_COMPLETE_SIGNAL = "ERR_FAILED_IN_COMPLETE_SIGNAL",
+    ERR_FAILED_IN_USABLE_SIGNAL = "ERR_FAILED_IN_USABLE_SIGNAL",
+    ERR_INCOMPLETE_PACKET = "ERR_INCOMPLETE_PACKET",
+    ERR_INVALID_BODY_FOR_2XX = "ERR_INVALID_BODY_FOR_2XX",
+    ERR_INVALID_PACKET = "ERR_INVALID_PACKET_START"
+}
+
+// @public
+interface GenericControllerOptions {
     enabledDefaults?: boolean | Partial<Record<Service, boolean>>;
     httpsOnly?: boolean;
-    methods?: ProxiedMethods;
     origin?: string;
     remoteTail?(service: Service, advertise: boolean): string;
 }
 
-// @public (undocumented)
-interface IError extends Error {
-    // (undocumented)
-    code: string;
-    // (undocumented)
-    statusCode?: number;
-}
-
-// @public (undocumented)
-interface IOuterError extends IError {
-    // (undocumented)
-    inner: any;
-}
-
 // @public
-declare class LogicController implements ServiceDriver {
-    constructor(serviceDriver: ServiceDriver);
+declare class LogicController implements ServiceController {
+    constructor(serviceController: ServiceController, overrides?: MethodOverrides);
     accept(context: Context): Promise<void>;
+    // (undocumented)
+    protected argumentMethod(method: keyof ServiceController, context: Context, defaultValue?: boolean): Promise<boolean>;
     // (undocumented)
     checkForAuth(context: Context): Promise<boolean>;
     // (undocumented)
     checkIfEnabled(context: Context): Promise<boolean>;
     // (undocumented)
     checkIfExists(context: Context): Promise<boolean>;
-    readonly driver: ServiceDriver;
     readonly onComplete: ReadableSignal<Context>;
     readonly onError: ReadableSignal<any>;
     readonly onUsable: ReadableSignal<Context>;
@@ -223,10 +204,10 @@ declare enum Service {
 }
 
 // @public
-interface ServiceDriver {
-    checkForAuth(context: Context): boolean | Promise<boolean> | PromiseLike<boolean>;
-    checkIfEnabled(context: Context): boolean | Promise<boolean> | PromiseLike<boolean>;
-    checkIfExists(context: Context): boolean | Promise<boolean> | PromiseLike<boolean>;
+interface ServiceController {
+    checkForAuth?(context: Context): Promise<boolean>;
+    checkIfEnabled(context: Context): Promise<boolean>;
+    checkIfExists(context: Context): Promise<boolean>;
     serve(context: Context): Promise<void>;
 }
 

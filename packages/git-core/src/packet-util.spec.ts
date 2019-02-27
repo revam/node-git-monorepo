@@ -1,5 +1,5 @@
 import { ErrorCodes } from "./enum";
-import { IError } from "./main";
+import { IError } from "./main.private";
 import * as lib from "./packet-util";
 
 // an incomplete packet

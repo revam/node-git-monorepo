@@ -1,34 +1,23 @@
 import { Context } from "./context";
 
 /**
- * @public
- */
-export interface IError extends Error {
-  code: string;
-  statusCode?: number;
-}
-
-/**
- * @public
- */
-export interface IOuterError extends IError {
-  inner: any;
-}
-
-/**
- * Low-level driver for handling common actions with git.
+ * High-level controller for serving git repositories in javascript.
+ *
+ * @remarks
+ *
+ *
  *
  * @public
  */
-export interface ServiceDriver {
+export interface ServiceController {
   /**
    * Check for authorization to repository and/or service, and/or authentication
    * of requester.
    *
    * @remarks
    *
-   * It is up to the implentation to define rules to check for
-   * authorization/authentication.
+   * This method is optional to implement, and it is up to the implentation to
+   * define rules on how to check for authorization/authentication.
    *
    * A gernal outline may be to check {@link Request.headers} for a
    * "Authorization" header, then check some database for permissions.
@@ -36,19 +25,19 @@ export interface ServiceDriver {
    * @param context - The {@link Context | context} to evaluate.
    * @returns True if request should gain access to repository and/or service.
    */
-  checkForAuth(context: Context): boolean | Promise<boolean> | PromiseLike<boolean>;
+  checkForAuth?(context: Context): Promise<boolean>;
   /**
    * Checks if service is enabled for repository.
    *
    * @remarks
    *
-   * It is up to the implementation to define rules to check if the content of
-   * the {@link Request | request} is enabled for use.
+   * It is up to the implementation to define rules to check if the target of
+   * {@link Context | `context`} is enabled for use.
    *
    * But it _should_ not modify the {@link Response | response}
    * object, and only serve as an indicator to if the given
    * {@link Service | service} is enabled, should still be possible to
-   * _atempt_ a forcefull use of {@link ServiceDriver.serve}.
+   * _atempt_ a forcefull use of {@link ServiceController.serve}.
    *
    * A gernal outline may be to check if the
    * {@link Context.service | service} is enabled for the
@@ -58,7 +47,7 @@ export interface ServiceDriver {
    * @returns True if service is enabled for requested repository, otherwise
    *          false.
    */
-  checkIfEnabled(context: Context): boolean | Promise<boolean> | PromiseLike<boolean>;
+  checkIfEnabled(context: Context): Promise<boolean>;
   /**
    * Checks if repository exists.
    *
@@ -66,12 +55,12 @@ export interface ServiceDriver {
    *
    * It should only be an indicatior to check if repository,
    * and should still be possible to _atempt_ a forcefull use of
-   * {@link ServiceDriver.serve}.
+   * {@link ServiceController.serve}.
    *
    * @param context - The {@link Context | context} to evaluate.
    * @returns True if repository exists.
    */
-  checkIfExists(context: Context): boolean | Promise<boolean> | PromiseLike<boolean>;
+  checkIfExists(context: Context): Promise<boolean>;
   /**
    * Set properties for {@link Response | response}, through
    * {@link Context | `context`}.
@@ -98,25 +87,8 @@ export interface ServiceDriver {
   serve(context: Context): Promise<void>;
 }
 
-/**
- * Check if `target` confronts to the {@link ServiceDriver} interface.
- *
- * @param target - Target to check
- *
- * @public
- */
-export function checkServiceDriver(target: unknown): target is ServiceDriver {
-  // tslint:disable:no-string-literal
-  return (typeof target === "object" &&
-    target !== null || typeof target === "function") &&
-    "checkForAuth" in target && typeof target["checkForAuth"] === "function" &&
-    "checkIfEnabled" in target && typeof target["checkIfEnabled"] === "function" &&
-    "checkIfExists" in target && typeof target["checkIfExists"] === "function" &&
-    "serve" in target && typeof target["serve"] === "function";
-  // tslint:enable:no-string-literal
-}
-
 export * from "./enum";
+export { checkServiceDriver } from "./main.private";
 export * from "./context";
-export * from "./generic-driver";
+export * from "./generic-controller";
 export * from "./logic-controller";

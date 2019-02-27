@@ -9,10 +9,6 @@ export enum ErrorCodes {
    */
   ERR_FAILED_GIT_EXECUTION = "ERR_FAILED_GIT_EXECUTION",
   /**
-   * Something went wrong in a proxied driver method.
-   */
-  ERR_FAILED_PROXY_METHOD = "ERR_FAILED_PROXY_METHOD",
-  /**
    * Something went wrong in a listener for request data.
    */
   ERR_FAILED_IN_USABLE_SIGNAL = "ERR_FAILED_IN_USABLE_SIGNAL",
@@ -33,10 +29,6 @@ export enum ErrorCodes {
    * An incomplete packet exceeds the rest of available buffer.
    */
   ERR_INCOMPLETE_PACKET = "ERR_INCOMPLETE_PACKET",
-  /**
-   * An argument of the wrong type was passed to the function. (Same as Node.js API)
-   */
-  ERR_INVALID_ARG_TYPE = "ERR_INVALID_ARG_TYPE",
 }
 
 /**

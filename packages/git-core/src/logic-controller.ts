@@ -1,49 +1,52 @@
 import { STATUS_CODES } from "http";
-import { ReadableSignal, Signal } from "micro-signals";
+import { ReadableSignal } from "micro-signals";
 import { Context } from "./context";
 import { ErrorCodes, Status } from "./enum";
-import { MiddlewareContext, OnCompleteSignal, OnUsableSignal } from "./logic-controller-util";
-import { IError, ServiceDriver } from "./main";
+import { CompleteSignal, ErrorSignal, MiddlewareContext, UsableSignal } from "./logic-controller.private";
+import { ServiceController } from "./main";
+import { checkServiceDriver, IError } from "./main.private";
 import { encodeString } from "./packet-util";
 
+const SymbolPrivate = Symbol("private");
 const SymbolOnError = Symbol("on error");
-
 const SymbolOnComplete = Symbol("on complete");
-
 const SymbolOnUsable = Symbol("on usable");
 
 /**
- * Common logic for controlling a {@link ServiceDriver | service driver}.
+ * Shared logic for controlling another
+ * {@link ServiceController | service controller} with sane defaults.
  *
  * @remarks
  *
- * It also implements the {@link ServiceDriver} interface.
+ * Hands
+ *
+ * It also implements the {@link ServiceController} interface.
  *
  * @public
  */
-export class LogicController implements ServiceDriver {
+export class LogicController implements ServiceController {
   /**
    * The parent signal of `onComplete`.
    * @internal
    */
-  private [SymbolOnComplete]: OnCompleteSignal = new OnCompleteSignal();
+  private [SymbolOnComplete]: CompleteSignal = new CompleteSignal();
 
   /**
    * The parent signal of `onError`.
    * @internal
    */
-  private [SymbolOnError]: Signal<any> = new Signal();
+  private [SymbolOnError]: ErrorSignal = new ErrorSignal();
 
   /**
    * The parent signal of `onUsable`.
    * @internal
    */
-  private [SymbolOnUsable]: OnUsableSignal = new OnUsableSignal();
+  private [SymbolOnUsable]: UsableSignal = new UsableSignal();
 
   /**
    * Service driver - doing the heavy-lifting for us.
    */
-  public readonly driver: ServiceDriver;
+  private readonly [SymbolPrivate]: { controller: ServiceController; methods?: MethodOverrides };
 
   /**
    * Payload is distpatched to any observer after processing if request is
@@ -71,10 +74,13 @@ export class LogicController implements ServiceDriver {
   /**
    * Create a new {@link (LogicController:class)} instance.
    *
-   * @param serviceDriver - The {@link ServiceDriver | driver} to use logic on.
+   * @param serviceController - The {@link ServiceController | controller} to use logic on.
    */
-  public constructor(serviceDriver: ServiceDriver) {
-    this.driver = serviceDriver;
+  public constructor(serviceController: ServiceController, overrides?: MethodOverrides) {
+    if (!checkServiceDriver(serviceController)) {
+      throw new TypeError("argument `serviceController` must be a valid implementation of ServiceController interface");
+    }
+    this[SymbolPrivate] = { controller: serviceController, methods: overrides };
   }
 
   /**
@@ -96,11 +102,11 @@ export class LogicController implements ServiceDriver {
    * Throws if any observer in either any listerners in
    * {@link (LogicController:class).onUsable | `onUsable`} or
    * {@link (LogicController:class).onComplete | `onComplete`} throws, or if the
-   * underlying {@link ServiceDriver | driver} throws.
+   * underlying {@link ServiceController | controller} throws.
    *
    * Also see {@link (LogicController:class).accept},
    * {@link (LogicController:class).reject}, and
-   * {@link (ServiceDriver:interface).serve}.
+   * {@link (ServiceController:interface).serve}.
    */
   public async serve(context: Context): Promise<void> {
     if (!context.isReady) {
@@ -151,7 +157,7 @@ export class LogicController implements ServiceDriver {
     }
     context.updateStatus(Status.Accepted);
     try {
-      await this.driver.serve(context);
+      await this[SymbolPrivate].controller.serve(context);
     } catch (error) {
       this.dispatchError(error);
       context.statusCode = error && (error.status || error.statusCode) || 500;
@@ -251,37 +257,59 @@ export class LogicController implements ServiceDriver {
   }
 
   /**
-   * {@inheritdoc ServiceDriver.checkIfExists}
+   * {@inheritdoc ServiceController.checkIfExists}
    */
   public async checkIfExists(context: Context): Promise<boolean> {
-    try {
-      return this.driver.checkIfExists(context);
-    } catch (error) {
-      this.dispatchError(error);
-    }
-    return false;
+    return this.argumentMethod("checkIfExists", context);
   }
 
   /**
-   * {@inheritdoc ServiceDriver.checkIfEnabled}
+   * {@inheritdoc ServiceController.checkIfEnabled}
    */
   public async checkIfEnabled(context: Context): Promise<boolean> {
-    try {
-      return this.driver.checkIfEnabled(context);
-    } catch (error) {
-      this.dispatchError(error);
-    }
-    return false;
+    return this.argumentMethod("checkIfEnabled", context);
   }
 
   /**
-   * {@inheritdoc ServiceDriver.checkForAuth}
+   * {@inheritdoc ServiceController.checkForAuth}
    */
   public async checkForAuth(context: Context): Promise<boolean> {
-    try {
-      return this.driver.checkForAuth(context);
-    } catch (error) {
-      this.dispatchError(error);
+    return this.argumentMethod("checkForAuth", context, true);
+  }
+
+  /**
+   *
+   * @param method - Key on {@link ServiceController | other controller} to argument.
+   *              Must not be "serve".
+   * @param context - {@link Context} to pass to function.
+   * @param defaultValue - Default value if
+   */
+  protected async argumentMethod(
+    method: keyof ServiceController,
+    context: Context,
+    defaultValue: boolean = false,
+  ): Promise<boolean> {
+    if (method !== "serve") {
+      try {
+        const {controller, methods} = this[SymbolPrivate];
+        const fnOrValue = methods && methods[method];
+        if (typeof fnOrValue === "boolean") {
+          return fnOrValue;
+        }
+        if (typeof fnOrValue === "function") {
+          const result = await fnOrValue(context);
+          if (typeof result === "boolean") {
+            return result;
+          }
+        }
+        const fn = controller[method];
+        if (typeof fn === "function") {
+          return controller[method]!(context);
+        }
+      } catch (error) {
+        this.dispatchError(error);
+      }
+      return defaultValue;
     }
     return false;
   }
@@ -313,7 +341,12 @@ export class LogicController implements ServiceDriver {
    * Dispatch error onto signal `onError`.
    */
   private dispatchError(error: any): void {
-    setImmediate(() => this[SymbolOnError].dispatch(error));
+    if (this[SymbolOnError].isUsable) {
+      setImmediate(() => this[SymbolOnError].dispatch(error));
+    }
+    else {
+      throw error;
+    }
   }
 }
 
@@ -323,3 +356,18 @@ export class LogicController implements ServiceDriver {
  * @public
  */
 export type Middleware = (this: MiddlewareContext, context: Context) => any;
+
+/**
+ * Custom implementations (overrides) of driver methods.
+ *
+ * All proxied methods should act the same as the methods they are proxying,
+ * with the exception of allowing void as a return type.
+ *
+ * When a proxied method returns undefined, or a promise-like object resolving
+ * to undefined, the proxided method will fallback to the original method
+ * implementation.
+ */
+type MethodOverrides = Partial<Record<
+  Exclude<keyof ServiceController, "serve">,
+  boolean | ((context: Context) => (void | boolean) | Promise<void | boolean> | PromiseLike<void | boolean>)>
+>;

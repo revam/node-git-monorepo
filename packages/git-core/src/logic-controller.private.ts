@@ -2,9 +2,15 @@ import { Signal } from "micro-signals";
 import { Context } from "./context";
 import { ErrorCodes } from "./enum";
 import { LogicController } from "./logic-controller";
-import { IOuterError } from "./main";
+import { IOuterError } from "./main.private";
 
-export class OnUsableSignal extends Signal<Context> {
+export class ErrorSignal extends Signal<any> {
+  public get isUsable(): boolean {
+    return this._listeners.size > 0;
+  }
+}
+
+export class UsableSignal extends Signal<Context> {
   // Dispatch payload to observers one at the time, till request is not pending.
   public async dispatchAsync(context: Context, logicController: LogicController): Promise<void> {
     try {
@@ -23,7 +29,7 @@ export class OnUsableSignal extends Signal<Context> {
   }
 }
 
-export class OnCompleteSignal extends Signal<Context> {
+export class CompleteSignal extends Signal<Context> {
   // Dispatch payload to observers in parallel, and await results.
   public async dispatchAsync(context: Context): Promise<void> {
     try {

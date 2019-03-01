@@ -124,7 +124,7 @@ export class Context {
     this.response = {
       body: undefined,
       headers: new Headers(),
-      status: 200,
+      status: 404,
     };
     // tslint:enable:cyclomatic-complexity
   }

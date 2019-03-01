@@ -59,7 +59,7 @@ describe("class Context", () => {
       },
     ));
 
-    test("first argument should be an URL-path", async () => Promise.all([
+    test("first argument should be an URL-path", async () => Promise.all<any>([
       invalid([undefined]),
       invalid([null as any]),
       invalid([""]),
@@ -172,7 +172,7 @@ describe("class Context", () => {
       ),
     ]));
 
-    test("third argument should be an async iterable", async () => Promise.all([
+    test("third argument should be an async iterable", async () => Promise.all<any>([
       invalid(["/", "GET", undefined]),
       invalid(["/", "GET", null as any]),
       invalid(["/", "GET", { async *[Symbol.iterator]() { return; } } as any]),

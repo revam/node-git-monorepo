@@ -2,7 +2,7 @@ import { Headers } from "node-fetch";
 import { Readable } from "stream";
 import { TextDecoder } from "util";
 import { addHeaderToIterable, addMessagesToIterable, createAsyncIterator, createReadable, inferValues } from "./context.private";
-import { Service, Status } from "./enum";
+import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
 import { encodePacket, encodeString, PacketType, readPackets } from "./packet-util";
 
@@ -140,48 +140,6 @@ export class Context {
    * Response object.
    */
   public readonly response: Response;
-
-  /**
-   * Current status of request.
-   *
-   * @remarks
-   *
-   * Can only be set through {@link Context.updateStatus}.
-   */
-  public get status(): Status {
-    return this.__status;
-  }
-
-  /**
-   * Check if request is still pending.
-   */
-  public get isPending(): boolean {
-    return this.__status === Status.Pending;
-  }
-
-  /**
-   * See {@link Context.status}.
-   */
-  private __status: Status = Status.Pending;
-
-  /**
-   * Update {@link Context.status | status} of request.
-   *
-   * @remarks
-   *
-   * We can only promote status once, except for failures, which can only be
-   * set after request was accepted.
-   */
-  public updateStatus(status: Status): void {
-    // We can only update promote status once,
-    if (this.__status === Status.Pending) {
-      this.__status = status;
-    }
-    // except for failures, which can still be set if status is `Status.Accepted`.
-    else if (this.__status === Status.Accepted && status === Status.Failure) {
-      this.__status = Status.Failure;
-    }
-  }
 
   /**
    * Application defined properties for request.

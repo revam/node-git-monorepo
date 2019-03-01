@@ -49,7 +49,6 @@ declare class Context {
     commands(): Promise<ReadonlyCommands>;
     get(headerName: string): string | undefined;
     initialise(): Promise<void>;
-    readonly isPending: boolean;
     readonly isReady: boolean;
     // (undocumented)
     length: number;
@@ -62,14 +61,12 @@ declare class Context {
     set(headerName: string, value?: number | string | string[]): void;
     set(headerName: string, ...values: [string, string, ...string[]]): void;
     state: Record<PropertyKey, any>;
-    readonly status: Status;
     // (undocumented)
     statusCode: number;
     toAsyncIterator(): AsyncIterableIterator<Uint8Array>;
     toReadable(): Readable;
     // (undocumented)
     type: string | undefined;
-    updateStatus(status: Status): void;
     // (undocumented)
     readonly url: string;
 }
@@ -129,7 +126,6 @@ interface GenericControllerOptions {
 declare class LogicController implements ServiceController {
     constructor(serviceController: ServiceController, overrides?: MethodOverrides);
     accept(context: Context): Promise<void>;
-    // (undocumented)
     protected argumentMethod(method: keyof ServiceController, context: Context, defaultValue?: boolean): Promise<boolean>;
     // (undocumented)
     checkForAuth(context: Context): Promise<boolean>;
@@ -209,15 +205,6 @@ interface ServiceController {
     checkIfEnabled(context: Context): Promise<boolean>;
     checkIfExists(context: Context): Promise<boolean>;
     serve(context: Context): Promise<void>;
-}
-
-// @public
-declare enum Status {
-    Accepted = "Accepted",
-    Failure = "Failure",
-    Pending = "Pending",
-    Redirect = "Redirect",
-    Rejected = "Rejected"
 }
 
 

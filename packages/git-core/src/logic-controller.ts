@@ -1,8 +1,16 @@
 import { STATUS_CODES } from "http";
 import { ReadableSignal } from "micro-signals";
 import { Context } from "./context";
-import { ErrorCodes, Status } from "./enum";
-import { CompleteSignal, ErrorSignal, MiddlewareContext, UsableSignal } from "./logic-controller.private";
+import { ErrorCodes } from "./enum";
+import {
+  checkStatus,
+  CompleteSignal,
+  ErrorSignal,
+  MiddlewareContext,
+  Status,
+  updateStatus,
+  UsableSignal,
+} from "./logic-controller.private";
 import { ServiceController } from "./main";
 import { checkServiceDriver, IError } from "./main.private";
 import { encodeString } from "./packet-util";
@@ -112,10 +120,10 @@ export class LogicController implements ServiceController {
     if (!context.isReady) {
       await context.initialise();
     }
-    if (context.isPending) {
+    if (checkStatus(context)) {
       await this[SymbolOnUsable].dispatchAsync(context, this);
       // Recheck because an observer might have changed it.
-      if (context.isPending) {
+      if (checkStatus(context)) {
         if (! await this.checkIfExists(context)) {
           await this.reject(context, 404); // 404 Not Found
         }
@@ -141,21 +149,19 @@ export class LogicController implements ServiceController {
    * @param context - An existing request.
    */
   public async accept(context: Context): Promise<void> {
-    if (!context.isPending) {
+    if (!checkStatus(context)) {
       return;
     }
     // No service -> invalid input -> 404 Not Found.
     if (!context.service) {
-      context.updateStatus(Status.Failure);
-      context.statusCode = 404;
+      updateStatus(context, Status.Failure);
       context.body = undefined;
-      this.createPlainBodyForResponse(context);
-      return;
+      return this.reject(context);
     }
     if (context.statusCode > 300 && context.statusCode < 400) {
       return this.redirect(context);
     }
-    context.updateStatus(Status.Accepted);
+    updateStatus(context, Status.Accepted);
     try {
       await this[SymbolPrivate].controller.serve(context);
     } catch (error) {
@@ -172,10 +178,11 @@ export class LogicController implements ServiceController {
       context.statusCode = 500;
       context.body = undefined;
     }
-    // Mark any response with a status above or equal to 400 as a failure.
+    // Reject and mark any response with a status above or equal to 400 as a
+    // failure.
     if (context.statusCode >= 400) {
-      context.updateStatus(Status.Failure);
-      this.createPlainBodyForResponse(context);
+      updateStatus(context, Status.Failure);
+      return this.reject(context);
     }
   }
 
@@ -189,20 +196,22 @@ export class LogicController implements ServiceController {
    * @param statusCode - 3xx, 4xx or 5xx http status code.
    *                     Default is `500`.
    *
-   *                   Code will only be set if no prior code is set.
+   *                     Code will only be set if no prior code is set.
    * @param reason - Reason for rejection.
    */
   public async reject(context: Context, statusCode?: number, reason?: string): Promise<void> {
-    if (!context.isPending) {
+    if (checkStatus(context)) {
+      // Redirect instead if the statusCode is in the 3xx range.
+      if (context.statusCode >= 300 && context.statusCode < 400) {
+        return this.redirect(context);
+      }
+      updateStatus(context, Status.Rejected);
+    }
+    else if (!checkStatus(context, Status.Failure)) {
       return;
     }
-    // Redirect instead if the statusCode is in the 3xx range.
-    if (context.statusCode && context.statusCode > 300 && context.statusCode < 400) {
-      return this.redirect(context);
-    }
-    context.updateStatus(Status.Rejected);
     if (context.statusCode < 400) {
-      if (!(statusCode && statusCode < 600 && statusCode >= 300)) {
+      if (!(statusCode && statusCode < 600 && statusCode >= 400)) {
         statusCode = 500;
       }
       context.statusCode = statusCode;
@@ -229,7 +238,7 @@ export class LogicController implements ServiceController {
   public redirect(request: Context, location: string, statusCode?: number): Promise<void>;
   public redirect(reqiest: Context, locationOrStatus?: string | number, statusCode?: number): Promise<void>;
   public async redirect(context: Context, location?: string | number, statusCode?: number): Promise<void> {
-    if (!context.isPending) {
+    if (!checkStatus(context)) {
       return;
     }
     if (typeof location === "number") {
@@ -244,7 +253,7 @@ export class LogicController implements ServiceController {
       context.statusCode = 500;
       return this.reject(context);
     }
-    context.updateStatus(Status.Redirect);
+    updateStatus(context, Status.Redirect);
     if (!(context.statusCode > 300 && context.statusCode < 400)) {
       if (!(statusCode && statusCode > 300 && statusCode < 400)) {
         statusCode = 308;
@@ -278,11 +287,20 @@ export class LogicController implements ServiceController {
   }
 
   /**
+   * Argument {@link ServiceController | controller} method with overrides and
+   * check return value from controller.
    *
-   * @param method - Key on {@link ServiceController | other controller} to argument.
-   *              Must not be "serve".
+   * @remarks
+   *
+   * Will only return value from override or controller if it is a boolean.
+   * If it is not a boolean, then `defaultValue` is returned.
+   *
+   * If `method` is "serve", then it immediately returns `defaultValue`.
+   *
+   * @param method - Method from {@link ServiceController | other controller} to
+   *                 argument. Not allowed to pass "serve".
    * @param context - {@link Context} to pass to function.
-   * @param defaultValue - Default value if
+   * @param defaultValue - Default value.
    */
   protected async argumentMethod(
     method: keyof ServiceController,
@@ -358,16 +376,21 @@ export class LogicController implements ServiceController {
 export type Middleware = (this: MiddlewareContext, context: Context) => any;
 
 /**
- * Custom implementations (overrides) of driver methods.
+ * Overries for methods of {@link ServiceController}.
  *
- * All proxied methods should act the same as the methods they are proxying,
- * with the exception of allowing void as a return type.
+ * @remarks
  *
- * When a proxied method returns undefined, or a promise-like object resolving
- * to undefined, the proxided method will fallback to the original method
- * implementation.
+ * It is possible to disable a method by setting its value here to true.
+ *
+ * All methods should act the same as the method they are overriding, but are
+ * also allowed to return `undefined` (or void), in order to hand control back
+ * to the overriden method.
+ *
+ * When a overriden method returns `undefined`, or a promise-like object
+ * resolving to `undefined`, the method in question will fallback to the
+ * original implementation.
  */
 type MethodOverrides = Partial<Record<
   Exclude<keyof ServiceController, "serve">,
-  boolean | ((context: Context) => (void | boolean) | Promise<void | boolean> | PromiseLike<void | boolean>)>
+  true | ((context: Context) => (void | boolean) | Promise<void | boolean> | PromiseLike<void | boolean>)>
 >;

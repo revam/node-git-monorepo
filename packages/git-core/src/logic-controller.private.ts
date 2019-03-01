@@ -4,6 +4,67 @@ import { ErrorCodes } from "./enum";
 import { LogicController } from "./logic-controller";
 import { IOuterError } from "./main.private";
 
+/**
+ * Check {@link Context.state | context state} for status.
+ *
+ * @remarks
+ *
+ * Don't pass a second argument to check if status is set, pass a second
+ * argument to check if set status is equal.
+ *
+ * @param context - Context to check.
+ * @param status - Status to check for. Ignore to check for no state.
+ */
+export function checkStatus(context: Context, status?: Status): boolean {
+  const inState = SymbolStatus in context.state;
+  return status ? !inState : inState && context.state[SymbolStatus as any] === status;
+}
+
+/**
+ * Update status in {@link Context.state}.
+ *
+ * @remarks
+ *
+ * We can only promote status once, except for failures, which can only be
+ * set after request was accepted.
+ */
+export function updateStatus(context: Context, status: Status): void {
+  // We can only update promote status once,
+  if (checkStatus(context)) {
+    context.state[SymbolStatus as any] = status;
+  }
+  // except for failures, which can still be set if status is `Status.Accepted`.
+  else if (checkStatus(context, Status.Accepted) && status === Status.Failure) {
+    context.state[SymbolStatus as any] = Status.Failure;
+  }
+}
+
+export const SymbolStatus: symbol = Symbol("status");
+
+/**
+ * Request service status.
+ *
+ * @public
+ */
+export enum Status {
+  /**
+   * Indicate the request was accepted.
+   */
+  Accepted = "Accepted",
+  /**
+   * Indicate the request was rejected.
+   */
+  Rejected = "Rejected",
+  /**
+   * Indicate the request was initially accepted, but ended in failure.
+   */
+  Failure = "Failure",
+  /**
+   * Indicate the repository has moved and the request is being redirected.
+   */
+  Redirect = "Redirect",
+}
+
 export class ErrorSignal extends Signal<any> {
   public get isUsable(): boolean {
     return this._listeners.size > 0;
@@ -14,11 +75,11 @@ export class UsableSignal extends Signal<Context> {
   // Dispatch payload to observers one at the time, till request is not pending.
   public async dispatchAsync(context: Context, logicController: LogicController): Promise<void> {
     try {
-      if (this._listeners.size && context.isPending) {
+      if (this._listeners.size && checkStatus(context)) {
         const thisArg = new MiddlewareContext(logicController, context);
         for (const fn of this._listeners) {
           await fn.call(thisArg, context);
-          if (!context.isPending) {
+          if (!checkStatus(context)) {
             break;
           }
         }
@@ -33,7 +94,7 @@ export class CompleteSignal extends Signal<Context> {
   // Dispatch payload to observers in parallel, and await results.
   public async dispatchAsync(context: Context): Promise<void> {
     try {
-      if (this._listeners.size && !context.isPending) {
+      if (this._listeners.size && !checkStatus(context)) {
         await Promise.all(Array.from(this._listeners).map(async (fn) => fn.call(void 0, context)));
       }
     } catch (error) {

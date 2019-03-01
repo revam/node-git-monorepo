@@ -46,31 +46,3 @@ export enum Service {
    */
   ReceivePack = "receive-pack",
 }
-
-/**
- * Request service status.
- *
- * @public
- */
-export enum Status {
-  /**
-   * Indicate the request is still pending.
-   */
-  Pending = "Pending",
-  /**
-   * Indicate the request was accepted.
-   */
-  Accepted = "Accepted",
-  /**
-   * Indicate the request was rejected.
-   */
-  Rejected = "Rejected",
-  /**
-   * Indicate the request was initially accepted, but ended in failure.
-   */
-  Failure = "Failure",
-  /**
-   * Indicate the repository has moved and the request is being redirected.
-   */
-  Redirect = "Redirect",
-}

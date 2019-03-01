@@ -16,15 +16,15 @@ enum B {
 describe("function checkEnum()", () => {
   test("test on enumerable numbers", () => {
     // valid
-    expect(lib.checkEnum(A1.a, A1)).toBe(true);
-    expect(lib.checkEnum(0, A1)).toBe(true);
-    expect(lib.checkEnum("a", A1)).toBe(true);
-    expect(lib.checkEnum(A1.b, A1)).toBe(true);
-    expect(lib.checkEnum(1, A1)).toBe(true);
-    expect(lib.checkEnum("b", A1)).toBe(true);
-    expect(lib.checkEnum(A2.a, A2)).toBe(true);
-    expect(lib.checkEnum(Infinity, A2)).toBe(true);
-    expect(lib.checkEnum("a", A2)).toBe(true);
+    expect(lib.checkEnum(A1.a, A1)).toBe(false);
+    expect(lib.checkEnum(0, A1)).toBe(false);
+    expect(lib.checkEnum("a", A1)).toBe(false);
+    expect(lib.checkEnum(A1.b, A1)).toBe(false);
+    expect(lib.checkEnum(1, A1)).toBe(false);
+    expect(lib.checkEnum("b", A1)).toBe(false);
+    expect(lib.checkEnum(A2.a, A2)).toBe(false);
+    expect(lib.checkEnum(Infinity, A2)).toBe(false);
+    expect(lib.checkEnum("a", A2)).toBe(false);
     // invalid
     expect(lib.checkEnum(2, A1)).toBe(false);
     expect(lib.checkEnum(2, A2)).toBe(false);

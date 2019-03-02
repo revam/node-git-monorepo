@@ -9,13 +9,6 @@ export interface IError extends Error {
 }
 
 /**
- * @public
- */
-export interface IOuterError extends IError {
-  inner: any;
-}
-
-/**
  * Check if `target` confronts to the {@link ServiceController} interface.
  *
  * @param target - Target to check

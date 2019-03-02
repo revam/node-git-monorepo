@@ -9,14 +9,6 @@ export enum ErrorCodes {
    */
   ERR_FAILED_GIT_EXECUTION = "ERR_FAILED_GIT_EXECUTION",
   /**
-   * Something went wrong in a listener for request data.
-   */
-  ERR_FAILED_IN_USABLE_SIGNAL = "ERR_FAILED_IN_USABLE_SIGNAL",
-  /**
-   * Something went wrong in a listener for response data.
-   */
-  ERR_FAILED_IN_COMPLETE_SIGNAL = "ERR_FAILED_IN_COMPLETE_SIGNAL",
-  /**
    * Response status is within the 2xx range, but contains no body. Possible
    * driver error.
    */
@@ -24,7 +16,7 @@ export enum ErrorCodes {
   /**
    * Packet starting position is invalid.
    */
-  ERR_INVALID_PACKET = "ERR_INVALID_PACKET_START",
+  ERR_INVALID_PACKET = "ERR_INVALID_PACKET",
   /**
    * An incomplete packet exceeds the rest of available buffer.
    */

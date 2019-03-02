@@ -1,8 +1,6 @@
 import { Signal } from "micro-signals";
 import { Context } from "./context";
-import { ErrorCodes } from "./enum";
 import { LogicController } from "./logic-controller";
-import { IOuterError } from "./main.private";
 
 /**
  * Check {@link Context.state | context state} for status.
@@ -74,18 +72,14 @@ export class ErrorSignal extends Signal<any> {
 export class UsableSignal extends Signal<Context> {
   // Dispatch payload to observers one at the time, till request is not pending.
   public async dispatchAsync(context: Context, logicController: LogicController): Promise<void> {
-    try {
-      if (this._listeners.size && checkStatus(context)) {
-        const thisArg = new MiddlewareContext(logicController, context);
-        for (const fn of this._listeners) {
-          await fn.call(thisArg, context);
-          if (!checkStatus(context)) {
-            break;
-          }
+    if (this._listeners.size && checkStatus(context)) {
+      const thisArg = new MiddlewareContext(logicController, context);
+      for (const fn of this._listeners) {
+        await fn.call(thisArg, context);
+        if (!checkStatus(context)) {
+          break;
         }
       }
-    } catch (error) {
-      throw wrapError(error, ErrorCodes.ERR_FAILED_IN_USABLE_SIGNAL);
     }
   }
 }
@@ -93,12 +87,8 @@ export class UsableSignal extends Signal<Context> {
 export class CompleteSignal extends Signal<Context> {
   // Dispatch payload to observers in parallel, and await results.
   public async dispatchAsync(context: Context): Promise<void> {
-    try {
-      if (this._listeners.size && !checkStatus(context)) {
-        await Promise.all(Array.from(this._listeners).map(async (fn) => fn.call(void 0, context)));
-      }
-    } catch (error) {
-      throw wrapError(error, ErrorCodes.ERR_FAILED_IN_COMPLETE_SIGNAL);
+    if (this._listeners.size && !checkStatus(context)) {
+      await Promise.all(Array.from(this._listeners).map(async (fn) => fn.call(void 0, context)));
     }
   }
 }
@@ -186,14 +176,4 @@ export class MiddlewareContext {
   public async checkIfExists(): Promise<boolean> {
     return this[SymbolContext].checkIfExists(this.context);
   }
-}
-
-function wrapError(error: any, code: ErrorCodes): IOuterError {
-  const outerError: Partial<IOuterError> = new Error("Error thown from signal");
-  outerError.code = code;
-  if (error && (error.status || error.statusCode)) {
-    outerError.statusCode = error.status || error.statusCode;
-  }
-  outerError.inner = error;
-  return outerError as IOuterError;
 }

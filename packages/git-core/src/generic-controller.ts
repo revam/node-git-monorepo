@@ -7,7 +7,7 @@ import { Context } from "./context";
 import { ErrorCodes, Service } from "./enum";
 import { fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, waitForChild } from "./generic-controller.private";
 import { ServiceController } from "./main";
-import { IError, IOuterError } from "./main.private";
+import { IError } from "./main.private";
 import { encodeString } from "./packet-util";
 
 const RELATIVE_PATH_REGEX = /(^|[/\\])\.{1,2}[/\\]/;
@@ -345,16 +345,6 @@ export interface GenericControllerOptions {
    * @param advertise - Should look for advertisement.
    */
   remoteTail?(service: Service, advertise: boolean): string;
-}
-
-/**
- * An error thrown from a proxied driver method.
- *
- * @public
- */
-export interface ProxyError extends IOuterError {
-  methodName: string;
-  inner: Error;
 }
 
 /**

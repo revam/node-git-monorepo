@@ -4,8 +4,8 @@ import fetch from "node-fetch";
 import { isAbsolute, join, resolve } from "path";
 import { Readable } from "stream";
 import { Context } from "./context";
+import { fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, waitForChild } from "./controller.private";
 import { ErrorCodes, Service } from "./enum";
-import { fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, waitForChild } from "./generic-controller.private";
 import { ServiceController } from "./main";
 import { IError } from "./main.private";
 import { encodeString } from "./packet-util";
@@ -30,7 +30,7 @@ const RELATIVE_PATH_REGEX = /(^|[/\\])\.{1,2}[/\\]/;
  */
 export class Controller implements ServiceController {
   /**
-   * Defaults for {@link GenericController.checkFSIfEnabled}.
+   * Defaults for {@link Controller.checkFSIfEnabled}.
    *
    * @remarks
    *
@@ -53,13 +53,13 @@ export class Controller implements ServiceController {
   protected readonly origin?: string;
 
   /**
-   * Indicates {@link GenericController.origin | origin} points to a remote
+   * Indicates {@link Controller.origin | origin} points to a remote
    * location (is an URL).
    *
    * @privateRemarks
    *
-   * Is `true` if {@link GenericController.origin | origin} is defined and
-   * {@link GenericController.originIsRemote} evaluates to `true`, otherwise
+   * Is `true` if {@link Controller.origin | origin} is defined and
+   * {@link Controller.originIsRemote} evaluates to `true`, otherwise
    * `false`.
    */
   protected readonly originIsRemote: boolean;
@@ -70,7 +70,7 @@ export class Controller implements ServiceController {
    * @remarks
    *
    * It is determined if it only checks for https protocol by setting
-   * {@link GenericDriverOptions.httpsOnly} to true. If it is
+   * {@link ControllerOptions.httpsOnly} to true. If it is
    * otherwise false or undefined then this function will check for http- or
    * https-protocols.
    */
@@ -90,11 +90,11 @@ export class Controller implements ServiceController {
   private readonly getRemoteTail: (service: Service, advertise: boolean) => string;
 
   /**
-   * Creates a new instance of {@link GenericController}.
+   * Creates a new instance of {@link Controller}.
    *
-   * @param options - {@link GenericDriverOptions | Optional options}.
+   * @param options - {@link ControllerOptions | Optional options}.
    */
-  public constructor(options: GenericControllerOptions | undefined | null = {}) {
+  public constructor(options: ControllerOptions | undefined | null = {}) {
     if (!(options === undefined || typeof options === "object" && options !== null)) {
       throw new TypeError("argument `options` must be of type 'object'.");
     }
@@ -143,7 +143,7 @@ export class Controller implements ServiceController {
   }
 
   /**
-   * Combine `baseURL` with the result of `GenericController.getRemoteTail`.
+   * Combine `baseURL` with the result of `Controller.getRemoteTail`.
    *
    * @param baseURL - Remote repository location as a URL without trailing slash.
    * @param service - {@link Service | service} to use.
@@ -310,11 +310,11 @@ export class Controller implements ServiceController {
 }
 
 /**
- * Options for {@link GenericController}.
+ * Options for {@link Controller}.
  *
  * @public
  */
-export interface GenericControllerOptions {
+export interface ControllerOptions {
   /**
    * Default values for .
    */

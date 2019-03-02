@@ -70,7 +70,7 @@ declare class Context {
 
 // @public
 declare class Controller implements ServiceController {
-    constructor(options?: GenericControllerOptions | undefined | null);
+    constructor(options?: ControllerOptions | undefined | null);
     // (undocumented)
     protected checkFSIfEnabled(context: Context): Promise<boolean>;
     // (undocumented)
@@ -102,19 +102,19 @@ declare class Controller implements ServiceController {
 }
 
 // @public
+interface ControllerOptions {
+    enabledDefaults?: boolean | Partial<Record<Service, boolean>>;
+    httpsOnly?: boolean;
+    origin?: string;
+    remoteTail?(service: Service, advertise: boolean): string;
+}
+
+// @public
 declare enum ErrorCodes {
     ERR_FAILED_GIT_EXECUTION = "ERR_FAILED_GIT_EXECUTION",
     ERR_INCOMPLETE_PACKET = "ERR_INCOMPLETE_PACKET",
     ERR_INVALID_BODY_FOR_2XX = "ERR_INVALID_BODY_FOR_2XX",
     ERR_INVALID_PACKET = "ERR_INVALID_PACKET"
-}
-
-// @public
-interface GenericControllerOptions {
-    enabledDefaults?: boolean | Partial<Record<Service, boolean>>;
-    httpsOnly?: boolean;
-    origin?: string;
-    remoteTail?(service: Service, advertise: boolean): string;
 }
 
 // @public

@@ -7,10 +7,11 @@ import {
   createAsyncIterator,
   createReadable,
   inferValues,
+  ServiceReaders,
 } from "./context.private";
 import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
-import { decodeString, encodePacket, encodeString, PacketType, readPackets } from "./packet-util";
+import { encodePacket, encodeString, PacketType, readPackets } from "./packet-util";
 
 const SymbolPromise = Symbol("promise");
 
@@ -203,18 +204,16 @@ export class Context {
    * @param headerName - Case-insensitive name of header to set.
    * @param values - Values to append to field.
    */
-  public set(headerName: string, ...values: [string, string, ...string[]]): void;
-  public set(headerName: string, ...values: [(number | string | string[])?, ...string[]] | string[]): void {
-    if (values[0] instanceof Array) {
-      values = values[0];
+  public set(headerName: string, values: number | string | string[]): void {
+    if (values instanceof Array) {
+      values.forEach((value) => this.response.headers.append(headerName, value));
+      return;
     }
-    if (values.length === 1) {
-      this.response.headers.set(headerName, values[0] as string);
+    if (typeof values === "number") {
+      values = values.toString(10);
     }
-    else {
-      for (const value of values) {
-        this.response.headers.append(headerName, value as string);
-      }
+    if (values) {
+      this.response.headers.set(headerName, values);
     }
   }
 
@@ -325,7 +324,8 @@ export class Context {
   }
 
   /**
-   * Create a {@link stream#Readable | readable} for {@link Response.body | response body}.
+   * Create a {@link stream#Readable | readable} for
+   * {@link Response.body | response body}.
    */
   public toReadable(): Readable {
     return createReadable(this.toAsyncIterator());
@@ -378,6 +378,9 @@ export class Context {
     this.response.status = value;
   }
 
+  /**
+   * {@inheritdoc Response.body}
+   */
   public get body(): Body {
     return this.response.body;
   }
@@ -385,6 +388,9 @@ export class Context {
     this.response.body = value;
   }
 
+  /**
+   * Get/set "Content-Type" header for response.
+   */
   public get type(): string | undefined {
     return this.response.headers.get("Content-Type") || undefined;
   }
@@ -397,15 +403,22 @@ export class Context {
     }
   }
 
-  public get length(): number {
+  /**
+   * Get/set "Content-Length" header for response.
+   */
+  public get length(): number | undefined {
     const value = this.response.headers.get("Content-Length");
-    if (value) {
+    if (typeof value === "string") {
       return Number.parseInt(value, 10);
     }
-    return 0;
   }
-  public set length(value: number) {
-    this.response.headers.set("Content-Length", value.toString(10));
+  public set length(value: number | undefined) {
+    if (value === undefined) {
+      this.response.headers.delete("Content-Length");
+    }
+    else if (typeof value === "number") {
+      this.response.headers.set("Content-Length", value.toString(10));
+    }
   }
 
   //#endregion response delegation
@@ -543,80 +556,3 @@ function asyncIterator<T>(iterable?: AsyncIterable<T> | AsyncIterableIterator<T>
   }
   return iterable[Symbol.asyncIterator]() as AsyncIterableIterator<T>;
 }
-
-function reader(
-  commands: Commands,
-  capabilities: Capabilities,
-  result: string,
-  metadata: CommandReceivePack | CommandUploadPack,
-) {
-  commands.push(metadata);
-  if (result) {
-    for (const c of result.trim().split(" ")) {
-      if (/=/.test(c)) {
-        const [k, v] = c.split("=");
-        capabilities.set(k, v);
-      }
-      else {
-        capabilities.set(c, undefined);
-      }
-    }
-  }
-}
-
-/**
- * Maps {@link Service} to a valid packet reader for
- * {@link Request.body | request body}.
- */
-const ServiceReaders = new Map<Service, (...args: [Capabilities, Commands]) => (b: Uint8Array) => any>([
-  [
-    Service.ReceivePack,
-    (capabilities, commands) => {
-      const pre_check = /[0-9a-f]{40} [0-9a-f]{40}/;
-      const regex =
-        /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
-      return (buffer) => {
-        if (pre_check.test(decodeString(buffer.slice(4, 85)))) {
-          const value = decodeString(buffer);
-          const results = regex.exec(value);
-          if (results) {
-            let kind: "create" | "delete" | "update";
-            if (results[1] === "0000000000000000000000000000000000000000") {
-              kind = "create";
-            }
-            else if (results[2] === "0000000000000000000000000000000000000000") {
-              kind = "delete";
-            }
-            else {
-              kind = "update";
-            }
-            reader(commands, capabilities, results[4], {
-              commits: [results[1], results[2]],
-              kind,
-              reference: results[3],
-            });
-          }
-        }
-      };
-    },
-  ],
-  [
-    Service.UploadPack,
-    (capabilities, commands) => {
-      const pre_check = /want|have/;
-      const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
-      return (buffer) => {
-        if (pre_check.test(decodeString(buffer.slice(4, 8)))) {
-          const value = decodeString(buffer);
-          const results = regex.exec(value);
-          if (results) {
-            reader(commands, capabilities, results[3], {
-              commits: [results[2]],
-              kind: results[1] as ("want" | "have"),
-            });
-          }
-        }
-      };
-    },
-  ],
-]);

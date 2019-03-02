@@ -1,9 +1,9 @@
 import { Readable } from "stream";
 import { URL } from "url";
-import { Body } from "./context";
+import { Body, Capabilities, CommandReceivePack, Commands, CommandUploadPack } from "./context";
 import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
-import { encodeString } from "./packet-util";
+import { decodeString, encodeString } from "./packet-util";
 
 export const AllowedMethods = new Set(["GET", "HEAD", "PATCH", "POST", "PUT"]);
 
@@ -177,3 +177,80 @@ export const Headers: Record<Service, Uint8Array> = {
   [Service.ReceivePack]: encodeString("001f# service=git-receive-pack\n0000"),
   [Service.UploadPack]: encodeString("001e# service=git-upload-pack\n0000"),
 };
+
+export function reader(
+  commands: Commands,
+  capabilities: Capabilities,
+  result: string,
+  metadata: CommandReceivePack | CommandUploadPack,
+) {
+  commands.push(metadata);
+  if (result) {
+    for (const c of result.trim().split(" ")) {
+      if (/=/.test(c)) {
+        const [k, v] = c.split("=");
+        capabilities.set(k, v);
+      }
+      else {
+        capabilities.set(c, undefined);
+      }
+    }
+  }
+}
+
+/**
+ * Maps {@link Service} to a valid packet reader for
+ * {@link Request.body | request body}.
+ */
+export const ServiceReaders = new Map<Service, (...args: [Capabilities, Commands]) => (b: Uint8Array) => any>([
+  [
+    Service.ReceivePack,
+    (capabilities, commands) => {
+      const pre_check = /[0-9a-f]{40} [0-9a-f]{40}/;
+      const regex =
+        /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
+      return (buffer) => {
+        if (pre_check.test(decodeString(buffer.slice(4, 85)))) {
+          const value = decodeString(buffer);
+          const results = regex.exec(value);
+          if (results) {
+            let kind: "create" | "delete" | "update";
+            if (results[1] === "0000000000000000000000000000000000000000") {
+              kind = "create";
+            }
+            else if (results[2] === "0000000000000000000000000000000000000000") {
+              kind = "delete";
+            }
+            else {
+              kind = "update";
+            }
+            reader(commands, capabilities, results[4], {
+              commits: [results[1], results[2]],
+              kind,
+              reference: results[3],
+            });
+          }
+        }
+      };
+    },
+  ],
+  [
+    Service.UploadPack,
+    (capabilities, commands) => {
+      const pre_check = /want|have/;
+      const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
+      return (buffer) => {
+        if (pre_check.test(decodeString(buffer.slice(4, 8)))) {
+          const value = decodeString(buffer);
+          const results = regex.exec(value);
+          if (results) {
+            reader(commands, capabilities, results[3], {
+              commits: [results[2]],
+              kind: results[1] as ("want" | "have"),
+            });
+          }
+        }
+      };
+    },
+  ],
+]);

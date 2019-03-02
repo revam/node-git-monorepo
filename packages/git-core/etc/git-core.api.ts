@@ -50,8 +50,7 @@ declare class Context {
     get(headerName: string): string | undefined;
     initialise(): Promise<void>;
     readonly isReady: boolean;
-    // (undocumented)
-    length: number;
+    length: number | undefined;
     // (undocumented)
     path: string | undefined;
     readonly request: Request;
@@ -59,13 +58,11 @@ declare class Context {
     // (undocumented)
     readonly service: Service | undefined;
     set(headerName: string, value?: number | string | string[]): void;
-    set(headerName: string, ...values: [string, string, ...string[]]): void;
     state: Record<PropertyKey, any>;
     // (undocumented)
     statusCode: number;
     toAsyncIterator(): AsyncIterableIterator<Uint8Array>;
     toReadable(): Readable;
-    // (undocumented)
     type: string | undefined;
     // (undocumented)
     readonly url: string;
@@ -107,11 +104,9 @@ declare class Controller implements ServiceController {
 // @public
 declare enum ErrorCodes {
     ERR_FAILED_GIT_EXECUTION = "ERR_FAILED_GIT_EXECUTION",
-    ERR_FAILED_IN_COMPLETE_SIGNAL = "ERR_FAILED_IN_COMPLETE_SIGNAL",
-    ERR_FAILED_IN_USABLE_SIGNAL = "ERR_FAILED_IN_USABLE_SIGNAL",
     ERR_INCOMPLETE_PACKET = "ERR_INCOMPLETE_PACKET",
     ERR_INVALID_BODY_FOR_2XX = "ERR_INVALID_BODY_FOR_2XX",
-    ERR_INVALID_PACKET = "ERR_INVALID_PACKET_START"
+    ERR_INVALID_PACKET = "ERR_INVALID_PACKET"
 }
 
 // @public
@@ -156,14 +151,6 @@ interface ProcessError extends IError {
     exitCode: number;
     // (undocumented)
     stderr: string;
-}
-
-// @public
-interface ProxyError extends IOuterError {
-    // (undocumented)
-    inner: Error;
-    // (undocumented)
-    methodName: string;
 }
 
 // @public (undocumented)

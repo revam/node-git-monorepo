@@ -1,5 +1,5 @@
 // @public (undocumented)
-declare type Body = Uint8Array | Promise<Uint8Array> | PromiseLike<Uint8Array> | IterableIterator<Uint8Array> | AsyncIterableIterator<Uint8Array> | undefined | null;
+declare type Body = Uint8Array | Promise<Uint8Array> | PromiseLike<Uint8Array> | Iterable<Uint8Array> | IterableIterator<Uint8Array> | AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array> | undefined | null;
 
 // @public
 declare type Capabilities = Map<string, string | undefined>;

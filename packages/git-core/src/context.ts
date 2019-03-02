@@ -1,14 +1,18 @@
 import { Headers } from "node-fetch";
 import { Readable } from "stream";
-import { TextDecoder } from "util";
-import { addHeaderToIterable, addMessagesToIterable, createAsyncIterator, createReadable, inferValues } from "./context.private";
+import {
+  addHeaderToIterable,
+  addMessagesToIterable,
+  AllowedMethods,
+  createAsyncIterator,
+  createReadable,
+  inferValues,
+} from "./context.private";
 import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
-import { encodePacket, encodeString, PacketType, readPackets } from "./packet-util";
+import { decodeString, encodePacket, encodeString, PacketType, readPackets } from "./packet-util";
 
 const SymbolPromise = Symbol("promise");
-
-const AllowedMethods = new Set(["GET", "HEAD", "PATCH", "POST", "PUT"]);
 
 /**
  * Generic context for use with an implementation of {@link ServiceController}.
@@ -106,7 +110,7 @@ export class Context {
     if (service && !advertisement) {
       const middleware = ServiceReaders.get(service)!;
       body = readPackets(body, middleware(this.__capabilities, this.__commands));
-      this[SymbolPromise] = body.next().then(() => undefined);
+      this[SymbolPromise] = body.next().then(() => { delete this[SymbolPromise]; });
     }
     // Add request and response objects.
     this.request = {
@@ -473,7 +477,9 @@ export type Body =
 | Uint8Array
 | Promise<Uint8Array>
 | PromiseLike<Uint8Array>
+| Iterable<Uint8Array>
 | IterableIterator<Uint8Array>
+| AsyncIterable<Uint8Array>
 | AsyncIterableIterator<Uint8Array>
 | undefined
 | null
@@ -558,8 +564,6 @@ function reader(
   }
 }
 
-const DECODER = new TextDecoder("utf8", { fatal: true, ignoreBOM: true });
-
 /**
  * Maps {@link Service} to a valid packet reader for
  * {@link Request.body | request body}.
@@ -572,8 +576,8 @@ const ServiceReaders = new Map<Service, (...args: [Capabilities, Commands]) => (
       const regex =
         /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
       return (buffer) => {
-        if (pre_check.test(DECODER.decode(buffer.slice(4, 85)))) {
-          const value = DECODER.decode(buffer);
+        if (pre_check.test(decodeString(buffer.slice(4, 85)))) {
+          const value = decodeString(buffer);
           const results = regex.exec(value);
           if (results) {
             let kind: "create" | "delete" | "update";
@@ -602,8 +606,8 @@ const ServiceReaders = new Map<Service, (...args: [Capabilities, Commands]) => (
       const pre_check = /want|have/;
       const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
       return (buffer) => {
-        if (pre_check.test(DECODER.decode(buffer.slice(4, 8)))) {
-          const value = DECODER.decode(buffer);
+        if (pre_check.test(decodeString(buffer.slice(4, 8)))) {
+          const value = decodeString(buffer);
           const results = regex.exec(value);
           if (results) {
             reader(commands, capabilities, results[3], {

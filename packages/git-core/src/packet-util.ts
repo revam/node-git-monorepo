@@ -13,6 +13,10 @@ export function encodeString(source: string): Uint8Array {
   return ENCODER.encode(source);
 }
 
+export function decodeString(source: Uint8Array): string {
+  return DECODER.decode(source);
+}
+
 /**
  * Encode packet of type `type`.
  * @param message - Source to encode.

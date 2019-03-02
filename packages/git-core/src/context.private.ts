@@ -2,55 +2,59 @@ import { Readable } from "stream";
 import { URL } from "url";
 import { Body } from "./context";
 import { Service } from "./enum";
+import { checkEnum } from "./enum.private";
 import { encodeString } from "./packet-util";
+
+export const AllowedMethods = new Set(["GET", "HEAD", "PATCH", "POST", "PUT"]);
+
+export const Advertisement = /^\/(?:(?<path>.+)\/)?info\/refs$/;
+export const DirectUse = /^\/(?:(?<path>.+)\/)?git-(?<service>\b[a-z\-]{1,20}\b)$/;
+export const ServiceName = /^git-(?<service>\b[a-z\-]{1,20}\b)$/;
 
 /**
  * Infer {@link Request.advertisement | advertisement},
  * {@link Request.path | path} and {@link Request.service | service} from
  * `urlPath`, `method`, and `content_type`.
  *
+ * @privateRemarks
+ *
+ * Returns a tuplet with one to three values for copmatibility with
+ * deconstructing rest argument from constructor in {@link Context}.
+ *
  * @param urlPath - The trailing part after the url origin, including the leading
  *                  forward slash (/).
- * @param method - HTTP verb.
+ * @param method - HTTP verb. (e.g. "GET" or "POST")
  * @param content_type - Content of "Content-Type" header, if present.
+ * @returns a tuplet with up to three values.
  */
 export function inferValues(
   urlPath: string,
   method: string,
   content_type?: string | undefined | null,
 ): [boolean, string?, Service?] {
-  const url = new URL(urlPath, "https://127.0.0.1/");
-  // Get advertisement from service
-  let results: RegExpExecArray | null = /^\/?(.*?)\/info\/refs$/.exec(url.pathname);
+  let url: URL;
+  // Bail on malformed url path (but don't throw)
+  try { url = new URL(urlPath, "https://127.0.0.1/"); } catch { return [false]; }
+  // Get advertisement from a service
+  let results = Advertisement.exec(url.pathname);
   if (results) {
-    const path = results[1];
-    if (!(method === "GET" || method === "HEAD") || !url.searchParams.has("service")) {
-      return [true, path];
+    const {path} = results.groups!;
+    if (method === "GET" || method === "HEAD") {
+      const service = (ServiceName.exec(url.searchParams.get("service") || "") || {groups: {service: undefined}}).groups!.service;
+      if (checkEnum(service, Service)) {
+        return [true, path, service];
+      }
     }
-    const serviceName = url.searchParams.get("service")!;
-    results = /^git-((?:receive|upload)-pack)$/.exec(serviceName);
-    if (!results) {
-      return [true, path];
-    }
-    return [true, path, results[1] as Service];
+    return [false, path];
   }
-  // Use service directly
-  results = /^\/?(.*?)\/(git-[\w\-]+\w)$/.exec(url.pathname);
+  // Use a service directly
+  results = DirectUse.exec(url.pathname);
   if (results) {
-    const path = results[1];
-    const serviceName = results[2];
-    if (method !== "POST" || !content_type) {
-      return [false, path];
+    const {path, service} = results.groups!;
+    if (method === "POST" && checkEnum(service, Service) && content_type === `application/x-git-${service}-request`) {
+      return [false, path, service];
     }
-    results = /^git-((?:receive|upload)-pack)$/.exec(serviceName);
-    if (!results) {
-      return [false, path];
-    }
-    const service = results[1];
-    if (content_type !== `application/x-git-${service}-request`) {
-      return [false, path];
-    }
-    return [false, path, service as Service];
+    return [false, path];
   }
   return [false];
 }
@@ -60,31 +64,36 @@ export function inferValues(
  *
  * @param iterable - Async iterable to transform.
  */
-export function createReadable(iterable?: AsyncIterableIterator<Uint8Array>): Readable {
-  if (iterable && Symbol.asyncIterator in iterable) {
-    const it: AsyncIterableIterator<Uint8Array> = iterable[Symbol.asyncIterator]();
-    return new Readable({
-      async read() {
-        const {value, done} = await it.next();
-        if (value) {
-          this.push(value);
-        }
-        if (done) {
-          this.push(null);
-        }
-      },
-    });
+export function createReadable(iterable: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>): Readable {
+  if (!(typeof iterable === "object" && Symbol.asyncIterator in iterable)) {
+    throw new TypeError("argument `iterable` does not contain Symbol.asyncIterable");
   }
-  return new Readable({ read() { this.push(null); } });
+  const it = iterable[Symbol.asyncIterator]();
+  return new Readable({
+    async read() {
+      const {value, done} = await it.next();
+      if (value) {
+        this.push(value);
+      }
+      if (done) {
+        this.push(null);
+      }
+    },
+  });
 }
 
 /**
  * Create an async iterable for `body`.
  *
+ * @privateRemarks
+ *
+ * We only allow body to be of type "object" or "function" if defined.
+ *
  * @param body - {@link Body} to convert.
  */
 export async function *createAsyncIterator(body: Body): AsyncIterableIterator<Uint8Array> {
-  if (body) {
+  let type: string;
+  if (body && ((type = typeof body) === "object" || type === "function")) {
     if (body instanceof Uint8Array || "then" in body) {
       yield body;
     }
@@ -97,20 +106,40 @@ export async function *createAsyncIterator(body: Body): AsyncIterableIterator<Ui
 /**
  * Add `header` to `iterable`, but only if not present.
  *
+ * @privateRemarks
+ *
+ * **Always** add header unless already present.
+ *
  * @param header - Header to check for and add.
  * @param iterable - Iterable to check.
  */
-export async function *addHeaderToIterable(
+export function addHeaderToIterable(
   service: Service,
   iterable: AsyncIterableIterator<Uint8Array>,
 ): AsyncIterableIterator<Uint8Array> {
   const header = Headers[service];
-  const result = await iterable.next();
-  if (!result.done) {
-    if (result.value && !bufferEquals(result.value.slice(0, header.length))) {
+  if (!header) {
+    throw new TypeError("argument `service` must be a value from enum Service");
+  }
+  if (!(iterable && Symbol.asyncIterator in iterable)) {
+    throw new TypeError("argument `iterable` does not contain Symbol.asyncIterable");
+  }
+  return it();
+
+  async function *it(): AsyncIterableIterator<Uint8Array> {
+    const result = await iterable.next();
+    if (result.value) {
+      if (!bufferEquals(result.value.slice(0, header.length))) {
+        yield header;
+      }
+      yield result.value;
+    }
+    else {
       yield header;
     }
-    yield* iterable;
+    if (!result.done) {
+      yield* iterable;
+    }
   }
 }
 
@@ -144,7 +173,7 @@ function bufferEquals(buf1?: Uint8Array, buf2?: Uint8Array): boolean {
 /**
  * Advertisement Headers for response
  */
-const Headers: Record<Service, Uint8Array> = {
+export const Headers: Record<Service, Uint8Array> = {
   [Service.ReceivePack]: encodeString("001f# service=git-receive-pack\n0000"),
   [Service.UploadPack]: encodeString("001e# service=git-upload-pack\n0000"),
 };

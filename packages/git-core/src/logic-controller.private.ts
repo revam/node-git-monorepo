@@ -124,11 +124,11 @@ export class MiddlewareContext {
    *
    * Will redirect if statusCode is in the 3xx range.
    *
-   * @param statusCode 3xx, 4xx or 5xx http status code.
+   * @param statusCode - 3xx, 4xx or 5xx http status code.
    *                   Default is `500`.
    *
    *                   Code will only be set if no prior code is set.
-   * @param body Reason for rejection.
+   * @param body - Reason for rejection.
    */
   public async reject(statusCode?: number, body?: string): Promise<void> {
     return this[SymbolContext].reject(this.context, statusCode, body);
@@ -148,7 +148,7 @@ export class MiddlewareContext {
   public redirect(statusCode: number): Promise<void>;
   /**
    * Redirects client to `location`. Can optionally set status code of redirect.
-   * @param location The location to redirect to.
+   * @param location - The location to redirect to.
    */
   public redirect(location: string, statusCode?: number): Promise<void>;
   public async redirect(location?: string | number, statusCode?: number): Promise<void> {

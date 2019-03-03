@@ -1,12 +1,17 @@
+import { IncomingHttpHeaders } from "http";
 import { Headers } from "node-fetch";
 import { Readable } from "stream";
 import {
   addHeaderToIterable,
   addMessagesToIterable,
-  AllowedMethods,
+  checkMethod,
+  checkObject,
   createAsyncIterator,
+  createEmptyAsyncIterator,
+  createHeaders,
   createReadable,
   inferValues,
+  markObject,
   ServiceReaders,
 } from "./context.private";
 import { Service } from "./enum";
@@ -24,7 +29,7 @@ const SymbolPromise = Symbol("promise");
  *
  * @public
  */
-export class Context {
+export class Context implements Response {
   //#region constructor
 
   public constructor();
@@ -44,13 +49,13 @@ export class Context {
     url: string,
     method: string,
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
-    headers: Headers | Record<string, string>,
+    headers: Headers | IncomingHttpHeaders,
   );
   public constructor(
     url: string,
     method: string,
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
-    headers: Headers | Record<string, string>,
+    headers: Headers | IncomingHttpHeaders,
     advertisement: boolean,
     path?: string,
     service?: Service,
@@ -59,7 +64,7 @@ export class Context {
     url?: string,
     method?: string,
     body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
-    headers?: Headers | Record<string, string>,
+    headers?: Headers | IncomingHttpHeaders,
     advertisement?: boolean,
     path?: string,
     service?: Service,
@@ -68,7 +73,7 @@ export class Context {
     string?,
     string?,
     (AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>)?,
-    (Headers | Record<string, string>)?,
+    (Headers | IncomingHttpHeaders)?,
     boolean?,
     string?,
     Service?
@@ -83,14 +88,15 @@ export class Context {
       throw new TypeError("argument `url` must start with '/'.");
     }
     const method = rest.length >= 2 ? (rest[1] && rest[1].toUpperCase()) : "GET";
-    if (!(typeof method === "string" && AllowedMethods.has(method))) {
-      throw new TypeError(`argument \`method\` must be one of the following HTTP verbs: '${Array.from(AllowedMethods).join("', '")}'`);
+    if (!(typeof method === "string" && checkMethod(method))) {
+      throw new TypeError("argument `method` must be one of the following HTTP verbs: GET, HEAD, PATCH, POST, PUT");
     }
-    let body = rest.length >= 3 ? asyncIterator(rest[2]) : emptyIterable();
-    if (rest.length >= 4 && (rest[3] === null || typeof rest[3] !== "object")) {
+    let body = rest.length >= 3 ? asyncIterator(rest[2]) : createEmptyAsyncIterator();
+    const incomingHeaders = rest.length >= 4 ? rest[3] : {};
+    if (incomingHeaders === null || typeof incomingHeaders !== "object") {
       throw new TypeError("argument `headers` must be of type 'object'.");
     }
-    const headers = new Headers(rest[3]);
+    const headers = createHeaders(incomingHeaders);
     let advertisement = rest.length >= 5 ? rest[4] : false;
     if (typeof advertisement !== "boolean") {
       throw new TypeError("argument `advertisement`must be of type 'boolean'.");
@@ -107,30 +113,34 @@ export class Context {
     if (rest.length < 5) {
       [advertisement, path, service] = inferValues(url, method, headers.get("Content-Type"));
     }
+    // Set own properties.
+    this.advertisement = advertisement;
+    this.path = path;
+    this.service = service;
     // Read and analyse packets if we have a valid service and requester does **not** want advertisement.
     if (service && !advertisement) {
       const middleware = ServiceReaders.get(service)!;
       body = readPackets(body, middleware(this.__capabilities, this.__commands));
       this[SymbolPromise] = body.next().then(() => { delete this[SymbolPromise]; });
     }
-    // Add request and response objects.
-    this.request = {
-      advertisement,
+    // Create request object from input.
+    this.request = Object.freeze({
       body,
       headers,
-      method: method as "GET" | "HEAD" | "PATCH" | "POST" | "PUT",
-      path,
-      service,
+      method,
       url,
-      toReadable() {
-        return createReadable(this.body);
-      },
-    };
+    });
+    // Create a fresh response object.
     this.response = {
       body: undefined,
-      headers: new Headers(),
+      headers: createHeaders(),
       status: 404,
     };
+    // Create compatibility object
+    this.readable = Object.freeze({
+      request: (): Readable => createReadable(this.request.body),
+      response: (): Readable => createReadable(this.toAsyncIterator()),
+    });
     // tslint:enable:cyclomatic-complexity
   }
 
@@ -138,11 +148,11 @@ export class Context {
   //#region own properties and methods
 
   /**
-   * Request object.
+   * Incoming request.
    */
-  public readonly request: Request;
+  public readonly request: Readonly<Request>;
   /**
-   * Response object.
+   * Outgoing response.
    */
   public readonly response: Response;
 
@@ -171,7 +181,7 @@ export class Context {
   /**
    * Check if request body has been analysed and is ready for use.
    */
-  public get isReady(): boolean {
+  public get isInitialised(): boolean {
     return !(SymbolPromise in this);
   }
 
@@ -180,41 +190,6 @@ export class Context {
    */
   public async initialise(): Promise<void> {
     return this[SymbolPromise];
-  }
-
-  /**
-   * Get header from {@link Request.headers | request headers}.
-   *
-   * @param headerName - Case-insensitive name of header to retrive.
-   */
-  public get(headerName: string): string | undefined {
-    return this.request.headers.get(headerName) || undefined;
-  }
-
-  /**
-   * Set header in {@link Response.headers | response headers}.
-   *
-   * @param headerName - Case-insensitive name of header to set.
-   * @param value - New value of field.
-   */
-  public set(headerName: string, value?: number | string | string[]): void;
-  /**
-   * Set multiple values for header in {@link Response.headers | response headers}.
-   *
-   * @param headerName - Case-insensitive name of header to set.
-   * @param values - Values to append to field.
-   */
-  public set(headerName: string, values: number | string | string[]): void {
-    if (values instanceof Array) {
-      values.forEach((value) => this.response.headers.append(headerName, value));
-      return;
-    }
-    if (typeof values === "number") {
-      values = values.toString(10);
-    }
-    if (values) {
-      this.response.headers.set(headerName, values);
-    }
   }
 
   /**
@@ -230,7 +205,7 @@ export class Context {
    * Will only be filled when request is not asking for advertisement.
    */
   public async capabilities(): Promise<Capabilities> {
-    if (!this.isReady) {
+    if (!this.isInitialised) {
       await this.initialise();
     }
     return new Map(this.__capabilities);
@@ -248,7 +223,7 @@ export class Context {
    * Will only be filled when request is not asking for advertisement.
    */
   public async commands(): Promise<ReadonlyCommands> {
-    if (!this.isReady) {
+    if (!this.isInitialised) {
       await this.initialise();
     }
     return this.__commands.slice();
@@ -286,100 +261,174 @@ export class Context {
    * {@link Context.addError} will be included in the resulting iterator.
    *
    * Also takes care of patching the header for advertisement.
-   *
-   * @privateRemarks
-   *
-   * Messages must be consumed if used, so multiple uses don't have the multiple
-   * instances(?) of the same message.
    */
   public toAsyncIterator(): AsyncIterableIterator<Uint8Array> {
     let body = createAsyncIterator(this.response.body);
-    // Check if body and service is truthy
-    if (this.response.body && this.request.service && this.type) {
-      // Add header or messages if content type is the expected type.
+    // Only do the following if object is not already marked and if response
+    // body, service and response "Content-Type" header is set.
+    if (!checkObject(body) && this.response.body && this.service && this.type) {
+      // Add header or messages to packed git stream if header "Content-Type" is
+      // equal to below constant.
       const content_type = `application/x-git-${this.service}-${this.advertisement ? "advertisement" : "result"}`;
       if (this.type === content_type) {
-        // Add header if none found
+        // Add header if advertisement is expected and no header is previously
+        // set
         if (this.advertisement) {
-          body = addHeaderToIterable(this.request.service, body);
+          body = addHeaderToIterable(this.service, body);
+          // Remove last known length (as it _may_ have been modified)
+          this.length = undefined;
         }
-        // Add messages
+        // Or add messages if service is used directly.
         else if (this.__messages.length) {
-          // Consume messages
+          // Consume messages by setting length to zero afterwards
           const packedMessages = this.__messages.map(([t, m]) => encodePacket(t, m));
           this.__messages.length = 0;
           body = addMessagesToIterable(packedMessages, body);
+          // Append length if previously known
+          if (this.length !== undefined) {
+            this.length += packedMessages.reduce((p, c) => p + c.length, 0);
+          }
         }
       }
       // Or add messages if type is "text/plain".
       else if (/^text\/plain(;|$)/.test(this.type) && this.__messages.length) {
-        // Consume messages
+        // Consume messages by setting length to zero afterwards
         const messages = this.__messages.map(([t, m]) => `${t === PacketType.Message ? "Error" : "Message"}: ${m}\n`).map(encodeString);
         this.__messages.length = 0;
         body = addMessagesToIterable(messages, body);
+        // Append length if previously known
+        if (this.length !== undefined) {
+          this.length += messages.reduce((p, c) => p + c.length, 0);
+        }
       }
     }
-    // Set body
+    // Mark body in case method is called multiple times.
+    markObject(body);
+    // Replace response body with new body
     return this.response.body = body;
   }
 
   /**
-   * Create a {@link stream#Readable | readable} for
-   * {@link Response.body | response body}.
+   * Requester want advertisement for {@link Service | service}, and not the
+   * service itself.
    */
-  public toReadable(): Readable {
-    return createReadable(this.toAsyncIterator());
-  }
+  public readonly advertisement: boolean;
+
+  /**
+   * Requested resource path.
+   *
+   * @remarks
+   *
+   * If `path` was not supplied to {@link Context | constructor} or could not
+   * be infered from the preceding arguments, then its value is set to
+   * `undefined`.
+   */
+  public path: string | undefined;
+
+  /**
+   * Requester want to use {@link Service | service}.
+   *
+   * @remarks
+   *
+   * If `service` was not supplied to {@link Context | constructor} or could not
+   * be infered from the preceding arguments, then its value is set to
+   * `undefined`.
+   */
+  public readonly service: Service | undefined;
 
   //#endregion own properties and methods
+  //#region stream compatibility
+
+  /**
+   * For compatibility with other libraries using standard node streams.
+   */
+  public readonly readable: {
+    /**
+     * Convert {@link Request.body | request body} to a
+     * {@link stream#Readable | readable stream}.
+     *
+     * @remarks
+     *
+     * For compatibility with other libraries using standard node streams.
+     */
+    request(): Readable;
+    /**
+     * Convert {@link Response.body | response body} to a
+     * {@link stream#Readable | readable stream}.
+     *
+     * @remarks
+     *
+     * For compatibility with other libraries using standard node streams.
+     */
+    response(): Readable;
+  };
+
+  //#endregion stream compatibility
   //#region request delegation
 
   /**
-   * {@inheritdoc Request.advertisement}
+   * URL-string without origin of incoming request.
    */
-  public get advertisement(): boolean {
-    return this.request.advertisement;
-  }
-
-  /**
-   * {@inheritdoc Request.service}
-   */
-  public get service(): Service | undefined {
-    return this.request.service;
-  }
-
-  /**
-   * {@inheritdoc Request.path}
-   */
-  public get path(): string | undefined {
-    return this.request.path;
-  }
-  public set path(value: string | undefined) {
-    this.request.path = value;
-  }
-
-  /**
-   * {@inheritdoc Request.url}
-   */
-  public get url(): string {
+  public get url() {
     return this.request.url;
+  }
+
+  /**
+   * HTTP verb used with incoming request.
+   */
+  public get method() {
+    return this.request.method;
   }
 
   //#endregion request delegation
   //#region response delegation
 
   /**
-   * {@inheritdoc Response.status}
+   * Set header in {@link Response.headers | response headers}.
+   *
+   * @param headerName - Case-insensitive name of header to set.
+   * @param value - New value(s) to set.
    */
-  public get statusCode(): number {
-    return this.response.status;
-  }
-  public set statusCode(value: number) {
-    this.response.status = value;
+  public setHeader(headerName: string, value: number | string | string[]): void;
+  /**
+   * Delete header from {@link Response.headers | response headers}.
+   *
+   * @param headerName - Case-insensitive name of header to delete.
+   */
+  public setHeader(headerName: string): void;
+  /**
+   * Set or delete header in/from {@link Response.headers | response headers}.
+   *
+   * @remarks
+   *
+   * Using an undefined value for `value` will remove the header.
+   *
+   * @param headerName - Case-insensitive name of header to set.
+   * @param value - New value(s) to set. Set `undefined` to delete instead.
+   */
+  public setHeader(headerName: string, value?: number | string | string[]): void;
+  public setHeader(headerName: string, value?: number | string | string[]): void {
+    if (value instanceof Array) {
+      value.forEach((v) => this.response.headers.append(headerName, v));
+      return;
+    }
+    if (typeof value === "number") {
+      value = value.toString(10);
+    }
+    if (typeof value === "string") {
+      this.response.headers.set(headerName, value);
+    }
+    else {
+      this.response.headers.delete(headerName);
+    }
   }
 
   /**
-   * {@inheritdoc Response.body}
+   * Response body to send.
+   *
+   * @remarks
+   *
+   * See {@link Body} for possible values.
    */
   public get body(): Body {
     return this.response.body;
@@ -389,18 +438,33 @@ export class Context {
   }
 
   /**
+   * Outgoing response headers.
+   */
+  public get headers(): Headers {
+    return this.response.headers;
+  }
+  public set headers(value: Headers) {
+    this.response.headers = value;
+  }
+
+  /**
+   * Status code for outgoing response.
+   */
+  public get status(): number {
+    return this.response.status;
+  }
+  public set status(value: number) {
+    this.response.status = value;
+  }
+
+  /**
    * Get/set "Content-Type" header for response.
    */
   public get type(): string | undefined {
     return this.response.headers.get("Content-Type") || undefined;
   }
   public set type(value: string | undefined) {
-    if (value) {
-      this.response.headers.set("Content-Type", value);
-    }
-    else {
-      this.response.headers.delete("Content-Type");
-    }
+    this.setHeader("Content-Type", value);
   }
 
   /**
@@ -413,12 +477,7 @@ export class Context {
     }
   }
   public set length(value: number | undefined) {
-    if (value === undefined) {
-      this.response.headers.delete("Content-Length");
-    }
-    else if (typeof value === "number") {
-      this.response.headers.set("Content-Length", value.toString(10));
-    }
+    this.setHeader("Content-Length", value);
   }
 
   //#endregion response delegation
@@ -499,57 +558,52 @@ export type Body =
 ;
 
 /**
+ * An incoming request.
+ *
  * @public
  */
 export interface Request {
   /**
-   * Requester want advertisement for service, and not the service itself.
+   * Incoming request body.
    */
-  readonly advertisement: boolean;
+  body: AsyncIterableIterator<Uint8Array>;
   /**
-   * Request body.
+   * Incoming HTTP headers.
    */
-  readonly body: AsyncIterableIterator<Uint8Array>;
+  headers: Headers;
   /**
-   * Request body as a {@link stream#Readable | readable stream}.
-   *
-   * @remarks
-   *
-   * For compatibility with other libraries using standard node streams.
+   * HTTP verb used with incoming request.
    */
-  toReadable(): Readable;
+  method: "GET" | "HEAD" | "PATCH" | "POST" | "PUT";
   /**
-   * Headers.
+   * URL-string without origin of incoming request.
    */
-  readonly headers: Headers;
-  /**
-   * HTTP method used.
-   */
-  readonly method: "GET" | "HEAD" | "PATCH" | "POST" | "PUT";
-  /**
-   * Requested resource path.
-   *
-   * @remarks
-   *
-   * If constructor is unable to get path, from either the `url` or `path`
-   * argument provided, then this path is set to undefined.
-   */
-  path?: string;
-  readonly service?: Service;
-  readonly url: string;
+  url: string;
 }
 
 /**
+ * An outgoing response.
+ *
  * @public
  */
 export interface Response {
+  /**
+   * Response body to send.
+   *
+   * @remarks
+   *
+   * See {@link Body} for possible values.
+   */
   body: Body;
+  /**
+   * Outgoing response headers.
+   */
   headers: Headers;
+  /**
+   * Status code for outgoing response.
+   */
   status: number;
 }
-
-async function *emptyIterable(): AsyncIterableIterator<Uint8Array> { return; }
-
 function asyncIterator<T>(iterable?: AsyncIterable<T> | AsyncIterableIterator<T>): AsyncIterableIterator<T> {
   if (!(iterable && Symbol.asyncIterator in iterable)) {
     throw new TypeError("argument `iterable` must be an async iterable.");

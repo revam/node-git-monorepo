@@ -583,4 +583,40 @@ describe("function addHeaderToIterable()", () => {
   test("should throw if second argument does not contain Symbol.asyncIterator", () => {
     expect(() => lib.addHeaderToIterable(Service.UploadPack, undefined as any)).toThrow();
   });
+
+  test("should not add anything if given iterable does not iterate anything", async() => {
+    async function *it(): AsyncIterableIterator<Uint8Array> { return; }
+    await Promise.all(Object.values(Service).filter((s): s is Service => checkEnum(s, Service)).map(async(service) =>
+      expect((async() => {
+        const itWithNoHeader = lib.addHeaderToIterable(service, it());
+        let count = 0;
+        for await (const _ of itWithNoHeader) {
+          count += 1;
+          throw new Error("Should not throw here");
+        }
+        expect(count).toBe(0);
+      })()).resolves.toBeUndefined(),
+    ));
+  });
+
+  test("should add a header if given iterable iterates, but the first value does not start with a header", async() => {
+    async function *it(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array([48, 48, 48, 48]); }
+    await Promise.all(Object.values(Service).filter((s): s is Service => checkEnum(s, Service)).map(async(service) =>
+      expect((async() => {
+        const itWithNoHeader = lib.addHeaderToIterable(service, it());
+        let count = 0;
+        const header = lib.ServiceHeaders[service];
+        for await (const value of itWithNoHeader) {
+          if (count === 0) {
+            expect(value).toEqual(header);
+          }
+          else if (count === 1) {
+            expect(value).toEqual(new Uint8Array([48, 48, 48, 48]));
+          }
+          count += 1;
+        }
+        expect(count).toBe(2);
+      })()).resolves.toBeUndefined(),
+    ));
+  });
 });

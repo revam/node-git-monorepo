@@ -115,8 +115,8 @@ export function concatBuffers(buffers: Uint8Array[]): Uint8Array {
 /**
  * Concats packet buffers. Can split the buffer at desired index,
  * inserting the rest buffers inbetween the split chunks.
- * @param buffers Buffers to concat
- * @param splitBufferAtIndex Index of buffer to split
+ * @param buffers - Buffers to concat
+ * @param splitBufferAtIndex - Index of buffer to split
  * @internal
  */
 export function concatPacketBuffers(
@@ -141,8 +141,8 @@ export function concatPacketBuffers(
 
 /**
  * Returns the first position of a zero packet after offset.
- * @param buffer A valid packet buffer
- * @param offset A valid packet start position
+ * @param buffer - A valid packet buffer
+ * @param offset - A valid packet start position
  * @internal
  */
 export function findNextZeroPacketInBuffer(

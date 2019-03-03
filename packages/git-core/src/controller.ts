@@ -279,27 +279,28 @@ export class Controller implements ServiceController {
   protected async serveHTTP(context: Context): Promise<void> {
     const url = this.remoteURL(context.path!, context.service!, context.advertisement);
     const response = await fetch(url, {
-      body: context.request.toReadable(),
+      body: context.readable.request(),
       headers: context.request.headers,
       method: context.advertisement ? "GET" : "POST",
     });
-    context.statusCode = response.status;
+    context.status = response.status;
     context.body = (response.body as Readable)[Symbol.asyncIterator]();
     for (const [header, value] of response.headers) {
-      context.set(header, value);
+      context.setHeader(header, value);
     }
   }
 
   protected async serveFS(context: Context): Promise<void> {
-    const statusCode = context.statusCode = await fsStatusCode(context.path);
+    const statusCode = context.status = await fsStatusCode(context.path);
     if (statusCode === 200) {
       const option = context.advertisement ? "--advertise-refs" : "--stateless-rpc";
       const child = spawn("git", ["-C", context.path!, context.service!, option, "."]);
       if (!context.advertisement) {
-        context.request.toReadable().pipe(child.stdin);
+        context.readable.request().pipe(child.stdin);
       }
       context.body = child.stdout[Symbol.asyncIterator]();
       context.type = `application/x-git-${context.service}-${context.advertisement ? "advertisement" : "result"}`;
+      context.length = undefined;
     }
     else {
       const body = context.body = encodeString(STATUS_CODES[statusCode]!);

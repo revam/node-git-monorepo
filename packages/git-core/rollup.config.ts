@@ -37,6 +37,9 @@ const options: RollupOptions = {
   output: output as any,
   plugins: [
     generatePackageJson({
+      dependencies: [
+        "@types/node-fetch",
+      ],
       pick: [
         "name",
         "version",

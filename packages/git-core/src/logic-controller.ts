@@ -37,19 +37,19 @@ export class LogicController implements ServiceController {
    * The parent signal of `onComplete`.
    * @internal
    */
-  private [SymbolOnComplete]: CompleteSignal = new CompleteSignal();
+  private [SymbolOnComplete]: CompleteSignal;
 
   /**
    * The parent signal of `onError`.
    * @internal
    */
-  private [SymbolOnError]: ErrorSignal = new ErrorSignal();
+  private [SymbolOnError]: ErrorSignal;
 
   /**
    * The parent signal of `onUsable`.
    * @internal
    */
-  private [SymbolOnUsable]: UsableSignal = new UsableSignal();
+  private [SymbolOnUsable]: UsableSignal;
 
   /**
    * Service driver - doing the heavy-lifting for us.
@@ -88,6 +88,9 @@ export class LogicController implements ServiceController {
     if (!checkServiceDriver(serviceController)) {
       throw new TypeError("argument `serviceController` must be a valid implementation of ServiceController interface");
     }
+    this[SymbolOnComplete] = new CompleteSignal();
+    this[SymbolOnError] = new ErrorSignal();
+    this[SymbolOnUsable] = new UsableSignal();
     this[SymbolPrivate] = { controller: serviceController, methods: overrides };
   }
 
@@ -117,7 +120,7 @@ export class LogicController implements ServiceController {
    * {@link (ServiceController:interface).serve}.
    */
   public async serve(context: Context): Promise<void> {
-    if (!context.isReady) {
+    if (!context.isInitialised) {
       await context.initialise();
     }
     if (checkStatus(context)) {
@@ -158,7 +161,7 @@ export class LogicController implements ServiceController {
       context.body = undefined;
       return this.reject(context);
     }
-    if (context.statusCode > 300 && context.statusCode < 400) {
+    if (context.status > 300 && context.status < 400) {
       return this.redirect(context);
     }
     updateStatus(context, Status.Accepted);
@@ -166,21 +169,21 @@ export class LogicController implements ServiceController {
       await this[SymbolPrivate].controller.serve(context);
     } catch (error) {
       this.dispatchError(error);
-      context.statusCode = error && (error.status || error.statusCode) || 500;
+      context.status = error && (error.status || error.statusCode) || 500;
       context.body = undefined;
     }
     // If no status code is set or is below 300 with no body, reset response
     // status and body and throw error.
-    if (context.statusCode < 300 && !context.body) {
+    if (context.status < 300 && !context.body) {
       const error = new Error("Response is within the 2xx range, but contains no body.") as IError;
       error.code = ErrorCodes.ERR_INVALID_BODY_FOR_2XX;
       this.dispatchError(error);
-      context.statusCode = 500;
+      context.status = 500;
       context.body = undefined;
     }
     // Reject and mark any response with a status above or equal to 400 as a
     // failure.
-    if (context.statusCode >= 400) {
+    if (context.status >= 400) {
       updateStatus(context, Status.Failure);
       return this.reject(context);
     }
@@ -202,7 +205,7 @@ export class LogicController implements ServiceController {
   public async reject(context: Context, statusCode?: number, reason?: string): Promise<void> {
     if (checkStatus(context)) {
       // Redirect instead if the statusCode is in the 3xx range.
-      if (context.statusCode >= 300 && context.statusCode < 400) {
+      if (context.status >= 300 && context.status < 400) {
         return this.redirect(context);
       }
       updateStatus(context, Status.Rejected);
@@ -210,11 +213,11 @@ export class LogicController implements ServiceController {
     else if (!checkStatus(context, Status.Failure)) {
       return;
     }
-    if (context.statusCode < 400) {
+    if (context.status < 400) {
       if (!(statusCode && statusCode < 600 && statusCode >= 400)) {
         statusCode = 500;
       }
-      context.statusCode = statusCode;
+      context.status = statusCode;
     }
     this.createPlainBodyForResponse(context, reason);
   }
@@ -233,7 +236,7 @@ export class LogicController implements ServiceController {
   public redirect(request: Context, statusCode: number): Promise<void>;
   /**
    * Redirects client to `location`. Can optionally set status code of redirect.
-   * @param location The location to redirect to.
+   * @param location - The location to redirect to.
    */
   public redirect(request: Context, location: string, statusCode?: number): Promise<void>;
   public redirect(reqiest: Context, locationOrStatus?: string | number, statusCode?: number): Promise<void>;
@@ -246,22 +249,22 @@ export class LogicController implements ServiceController {
       location = undefined;
     }
     if (location) {
-      context.set("Location", location[0] !== "/" ? `/${location}` : location);
+      context.setHeader("Location", location[0] !== "/" ? `/${location}` : location);
     }
     // Reject if no "Location" header is not found and status is not 304
-    if (!context.response.headers.has("Location") && context.statusCode !== 304) {
-      context.statusCode = 500;
+    if (!context.response.headers.has("Location") && context.status !== 304) {
+      context.status = 500;
       return this.reject(context);
     }
     updateStatus(context, Status.Redirect);
-    if (!(context.statusCode > 300 && context.statusCode < 400)) {
+    if (!(context.status > 300 && context.status < 400)) {
       if (!(statusCode && statusCode > 300 && statusCode < 400)) {
         statusCode = 308;
       }
-      context.statusCode = statusCode;
+      context.status = statusCode;
     }
-    context.response.headers.delete("Content-Type");
-    context.response.headers.delete("Content-Length");
+    context.type = undefined;
+    context.length = undefined;
     context.body = undefined;
   }
 
@@ -346,7 +349,7 @@ export class LogicController implements ServiceController {
    */
   private createPlainBodyForResponse(
     context: Context,
-    data: string = STATUS_CODES[context.statusCode]!,
+    data: string = STATUS_CODES[context.status]!,
   ): void {
     if (!context.body) {
       const body = context.body = encodeString(data);

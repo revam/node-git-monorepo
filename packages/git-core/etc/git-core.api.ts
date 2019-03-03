@@ -24,7 +24,7 @@ interface CommandUploadPack {
 }
 
 // @public
-declare class Context {
+declare class Context implements Response {
     // (undocumented)
     constructor();
     // (undocumented)
@@ -34,37 +34,37 @@ declare class Context {
     // (undocumented)
     constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>);
     // (undocumented)
-    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>);
+    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | IncomingHttpHeaders);
     // (undocumented)
-    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>, advertisement: boolean, path?: string, service?: Service);
+    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | IncomingHttpHeaders, advertisement: boolean, path?: string, service?: Service);
     // (undocumented)
-    constructor(url?: string, method?: string, body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers?: Headers | Record<string, string>, advertisement?: boolean, path?: string, service?: Service);
+    constructor(url?: string, method?: string, body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers?: Headers | IncomingHttpHeaders, advertisement?: boolean, path?: string, service?: Service);
     addError(errorMessage: string): void;
     addMessage(message: string): void;
-    // (undocumented)
     readonly advertisement: boolean;
-    // (undocumented)
     body: Body;
     capabilities(): Promise<Capabilities>;
     commands(): Promise<ReadonlyCommands>;
-    get(headerName: string): string | undefined;
+    headers: Headers;
     initialise(): Promise<void>;
-    readonly isReady: boolean;
+    readonly isInitialised: boolean;
     length: number | undefined;
-    // (undocumented)
+    readonly method: "HEAD" | "GET" | "PATCH" | "POST" | "PUT";
     path: string | undefined;
-    readonly request: Request;
+    readonly readable: {
+        request(): Readable;
+        response(): Readable;
+    };
+    readonly request: Readonly<Request>;
     readonly response: Response;
-    // (undocumented)
     readonly service: Service | undefined;
-    set(headerName: string, value?: number | string | string[]): void;
+    setHeader(headerName: string, value: number | string | string[]): void;
+    setHeader(headerName: string): void;
+    setHeader(headerName: string, value?: number | string | string[]): void;
     state: Record<PropertyKey, any>;
-    // (undocumented)
-    statusCode: number;
+    status: number;
     toAsyncIterator(): AsyncIterableIterator<Uint8Array>;
-    toReadable(): Readable;
     type: string | undefined;
-    // (undocumented)
     readonly url: string;
 }
 
@@ -156,27 +156,18 @@ interface ProcessError extends IError {
 // @public (undocumented)
 declare type ReadonlyCommands = ReadonlyArray<Readonly<CommandReceivePack | CommandUploadPack>>;
 
-// @public (undocumented)
+// @public
 interface Request {
-    readonly advertisement: boolean;
-    readonly body: AsyncIterableIterator<Uint8Array>;
-    readonly headers: Headers;
-    readonly method: "GET" | "HEAD" | "PATCH" | "POST" | "PUT";
-    path?: string;
-    // (undocumented)
-    readonly service?: Service;
-    toReadable(): Readable;
-    // (undocumented)
-    readonly url: string;
+    body: AsyncIterableIterator<Uint8Array>;
+    headers: Headers;
+    method: "GET" | "HEAD" | "PATCH" | "POST" | "PUT";
+    url: string;
 }
 
-// @public (undocumented)
+// @public
 interface Response {
-    // (undocumented)
     body: Body;
-    // (undocumented)
     headers: Headers;
-    // (undocumented)
     status: number;
 }
 

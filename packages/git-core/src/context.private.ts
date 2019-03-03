@@ -1,3 +1,5 @@
+import { IncomingHttpHeaders } from "http";
+import { Headers } from "node-fetch";
 import { Readable } from "stream";
 import { URL } from "url";
 import { Body, Capabilities, CommandReceivePack, Commands, CommandUploadPack } from "./context";
@@ -5,7 +7,11 @@ import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
 import { decodeString, encodeString } from "./packet-util";
 
-export const AllowedMethods = new Set(["GET", "HEAD", "PATCH", "POST", "PUT"]);
+export const AllowedMethods: ReadonlySet<string> = new Set(["GET", "HEAD", "PATCH", "POST", "PUT"]);
+
+export function checkMethod(method: string): method is "GET" | "HEAD" | "PATCH" | "POST" | "PUT" {
+  return AllowedMethods.has(method);
+}
 
 export const Advertisement = /^\/(?:(?<path>.+)\/)?info\/refs$/;
 export const DirectUse = /^\/(?:(?<path>.+)\/)?git-(?<service>\b[a-z\-]{1,20}\b)$/;
@@ -59,6 +65,24 @@ export function inferValues(
   return [false];
 }
 
+export function createHeaders(incomingHeaders?: IncomingHttpHeaders | Headers): Headers {
+  if (incomingHeaders instanceof Headers) {
+    return incomingHeaders;
+  }
+  const headers = new Headers();
+  if (incomingHeaders) {
+    for (const [header, value] of Object.entries(incomingHeaders)) {
+      if (value instanceof Array) {
+        value.forEach((v) => headers.append(header, v));
+      }
+      else if (value) {
+        headers.set(header, value);
+      }
+    }
+  }
+  return headers;
+}
+
 /**
  * Creates a new {@link stream#Readable | readable} from `iterable`.
  *
@@ -82,8 +106,33 @@ export function createReadable(iterable: AsyncIterable<Uint8Array> | AsyncIterab
   });
 }
 
+const SymbolChecked = Symbol("checked");
+
 /**
- * Create an async iterable for `body`.
+ * Mark object.
+ *
+ * @param obj - Object to mark.
+ */
+export function markObject(obj: object): void {
+  obj[SymbolChecked] = undefined;
+}
+
+/**
+ * Check object for mark.
+ *
+ * @param obj - Object to check.
+ */
+export function checkObject(obj: object): boolean {
+  return SymbolChecked in obj;
+}
+
+/**
+ * Create an empty async iterable iterator.
+ */
+export async function *createEmptyAsyncIterator(): AsyncIterableIterator<Uint8Array> { return; }
+
+/**
+ * Create an async iterable iterator for {@link Body | `body`}.
  *
  * @privateRemarks
  *
@@ -91,16 +140,22 @@ export function createReadable(iterable: AsyncIterable<Uint8Array> | AsyncIterab
  *
  * @param body - {@link Body} to convert.
  */
-export async function *createAsyncIterator(body: Body): AsyncIterableIterator<Uint8Array> {
-  let type: string;
-  if (body && ((type = typeof body) === "object" || type === "function")) {
+export function createAsyncIterator(body: Body): AsyncIterableIterator<Uint8Array> {
+  const type = typeof body;
+  const typeObjOrFct = (type === "object" || type === "function");
+  if (body && typeObjOrFct) {
     if (body instanceof Uint8Array || "then" in body) {
-      yield body;
+      return (async function*(): AsyncIterableIterator<Uint8Array> { yield body; })();
     }
-    else if (Symbol.asyncIterator in body || Symbol.iterator in body) {
-      yield* body;
+    else if (Symbol.asyncIterator in body && body === body[Symbol.asyncIterator]()) {
+      return body as AsyncIterableIterator<Uint8Array>;
     }
+    else if (Symbol.iterator in body || Symbol.asyncIterator in body) {
+      return (async function *(): AsyncIterableIterator<Uint8Array> { yield* body; })();
+    }
+    return body as AsyncIterableIterator<Uint8Array>;
   }
+  return createEmptyAsyncIterator();
 }
 
 /**
@@ -117,7 +172,7 @@ export function addHeaderToIterable(
   service: Service,
   iterable: AsyncIterableIterator<Uint8Array>,
 ): AsyncIterableIterator<Uint8Array> {
-  const header = Headers[service];
+  const header = ServiceHeaders[service];
   if (!header) {
     throw new TypeError("argument `service` must be a value from enum Service");
   }
@@ -133,9 +188,6 @@ export function addHeaderToIterable(
         yield header;
       }
       yield result.value;
-    }
-    else {
-      yield header;
     }
     if (!result.done) {
       yield* iterable;
@@ -173,7 +225,7 @@ function bufferEquals(buf1?: Uint8Array, buf2?: Uint8Array): boolean {
 /**
  * Advertisement Headers for response
  */
-export const Headers: Record<Service, Uint8Array> = {
+export const ServiceHeaders: Record<Service, Uint8Array> = {
   [Service.ReceivePack]: encodeString("001f# service=git-receive-pack\n0000"),
   [Service.UploadPack]: encodeString("001e# service=git-upload-pack\n0000"),
 };

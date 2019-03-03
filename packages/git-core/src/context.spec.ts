@@ -12,13 +12,20 @@ describe("class Context", () => {
 
     async function valid(
       args: ClassTypeArgs<typeof lib.Context> = [],
-      request: Pick<lib.Request, Exclude<keyof lib.Request, "headers" | "body" | "toReadable">>,
+      request: Pick<lib.Request, Exclude<keyof lib.Request, "headers" | "body">>,
+      context: Pick<lib.Context, "advertisement" | "service" | "path">,
       body: Uint8Array = new Uint8Array(0),
       headers: Record<string, string[]> = {},
     ): Promise<lib.Context | never> {
-      const context = new lib.Context(...args);
-      expect(context).toBeInstanceOf(lib.Context);
-      const output = context.request;
+      const value = new lib.Context(...args);
+      expect(value).toBeInstanceOf(lib.Context);
+      for (const key in context) {
+        expect(value).toHaveProperty(key) // tslint:disable-line
+        if (key in value) {
+          expect(value[key]).toBe(context[key]);
+        }
+      }
+      const output = value.request;
       for (const key in request) {
         expect(output).toHaveProperty(key); // tslint:disable-line
         if (key in output) {
@@ -26,19 +33,19 @@ describe("class Context", () => {
         }
       }
       const buffers: Uint8Array[] = [];
-      for await (const b of context.request.body) {
+      for await (const b of value.request.body) {
         buffers.push(b);
       }
       const buffer = concatBuffers(buffers);
       expect(buffer).toEqual(body);
-      const raw = context.request.headers.raw();
+      const raw = value.request.headers.raw();
       for (const key in headers) {
         expect(raw).toHaveProperty(key); // tslint:disable-line
         if (key in raw) {
           expect(raw[key]).toEqual(headers[key]);
         }
       }
-      return context;
+      return value;
     }
 
     async function invalid(args: ClassTypeArgs<typeof lib.Context>): Promise<void | never> {
@@ -51,11 +58,13 @@ describe("class Context", () => {
     test("should accept no arguments", async () => valid(
       [],
       {
-        advertisement: false,
         method: "GET",
+        url: "/",
+      },
+      {
+        advertisement: false,
         path: undefined,
         service: undefined,
-        url: "/",
       },
     ));
 
@@ -71,11 +80,13 @@ describe("class Context", () => {
           "/",
         ],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
@@ -83,11 +94,13 @@ describe("class Context", () => {
           "/repository/path/info/refs?service=git-upload-pack",
         ],
         {
-          advertisement: true,
           method: "GET",
+          url: "/repository/path/info/refs?service=git-upload-pack",
+        },
+        {
+          advertisement: true,
           path: "repository/path",
           service: Service.UploadPack,
-          url: "/repository/path/info/refs?service=git-upload-pack",
         },
         new Uint8Array(0),
         {},
@@ -103,71 +116,85 @@ describe("class Context", () => {
       valid(
         ["/", "GET"],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "get"],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "gEt"],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "HEAD"],
         {
-          advertisement: false,
           method: "HEAD",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "POST"],
         {
-          advertisement: false,
           method: "POST",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "PATCH"],
         {
-          advertisement: false,
           method: "PATCH",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "PUT"],
         {
-          advertisement: false,
           method: "PUT",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
     ]));
@@ -179,93 +206,111 @@ describe("class Context", () => {
       valid(
         ["/", "GET", { async *[Symbol.asyncIterator]() { return; } }],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "GET", asyncIterable()],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/path/to/repo/info/refs?service=git-upload-pack", "GET", asyncIterable()],
         {
-          advertisement: true,
           method: "GET",
+          url: "/path/to/repo/info/refs?service=git-upload-pack",
+        },
+        {
+          advertisement: true,
           path: "path/to/repo",
           service: Service.UploadPack,
-          url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
       ),
       valid(
         ["/path/to/repo/info/refs?service=git-receive-pack", "GET", asyncIterable()],
         {
-          advertisement: true,
           method: "GET",
+          url: "/path/to/repo/info/refs?service=git-receive-pack",
+        },
+        {
+          advertisement: true,
           path: "path/to/repo",
           service: Service.ReceivePack,
-          url: "/path/to/repo/info/refs?service=git-receive-pack",
         },
       ),
       valid(
         ["/path/to/repo/info/refs?service=git-upload-pack", "POST", asyncIterable()],
         {
-          advertisement: false,
           method: "POST",
+          url: "/path/to/repo/info/refs?service=git-upload-pack",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: undefined,
-          url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
       ),
       valid(
         ["/path/to/repo/info/refs?service=git-receive-pack", "POST", asyncIterable()],
         {
-          advertisement: false,
           method: "POST",
+          url: "/path/to/repo/info/refs?service=git-receive-pack",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: undefined,
-          url: "/path/to/repo/info/refs?service=git-receive-pack",
         },
       ),
       valid(
         ["/", "GET", { async *[Symbol.asyncIterator]() { yield new Uint8Array([48, 48, 48, 48]); } }],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
         new Uint8Array([48, 48, 48, 48]),
       ),
       valid(
         ["/path/to/repo/git-upload-pack", "POST", { async *[Symbol.asyncIterator]() { yield new Uint8Array([48, 48, 48, 48]); } }],
         {
-          advertisement: false,
           method: "POST",
+          url: "/path/to/repo/git-upload-pack",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: undefined,
-          url: "/path/to/repo/git-upload-pack",
         },
         new Uint8Array([48, 48, 48, 48]),
       ),
       valid(
         ["/path/to/repo/git-receive-pack", "POST", { async *[Symbol.asyncIterator]() { yield new Uint8Array([48, 48, 48, 48]); } }],
         {
-          advertisement: false,
           method: "POST",
+          url: "/path/to/repo/git-receive-pack",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: undefined,
-          url: "/path/to/repo/git-receive-pack",
         },
         new Uint8Array([48, 48, 48, 48]),
       ),
@@ -279,101 +324,121 @@ describe("class Context", () => {
       valid(
         ["/", "GET", asyncIterable(), {}],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "GET", asyncIterable(), new Headers()],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/path/to/repo/info/refs?service=git-upload-pack", "GET", asyncIterable(), {}],
         {
-          advertisement: true,
           method: "GET",
+          url: "/path/to/repo/info/refs?service=git-upload-pack",
+        },
+        {
+          advertisement: true,
           path: "path/to/repo",
           service: Service.UploadPack,
-          url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
       ),
       valid(
         ["/path/to/repo/info/refs?service=git-receive-pack", "GET", asyncIterable(), {}],
         {
-          advertisement: true,
           method: "GET",
+          url: "/path/to/repo/info/refs?service=git-receive-pack",
+        },
+        {
+          advertisement: true,
           path: "path/to/repo",
           service: Service.ReceivePack,
-          url: "/path/to/repo/info/refs?service=git-receive-pack",
         },
       ),
       valid(
         ["/path/to/repo/info/refs?service=git-upload-pack", "POST", asyncIterable(), {}],
         {
-          advertisement: false,
           method: "POST",
+          url: "/path/to/repo/info/refs?service=git-upload-pack",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: undefined,
-          url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
       ),
       valid(
         ["/path/to/repo/info/refs?service=git-receive-pack", "POST", asyncIterable(), {}],
         {
-          advertisement: false,
           method: "POST",
+          url: "/path/to/repo/info/refs?service=git-receive-pack",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: undefined,
-          url: "/path/to/repo/info/refs?service=git-receive-pack",
         },
       ),
       valid(
         ["/path/to/repo/git-upload-pack", "GET", asyncIterable(), {}],
         {
-          advertisement: false,
           method: "GET",
+          url: "/path/to/repo/git-upload-pack",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: undefined,
-          url: "/path/to/repo/git-upload-pack",
         },
       ),
       valid(
         ["/path/to/repo/git-receive-pack", "GET", asyncIterable(), {}],
         {
-          advertisement: false,
           method: "GET",
+          url: "/path/to/repo/git-receive-pack",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: undefined,
-          url: "/path/to/repo/git-receive-pack",
         },
       ),
       valid(
         ["/path/to/repo/git-upload-pack", "POST", asyncIterable(), { "content-type": "application/x-git-upload-pack-request"}],
         {
-          advertisement: false,
           method: "POST",
+          url: "/path/to/repo/git-upload-pack",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: Service.UploadPack,
-          url: "/path/to/repo/git-upload-pack",
         },
       ),
       valid(
         ["/path/to/repo/git-receive-pack", "POST", asyncIterable(), { "content-type": "application/x-git-receive-pack-request"}],
         {
-          advertisement: false,
           method: "POST",
+          url: "/path/to/repo/git-receive-pack",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: Service.ReceivePack,
-          url: "/path/to/repo/git-receive-pack",
         },
       ),
     ]));
@@ -388,41 +453,49 @@ describe("class Context", () => {
       valid(
         ["/", "GET", asyncIterable(), {}, false],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "GET", asyncIterable(), {}, true],
         {
-          advertisement: true,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: true,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/path/to/repo/info/refs?service=git-upload-pack", "GET", asyncIterable(), {}, true],
         {
-          advertisement: true,
           method: "GET",
+          url: "/path/to/repo/info/refs?service=git-upload-pack",
+        },
+        {
+          advertisement: true,
           path: undefined,
           service: undefined,
-          url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
       ),
       valid(
         ["/path/to/repo/info/refs?service=git-upload-pack", "POST", asyncIterable(), {}, true],
         {
-          advertisement: true,
           method: "POST",
+          url: "/path/to/repo/info/refs?service=git-upload-pack",
+        },
+        {
+          advertisement: true,
           path: undefined,
           service: undefined,
-          url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
       ),
     ]));
@@ -443,41 +516,49 @@ describe("class Context", () => {
       valid(
         ["/", "GET", asyncIterable(), {}, false, undefined],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "GET", asyncIterable(), {}, true, undefined],
         {
-          advertisement: true,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: true,
           path: undefined,
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "GET", asyncIterable(), {}, false, "path/to/repo"],
         {
-          advertisement: false,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: false,
           path: "path/to/repo",
           service: undefined,
-          url: "/",
         },
       ),
       valid(
         ["/", "GET", asyncIterable(), {}, true, "path/to/repo"],
         {
-          advertisement: true,
           method: "GET",
+          url: "/",
+        },
+        {
+          advertisement: true,
           path: "path/to/repo",
           service: undefined,
-          url: "/",
         },
       ),
     ]));
@@ -496,121 +577,145 @@ describe("class Context", () => {
         valid(
           ["/", "GET", asyncIterable(), {}, false, undefined, undefined],
           {
-            advertisement: false,
             method: "GET",
+            url: "/",
+          },
+          {
+            advertisement: false,
             path: undefined,
             service: undefined,
-            url: "/",
           },
         ),
         valid(
           ["/", "GET", asyncIterable(), {}, true, undefined, undefined],
           {
-            advertisement: true,
             method: "GET",
+            url: "/",
+          },
+          {
+            advertisement: true,
             path: undefined,
             service: undefined,
-            url: "/",
           },
         ),
         valid(
           ["/path/to/repoA", "GET", asyncIterable(), {}, false, "path/to/repoB", undefined],
           {
-            advertisement: false,
             method: "GET",
+            url: "/path/to/repoA",
+          },
+          {
+            advertisement: false,
             path: "path/to/repoB",
             service: undefined,
-            url: "/path/to/repoA",
           },
         ),
         valid(
           ["/path/to/repoA", "GET", asyncIterable(), {}, true, "path/to/repoB", undefined],
           {
-            advertisement: true,
             method: "GET",
+            url: "/path/to/repoA",
+          },
+          {
+            advertisement: true,
             path: "path/to/repoB",
             service: undefined,
-            url: "/path/to/repoA",
           },
         ),
         valid(
           ["/path/to/repoA", "GET", asyncIterable(), {}, false, "path/to/repoB", Service.UploadPack],
           {
-            advertisement: false,
             method: "GET",
+            url: "/path/to/repoA",
+          },
+          {
+            advertisement: false,
             path: "path/to/repoB",
             service: Service.UploadPack,
-            url: "/path/to/repoA",
           },
         ),
         valid(
           ["/path/to/repoA", "GET", asyncIterable(), {}, true, "path/to/repoB", Service.UploadPack],
           {
-            advertisement: true,
             method: "GET",
+            url: "/path/to/repoA",
+          },
+          {
+            advertisement: true,
             path: "path/to/repoB",
             service: Service.UploadPack,
-            url: "/path/to/repoA",
           },
         ),
         valid(
           ["/path/to/repoA", "GET", asyncIterable(), {}, false, "path/to/repoB", Service.ReceivePack],
           {
-            advertisement: false,
             method: "GET",
+            url: "/path/to/repoA",
+          },
+          {
+            advertisement: false,
             path: "path/to/repoB",
             service: Service.ReceivePack,
-            url: "/path/to/repoA",
           },
         ),
         valid(
           ["/path/to/repoA", "GET", asyncIterable(), {}, true, "path/to/repoB", Service.ReceivePack],
           {
-            advertisement: true,
             method: "GET",
+            url: "/path/to/repoA",
+          },
+          {
+            advertisement: true,
             path: "path/to/repoB",
             service: Service.ReceivePack,
-            url: "/path/to/repoA",
           },
         ),
         valid(
           ["/path/to/repoA", "POST", asyncIterable(), {}, false, "path/to/repoB", Service.UploadPack],
           {
-            advertisement: false,
             method: "POST",
+            url: "/path/to/repoA",
+          },
+          {
+            advertisement: false,
             path: "path/to/repoB",
             service: Service.UploadPack,
-            url: "/path/to/repoA",
           },
         ),
         valid(
           ["/path/to/repoA", "POST", asyncIterable(), {}, true, "path/to/repoB", Service.UploadPack],
           {
-            advertisement: true,
             method: "POST",
+            url: "/path/to/repoA",
+          },
+          {
+            advertisement: true,
             path: "path/to/repoB",
             service: Service.UploadPack,
-            url: "/path/to/repoA",
           },
         ),
         valid(
           ["/path/to/repoA", "POST", asyncIterable(), {}, false, "path/to/repoB", Service.ReceivePack],
           {
-            advertisement: false,
             method: "POST",
+            url: "/path/to/repoA",
+          },
+          {
+            advertisement: false,
             path: "path/to/repoB",
             service: Service.ReceivePack,
-            url: "/path/to/repoA",
           },
         ),
         valid(
           ["/path/to/repoA", "POST", asyncIterable(), {}, true, "path/to/repoB", Service.ReceivePack],
           {
-            advertisement: true,
             method: "POST",
+            url: "/path/to/repoA",
+          },
+          {
+            advertisement: true,
             path: "path/to/repoB",
             service: Service.ReceivePack,
-            url: "/path/to/repoA",
           },
         ),
     ]));

@@ -13,7 +13,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/revam/node-git-monorepo.git"
+    "url": "git+https://github.com/revam/node-git-monorepo.git",
+    "directory": "packages/git-core"
   },
   "homepage": "https://github.com/revam/node-git-monorepo/tree/master/packages/git-core#readme",
   "bugs": {
@@ -32,6 +33,7 @@
     "index.mjs"
   ],
   "dependencies": {
+    "@types/node-fetch": "^2.1.6",
     "micro-signals": "^2.0.0",
     "node-fetch": "^2.3.0"
   },
@@ -39,7 +41,6 @@
     "@microsoft/api-extractor": "^7.0.17",
     "@types/jest": "^24.0.6",
     "@types/node": "^11.9.5",
-    "@types/node-fetch": "^2.1.6",
     "jest": "^24.1.0",
     "read-pkg": "^4.0.1",
     "rollup": "^1.2.3",
@@ -55,6 +56,7 @@
     "build": "npm run cleanup && npm run lint && npm run api-extractor && npm run test && npm run rollup && npm pack ./dist/package",
     "cleanup": "rm -rf dist",
     "lint": "tslint -p . src/**/*.ts",
+    "preapi-extractor:local": "npm run tsc:declaration",
     "preapi-extractor": "npm run tsc:declaration",
     "prerollup": "npm run tsc:lib",
     "rollup": "rollup -c",

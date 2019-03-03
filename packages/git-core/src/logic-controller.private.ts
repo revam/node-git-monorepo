@@ -44,23 +44,23 @@ export const SymbolStatus: symbol = Symbol("status");
  *
  * @public
  */
-export enum Status {
+export const enum Status {
   /**
    * Indicate the request was accepted.
    */
-  Accepted = "Accepted",
+  Accepted,
   /**
    * Indicate the request was rejected.
    */
-  Rejected = "Rejected",
+  Rejected,
   /**
    * Indicate the request was initially accepted, but ended in failure.
    */
-  Failure = "Failure",
+  Failure,
   /**
    * Indicate the repository has moved and the request is being redirected.
    */
-  Redirect = "Redirect",
+  Redirect,
 }
 
 export class ErrorSignal extends Signal<any> {

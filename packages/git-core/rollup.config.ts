@@ -2,6 +2,7 @@ import { readFile as READ, stat as STAT, writeFile as WRITE } from "fs";
 import { dirname, join, relative, resolve } from "path";
 import readPkg from "read-pkg";
 import { OutputAsset, OutputBundle, OutputChunk, OutputOptions, Plugin, RollupOptions } from "rollup";
+import replace from "rollup-plugin-re";
 import { promisify } from "util";
 import writePkg from "write-pkg";
 
@@ -36,6 +37,18 @@ const options: RollupOptions = {
   input: "dist/build/main.js",
   output: output as any,
   plugins: [
+    replace({
+      patterns: [{
+        replace: "const $1 = Object.create(null);\n$2",
+        test: /var (\w+);\n\(function \(\1\) {\n([^}]+)\n}\)\(\1 \|\| \(\1 = {}\)\);/g,
+      }],
+    }),
+    replace({
+      patterns: [{
+        replace: "$1.$2 = $3;",
+        test: /[ \t]+(\w+)\["([^"]+)"\] = ("[^"]+");/g,
+      }],
+    }),
     generatePackageJson({
       dependencies: [
         "@types/node-fetch",

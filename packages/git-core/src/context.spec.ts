@@ -112,7 +112,8 @@ describe("class Context", () => {
       invalid(["/", null as any]),
       invalid(["/", ""]),
       invalid(["/", "some text"]),
-      invalid(["/", "OPTIONS"]),
+      invalid(["/", "TRACE"]),
+      invalid(["/", "CONNECT"]),
       valid(
         ["/", "GET"],
         {
@@ -189,6 +190,18 @@ describe("class Context", () => {
         ["/", "PUT"],
         {
           method: "PUT",
+          url: "/",
+        },
+        {
+          advertisement: false,
+          path: undefined,
+          service: undefined,
+        },
+      ),
+      valid(
+        ["/", "OPTIONS"],
+        {
+          method: "OPTIONS",
           url: "/",
         },
         {

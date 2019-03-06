@@ -7,9 +7,9 @@ import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
 import { decodeString, encodeString } from "./packet-util";
 
-export const AllowedMethods: ReadonlySet<string> = new Set(["GET", "HEAD", "PATCH", "POST", "PUT"]);
+export const AllowedMethods: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]);
 
-export function checkMethod(method: string): method is "GET" | "HEAD" | "PATCH" | "POST" | "PUT" {
+export function checkMethod(method: string): method is "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT" {
   return AllowedMethods.has(method);
 }
 

@@ -49,7 +49,7 @@ declare class Context implements Response {
     initialise(): Promise<void>;
     readonly isInitialised: boolean;
     length: number | undefined;
-    readonly method: "HEAD" | "GET" | "PATCH" | "POST" | "PUT";
+    readonly method: "HEAD" | "GET" | "OPTIONS" | "PATCH" | "POST" | "PUT";
     path: string | undefined;
     readonly readable: {
         request(): Readable;
@@ -160,7 +160,7 @@ declare type ReadonlyCommands = ReadonlyArray<Readonly<CommandReceivePack | Comm
 interface Request {
     body: AsyncIterableIterator<Uint8Array>;
     headers: Headers;
-    method: "GET" | "HEAD" | "PATCH" | "POST" | "PUT";
+    method: "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
     url: string;
 }
 

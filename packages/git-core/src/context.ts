@@ -574,7 +574,7 @@ export interface Request {
   /**
    * HTTP verb used with incoming request.
    */
-  method: "GET" | "HEAD" | "PATCH" | "POST" | "PUT";
+  method: "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
   /**
    * URL-string without origin of incoming request.
    */

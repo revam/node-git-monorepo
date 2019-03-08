@@ -443,6 +443,38 @@ describe("function inferValues()", () => {
   }
 });
 
+describe("function checkMethod()", () => {
+  test("disallowed values", () => {
+    const Values = new Set([
+      "a string with a length of 29.",
+      "git-core",
+      "path/to/repo",
+
+      // HTTP verbs
+      "CONNECT",
+      "TRACE",
+    ]);
+    for (const value of Values) {
+      expect(lib.checkMethod(value)).toBe(false);
+    }
+  });
+
+  test("allowed values", () => {
+    const Values = new Set([
+      ...lib.AllowedMethods,
+      "GET",
+      "HEAD",
+      "OPTIONS",
+      "PATCH",
+      "POST",
+      "PUT",
+    ]);
+    for (const value of Values) {
+      expect(lib.checkMethod(value)).toBe(true);
+    }
+  });
+});
+
 describe("function createReadable()", () => {
   test("should throw if first argument does not contain Symbol.asyncIterable", () => {
     expect(() => lib.createReadable(undefined as any)).toThrow();

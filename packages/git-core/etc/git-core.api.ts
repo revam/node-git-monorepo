@@ -5,7 +5,7 @@ declare type Body = Uint8Array | Promise<Uint8Array> | PromiseLike<Uint8Array> |
 declare type Capabilities = Map<string, string | undefined>;
 
 // @public
-declare function checkServiceDriver(target: unknown): target is ServiceController;
+declare function checkServiceController(target: unknown): target is ServiceController;
 
 // @public
 interface CommandReceivePack {

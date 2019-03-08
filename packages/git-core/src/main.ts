@@ -1,11 +1,7 @@
 import { Context } from "./context";
 
 /**
- * High-level controller for serving git repositories in javascript.
- *
- * @remarks
- *
- *
+ * High-level controller for serving git repositories.
  *
  * @public
  */
@@ -87,7 +83,7 @@ export interface ServiceController {
 }
 
 export * from "./enum";
-export { checkServiceDriver } from "./main.private";
+export { checkServiceController } from "./main.private";
 export * from "./context";
 export * from "./controller";
 export * from "./logic-controller";

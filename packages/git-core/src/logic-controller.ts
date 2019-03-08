@@ -12,7 +12,7 @@ import {
   UsableSignal,
 } from "./logic-controller.private";
 import { ServiceController } from "./main";
-import { checkServiceDriver, IError } from "./main.private";
+import { checkServiceController, IError } from "./main.private";
 import { encodeString } from "./packet-util";
 
 const SymbolPrivate = Symbol("private");
@@ -85,7 +85,7 @@ export class LogicController implements ServiceController {
    * @param serviceController - The {@link ServiceController | controller} to use logic on.
    */
   public constructor(serviceController: ServiceController, overrides?: MethodOverrides) {
-    if (!checkServiceDriver(serviceController)) {
+    if (!checkServiceController(serviceController)) {
       throw new TypeError("argument `serviceController` must be a valid implementation of ServiceController interface");
     }
     this[SymbolOnComplete] = new CompleteSignal();

@@ -1,8 +1,10 @@
+import { Headers } from "node-fetch";
 import { Readable, Writable } from "stream";
 import { URL } from "url";
 import * as lib from "./context.private";
 import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
+import { concatBuffers } from "./packet-util";
 
 // tslint:disable:cyclomatic-complexity
 
@@ -240,31 +242,21 @@ describe("function inferValues()", () => {
       const urlContainsService = lib.ServiceName.test(url && url.searchParams.get("service") || "");
       const pathIsAdvertisement = lib.Advertisement.test(inputPath || "");
       const pathIsDirect = inputPath && lib.DirectUse.test(inputPath) && inputPath.endsWith(`/git-${service}`) || false;
-      switch (true as boolean) {
-        // Full match (with advertisement)
-        case (
-          methodIsGET &&
-          pathIsAdvertisement &&
-          urlContainsService
-        ):
-          // True if service is defined and in search
-          match(input, [Boolean(service), outputPath, service]);
-          break;
-        // Full match (without advertisement)
-        case (
-          methodIsPOST &&
-          service &&
-          pathIsDirect &&
-          content_type === `application/x-git-${service}-request`
-        ):
-          match(input, [false, outputPath, service]);
-          break;
-        // We can infer path, but not service
-        case (pathIsAdvertisement || pathIsDirect):
-          match(input, [false, outputPath]);
-          break;
-        default:
-          match(input, [false, undefined, undefined]);
+      // Full match (with advertisement)
+      if (methodIsGET && pathIsAdvertisement && urlContainsService) {
+        // True if service is defined and in search
+        match(input, [Boolean(service), outputPath, service]);
+      }
+      // Full match (without advertisement)
+      else if (methodIsPOST && service && pathIsDirect && content_type === `application/x-git-${service}-request`) {
+        match(input, [false, outputPath, service]);
+      }
+      // We can infer path, but not service
+      else if (pathIsAdvertisement || pathIsDirect) {
+        match(input, [false, outputPath]);
+      }
+      else {
+        match(input, [false]);
       }
     }
   });
@@ -443,6 +435,24 @@ describe("function inferValues()", () => {
   }
 });
 
+describe("function checkObject()", () => {
+  test("should check for an unique symbol in `obj`", () => {
+    const obj = {};
+    expect(lib.checkObject(obj)).toBe(false);
+    lib.markObject(obj);
+    expect(lib.checkObject(obj)).toBe(true);
+  });
+});
+
+describe("function markObject()", () => {
+  test("should mark `obj` with an unique symbol", () => {
+    const obj = {};
+    expect(lib.checkObject(obj)).toBe(false);
+    lib.markObject(obj);
+    expect(lib.checkObject(obj)).toBe(true);
+  });
+});
+
 describe("function checkMethod()", () => {
   test("disallowed values", () => {
     const Values = new Set([
@@ -471,6 +481,54 @@ describe("function checkMethod()", () => {
     ]);
     for (const value of Values) {
       expect(lib.checkMethod(value)).toBe(true);
+    }
+  });
+});
+
+describe("function createHeaders()", () => {
+  test("should create a new instance of Headers", () => {
+    const headers = lib.createHeaders();
+    expect(headers).toBeInstanceOf(Headers);
+  });
+
+  test("should ignore null and undefined", () => {
+    for (const value of [undefined, null]) {
+      const headers = lib.createHeaders(value);
+      expect(headers).toBeInstanceOf(Headers);
+      expect(Object.entries(headers.raw()).length).toBe(0);
+    }
+  });
+
+  test("should convert IncomingHttpHeaders and OutgoingHttpHeaders to Headers", () => {
+    const PreHeaders: Array<Record<string, string>> = [
+      // Request header
+      {
+        "Accept": "application/json, text/plain;q=0.9, */*;q=0.8",
+        "Host": "example.lan",
+        "If-Match": '"bfc13a64729c4290ef5b2c2730249c88ca92d82d"',
+        "Referer": "https://example.local",
+      },
+      // Response header
+      {
+        "Content-Length": "256",
+        "Content-Type": "application/json",
+        "Date": "Sat, 09 Mar 2019 19:05:36 GMT",
+        "ETag": "33a64df551425fcc55e4d42a148795d9f25f89d4",
+        "Server": "none",
+        "Set-Cookie": [
+          "_sid=6c44deea-61d9-47de-97b0-0a744e1e5af2; Expires=Sat, 09 Mar 2019 20:05:36 GMT; Domain=example.lan; Path=/; Secure; HttpOnly",
+          "_secretTracker=5c840f4fc999531e3bde1ce9; Domain=example.lan; Path=/; Secure; HttpOnly",
+        ].join(", "),
+      },
+    ];
+    for (const incomingHeader of PreHeaders) {
+      const headers = lib.createHeaders(incomingHeader);
+      expect(headers).toBeInstanceOf(Headers);
+      const entries = Object.entries(incomingHeader);
+      expect(Object.entries(headers.raw()).length).toBe(entries.length);
+      for (const [key, value] of entries) {
+        expect(headers.get(key)).toBe(value);
+      }
     }
   });
 });
@@ -650,5 +708,40 @@ describe("function addHeaderToIterable()", () => {
         expect(count).toBe(2);
       })()).resolves.toBeUndefined(),
     ));
+  });
+
+  test("should not add a header if given iterable iterates and the first value starts with a header", async() => {
+    await Promise.all<any>(Object.values(Service).filter((s): s is Service => checkEnum(s, Service)).map(async(service) => {
+      const header = lib.ServiceHeaders[service];
+      async function *it1(): AsyncIterableIterator<Uint8Array> { yield concatBuffers([header, new Uint8Array([48, 48, 48, 48])]); }
+      async function *it2(): AsyncIterableIterator<Uint8Array> { yield header; yield new Uint8Array([48, 48, 48, 48]); }
+      return Promise.all<any>([
+        expect((async() => {
+          const itWithNoHeader = lib.addHeaderToIterable(service, it1());
+          let count = 0;
+          for await (const value of itWithNoHeader) {
+            if (count === 0) {
+              expect(value).toEqual(concatBuffers([header, new Uint8Array([48, 48, 48, 48])]));
+            }
+            count += 1;
+          }
+          expect(count).toBe(1);
+        })()).resolves.toBeUndefined(),
+        expect((async() => {
+          const itWithNoHeader = lib.addHeaderToIterable(service, it2());
+          let count = 0;
+          for await (const value of itWithNoHeader) {
+            if (count === 0) {
+              expect(value).toEqual(header);
+            }
+            else if (count === 1) {
+              expect(value).toEqual(new Uint8Array([48, 48, 48, 48]));
+            }
+            count += 1;
+          }
+          expect(count).toBe(2);
+        })()).resolves.toBeUndefined(),
+      ]);
+    }));
   });
 });

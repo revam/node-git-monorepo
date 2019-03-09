@@ -1,4 +1,3 @@
-import { IncomingHttpHeaders } from "http";
 import { Headers } from "node-fetch";
 import { Readable } from "stream";
 import {
@@ -13,12 +12,11 @@ import {
   inferValues,
   markObject,
   ServiceReaders,
+  SymbolPromise,
 } from "./context.private";
 import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
 import { encodePacket, encodeString, PacketType, readPackets } from "./packet-util";
-
-const SymbolPromise = Symbol("promise");
 
 /**
  * Generic context for use with an implementation of {@link ServiceController}.
@@ -49,13 +47,13 @@ export class Context implements Response {
     url: string,
     method: string,
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
-    headers: Headers | IncomingHttpHeaders,
+    headers: Headers | Record<string, string>,
   );
   public constructor(
     url: string,
     method: string,
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
-    headers: Headers | IncomingHttpHeaders,
+    headers: Headers | Record<string, string>,
     advertisement: boolean,
     path?: string,
     service?: Service,
@@ -64,7 +62,7 @@ export class Context implements Response {
     url?: string,
     method?: string,
     body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
-    headers?: Headers | IncomingHttpHeaders,
+    headers?: Headers | Record<string, string>,
     advertisement?: boolean,
     path?: string,
     service?: Service,
@@ -73,7 +71,7 @@ export class Context implements Response {
     string?,
     string?,
     (AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>)?,
-    (Headers | IncomingHttpHeaders)?,
+    (Headers | Record<string, string>)?,
     boolean?,
     string?,
     Service?
@@ -113,34 +111,35 @@ export class Context implements Response {
     if (rest.length < 5) {
       [advertisement, path, service] = inferValues(url, method, headers.get("Content-Type"));
     }
-    // Set own properties.
-    this.advertisement = advertisement;
-    this.path = path;
-    this.service = service;
     // Read and analyse packets if we have a valid service and requester does **not** want advertisement.
     if (service && !advertisement) {
-      const middleware = ServiceReaders.get(service)!;
-      body = readPackets(body, middleware(this.__capabilities, this.__commands));
+      body = readPackets(body, ServiceReaders[service](this.__capabilities, this.__commands));
+      // Start analysing body, and delete promise when done.
       this[SymbolPromise] = body.next().then(() => { delete this[SymbolPromise]; });
     }
-    // Create request object from input.
+    // Set properties.
+    this.__capabilities = new Map();
+    this.__commands = [];
+    this.__messages = [];
+    this.advertisement = advertisement;
+    this.path = path;
+    this.readable = Object.freeze({
+      request: (): Readable => createReadable(this.request.body),
+      response: (): Readable => createReadable(this.toAsyncIterator()),
+    });
     this.request = Object.freeze({
       body,
       headers,
       method,
       url,
     });
-    // Create a fresh response object.
     this.response = {
       body: undefined,
       headers: createHeaders(),
       status: 404,
     };
-    // Create compatibility object
-    this.readable = Object.freeze({
-      request: (): Readable => createReadable(this.request.body),
-      response: (): Readable => createReadable(this.toAsyncIterator()),
-    });
+    this.service = service;
+    this.state = Object.create(null);
     // tslint:enable:cyclomatic-complexity
   }
 
@@ -157,14 +156,14 @@ export class Context implements Response {
   public readonly response: Response;
 
   /**
-   * Application defined properties for request.
+   * Application/library defined properties for request.
    *
    * @remarks
    *
-   * Up to application on how to use this object, the only restriction set is it
-   * must be an object.
+   * Up to extending libraries and/or applications on how to use this object,
+   * the only restriction set is: it _must_ be an object.
    */
-  public state: Record<PropertyKey, any> = {};
+  public state: Record<PropertyKey, any>;
 
   /**
    * Resolves when request has been analysed.
@@ -195,7 +194,7 @@ export class Context implements Response {
   /**
    * Raw capabilities for git retrived from request body.
    */
-  private readonly __capabilities: Capabilities = new Map();
+  private readonly __capabilities: Capabilities;
 
   /**
    * Capabilities read from {@link Request.body}.
@@ -214,7 +213,7 @@ export class Context implements Response {
   /**
    * Raw commands for git retrived from request body.
    */
-  private readonly __commands: Commands = [];
+  private readonly __commands: Commands;
   /**
    * Commands retrived from {@link Request.body}.
    *
@@ -232,7 +231,7 @@ export class Context implements Response {
   /**
    * String messages from application to requester.
    */
-  private readonly __messages: Array<[PacketType, string]> = [];
+  private readonly __messages: Array<[PacketType, string]>;
 
   /**
    * Adds `message` to messages for {@link Response.body | response body}.
@@ -263,10 +262,10 @@ export class Context implements Response {
    * Also takes care of patching the header for advertisement.
    */
   public toAsyncIterator(): AsyncIterableIterator<Uint8Array> {
-    let body = createAsyncIterator(this.response.body);
+    let body = createAsyncIterator(this.body);
     // Only do the following if object is not already marked and if response
     // body, service and response "Content-Type" header is set.
-    if (!checkObject(body) && this.response.body && this.service && this.type) {
+    if (!checkObject(body) && this.body && this.service && this.type) {
       // Add header or messages to packed git stream if header "Content-Type" is
       // equal to below constant.
       const content_type = `application/x-git-${this.service}-${this.advertisement ? "advertisement" : "result"}`;
@@ -293,7 +292,7 @@ export class Context implements Response {
       // Or add messages if type is "text/plain".
       else if (/^text\/plain(;|$)/.test(this.type) && this.__messages.length) {
         // Consume messages by setting length to zero afterwards
-        const messages = this.__messages.map(([t, m]) => `${t === PacketType.Message ? "Error" : "Message"}: ${m}\n`).map(encodeString);
+        const messages = this.__messages.map(([t, m]) => `${t === PacketType.Message ? "Message" : "Error"}: ${m}\n`).map(encodeString);
         this.__messages.length = 0;
         body = addMessagesToIterable(messages, body);
         // Append length if previously known
@@ -305,7 +304,7 @@ export class Context implements Response {
     // Mark body in case method is called multiple times.
     markObject(body);
     // Replace response body with new body
-    return this.response.body = body;
+    return this.body = body;
   }
 
   /**
@@ -604,6 +603,7 @@ export interface Response {
    */
   status: number;
 }
+
 function asyncIterator<T>(iterable?: AsyncIterable<T> | AsyncIterableIterator<T>): AsyncIterableIterator<T> {
   if (!(iterable && Symbol.asyncIterator in iterable)) {
     throw new TypeError("argument `iterable` must be an async iterable.");

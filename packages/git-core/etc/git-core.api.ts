@@ -34,11 +34,11 @@ declare class Context implements Response {
     // (undocumented)
     constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>);
     // (undocumented)
-    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | IncomingHttpHeaders);
+    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>);
     // (undocumented)
-    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | IncomingHttpHeaders, advertisement: boolean, path?: string, service?: Service);
+    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>, advertisement: boolean, path?: string, service?: Service);
     // (undocumented)
-    constructor(url?: string, method?: string, body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers?: Headers | IncomingHttpHeaders, advertisement?: boolean, path?: string, service?: Service);
+    constructor(url?: string, method?: string, body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers?: Headers | Record<string, string>, advertisement?: boolean, path?: string, service?: Service);
     addError(errorMessage: string): void;
     addMessage(message: string): void;
     readonly advertisement: boolean;

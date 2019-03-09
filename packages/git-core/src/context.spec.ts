@@ -13,7 +13,7 @@ describe("class Context", () => {
     async function valid(
       args: ClassTypeArgs<typeof lib.Context> = [],
       request: Pick<lib.Request, Exclude<keyof lib.Request, "headers" | "body">>,
-      context: Pick<lib.Context, "advertisement" | "service" | "path">,
+      context: Pick<lib.Context, "advertisement" | "service" | "path" | "isInitialised">,
       body: Uint8Array = new Uint8Array(0),
       headers: Record<string, string[]> = {},
     ): Promise<lib.Context | never> {
@@ -63,6 +63,7 @@ describe("class Context", () => {
       },
       {
         advertisement: false,
+        isInitialised: true,
         path: undefined,
         service: undefined,
       },
@@ -85,6 +86,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -99,6 +101,7 @@ describe("class Context", () => {
         },
         {
           advertisement: true,
+          isInitialised: true,
           path: "repository/path",
           service: Service.UploadPack,
         },
@@ -122,6 +125,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -134,6 +138,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -146,6 +151,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -158,6 +164,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -170,6 +177,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -182,6 +190,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -194,6 +203,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -206,6 +216,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -224,6 +235,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -236,6 +248,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -248,6 +261,7 @@ describe("class Context", () => {
         },
         {
           advertisement: true,
+          isInitialised: true,
           path: "path/to/repo",
           service: Service.UploadPack,
         },
@@ -260,6 +274,7 @@ describe("class Context", () => {
         },
         {
           advertisement: true,
+          isInitialised: true,
           path: "path/to/repo",
           service: Service.ReceivePack,
         },
@@ -272,6 +287,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: "path/to/repo",
           service: undefined,
         },
@@ -284,6 +300,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: "path/to/repo",
           service: undefined,
         },
@@ -296,6 +313,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -309,6 +327,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: "path/to/repo",
           service: undefined,
         },
@@ -322,6 +341,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: "path/to/repo",
           service: undefined,
         },
@@ -342,6 +362,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -354,6 +375,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -366,6 +388,7 @@ describe("class Context", () => {
         },
         {
           advertisement: true,
+          isInitialised: true,
           path: "path/to/repo",
           service: Service.UploadPack,
         },
@@ -378,6 +401,7 @@ describe("class Context", () => {
         },
         {
           advertisement: true,
+          isInitialised: true,
           path: "path/to/repo",
           service: Service.ReceivePack,
         },
@@ -390,6 +414,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: "path/to/repo",
           service: undefined,
         },
@@ -402,6 +427,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: "path/to/repo",
           service: undefined,
         },
@@ -414,6 +440,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: "path/to/repo",
           service: undefined,
         },
@@ -426,6 +453,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: "path/to/repo",
           service: undefined,
         },
@@ -438,6 +466,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: false,
           path: "path/to/repo",
           service: Service.UploadPack,
         },
@@ -450,6 +479,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: false,
           path: "path/to/repo",
           service: Service.ReceivePack,
         },
@@ -471,6 +501,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -483,6 +514,7 @@ describe("class Context", () => {
         },
         {
           advertisement: true,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -495,6 +527,7 @@ describe("class Context", () => {
         },
         {
           advertisement: true,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -507,6 +540,7 @@ describe("class Context", () => {
         },
         {
           advertisement: true,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -534,6 +568,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -546,6 +581,7 @@ describe("class Context", () => {
         },
         {
           advertisement: true,
+          isInitialised: true,
           path: undefined,
           service: undefined,
         },
@@ -558,6 +594,7 @@ describe("class Context", () => {
         },
         {
           advertisement: false,
+          isInitialised: true,
           path: "path/to/repo",
           service: undefined,
         },
@@ -570,6 +607,7 @@ describe("class Context", () => {
         },
         {
           advertisement: true,
+          isInitialised: true,
           path: "path/to/repo",
           service: undefined,
         },
@@ -595,6 +633,7 @@ describe("class Context", () => {
           },
           {
             advertisement: false,
+            isInitialised: true,
             path: undefined,
             service: undefined,
           },
@@ -607,6 +646,7 @@ describe("class Context", () => {
           },
           {
             advertisement: true,
+            isInitialised: true,
             path: undefined,
             service: undefined,
           },
@@ -619,6 +659,7 @@ describe("class Context", () => {
           },
           {
             advertisement: false,
+            isInitialised: true,
             path: "path/to/repoB",
             service: undefined,
           },
@@ -631,6 +672,7 @@ describe("class Context", () => {
           },
           {
             advertisement: true,
+            isInitialised: true,
             path: "path/to/repoB",
             service: undefined,
           },
@@ -643,6 +685,7 @@ describe("class Context", () => {
           },
           {
             advertisement: false,
+            isInitialised: false,
             path: "path/to/repoB",
             service: Service.UploadPack,
           },
@@ -655,6 +698,7 @@ describe("class Context", () => {
           },
           {
             advertisement: true,
+            isInitialised: true,
             path: "path/to/repoB",
             service: Service.UploadPack,
           },
@@ -667,6 +711,7 @@ describe("class Context", () => {
           },
           {
             advertisement: false,
+            isInitialised: false,
             path: "path/to/repoB",
             service: Service.ReceivePack,
           },
@@ -679,6 +724,7 @@ describe("class Context", () => {
           },
           {
             advertisement: true,
+            isInitialised: true,
             path: "path/to/repoB",
             service: Service.ReceivePack,
           },
@@ -691,6 +737,7 @@ describe("class Context", () => {
           },
           {
             advertisement: false,
+            isInitialised: false,
             path: "path/to/repoB",
             service: Service.UploadPack,
           },
@@ -703,6 +750,7 @@ describe("class Context", () => {
           },
           {
             advertisement: true,
+            isInitialised: true,
             path: "path/to/repoB",
             service: Service.UploadPack,
           },
@@ -715,6 +763,7 @@ describe("class Context", () => {
           },
           {
             advertisement: false,
+            isInitialised: false,
             path: "path/to/repoB",
             service: Service.ReceivePack,
           },
@@ -727,6 +776,7 @@ describe("class Context", () => {
           },
           {
             advertisement: true,
+            isInitialised: true,
             path: "path/to/repoB",
             service: Service.ReceivePack,
           },

@@ -1,4 +1,3 @@
-import { IncomingHttpHeaders } from "http";
 import { Headers } from "node-fetch";
 import { Readable } from "stream";
 import { URL } from "url";
@@ -6,6 +5,8 @@ import { Body, Capabilities, CommandReceivePack, Commands, CommandUploadPack } f
 import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
 import { decodeString, encodeString } from "./packet-util";
+
+export const SymbolPromise = Symbol("promise");
 
 export const AllowedMethods: ReadonlySet<string> = new Set(["GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]);
 
@@ -40,13 +41,21 @@ export function inferValues(
 ): [boolean, string?, Service?] {
   let url: URL;
   // Bail on malformed url path (but don't throw)
-  try { url = new URL(urlPath, "https://127.0.0.1/"); } catch { return [false]; }
+  try {
+    url = new URL(urlPath, "https://127.0.0.1/");
+  } catch {
+    return [false];
+  }
   // Get advertisement from a service
   let results = Advertisement.exec(url.pathname);
   if (results) {
     const {path} = results.groups!;
     if (method === "GET" || method === "HEAD") {
-      const service = (ServiceName.exec(url.searchParams.get("service") || "") || {groups: {service: undefined}}).groups!.service;
+      let service: unknown;
+      results = ServiceName.exec(url.searchParams.get("service") || "");
+      if (results) {
+        service = results.groups!.service;
+      }
       if (checkEnum(service, Service)) {
         return [true, path, service];
       }
@@ -65,22 +74,11 @@ export function inferValues(
   return [false];
 }
 
-export function createHeaders(incomingHeaders?: IncomingHttpHeaders | Headers): Headers {
+export function createHeaders(incomingHeaders?: Record<string, string> | Headers | undefined | null): Headers {
   if (incomingHeaders instanceof Headers) {
     return incomingHeaders;
   }
-  const headers = new Headers();
-  if (incomingHeaders) {
-    for (const [header, value] of Object.entries(incomingHeaders)) {
-      if (value instanceof Array) {
-        value.forEach((v) => headers.append(header, v));
-      }
-      else if (value) {
-        headers.set(header, value);
-      }
-    }
-  }
-  return headers;
+  return new Headers(incomingHeaders || undefined);
 }
 
 /**
@@ -109,7 +107,7 @@ export function createReadable(iterable: AsyncIterable<Uint8Array> | AsyncIterab
 const SymbolChecked = Symbol("checked");
 
 /**
- * Mark object.
+ * Mark object with an unique symbol.
  *
  * @param obj - Object to mark.
  */
@@ -118,7 +116,7 @@ export function markObject(obj: object): void {
 }
 
 /**
- * Check object for mark.
+ * Check object for mark from {@link markObject}.
  *
  * @param obj - Object to check.
  */
@@ -151,9 +149,8 @@ export function createAsyncIterator(body: Body): AsyncIterableIterator<Uint8Arra
       return body as AsyncIterableIterator<Uint8Array>;
     }
     else if (Symbol.iterator in body || Symbol.asyncIterator in body) {
-      return (async function *(): AsyncIterableIterator<Uint8Array> { yield* body; })();
+      return (async function*(): AsyncIterableIterator<Uint8Array> { yield* body; })();
     }
-    return body as AsyncIterableIterator<Uint8Array>;
   }
   return createEmptyAsyncIterator();
 }
@@ -184,7 +181,7 @@ export function addHeaderToIterable(
   async function *it(): AsyncIterableIterator<Uint8Array> {
     const result = await iterable.next();
     if (result.value) {
-      if (!bufferEquals(result.value.slice(0, header.length))) {
+      if (!bufferEquals(header, result.value.slice(0, header.length))) {
         yield header;
       }
       yield result.value;
@@ -204,15 +201,9 @@ export async function *addMessagesToIterable(
 }
 
 // http://codahale.com/a-lesson-in-timing-attacks/
-function bufferEquals(buf1?: Uint8Array, buf2?: Uint8Array): boolean {
-  if (buf1 === undefined && buf2 === undefined) {
-    return true;
-  }
-  if (buf1 === undefined || buf2 === undefined) {
-    return false;
-  }
+function bufferEquals(buf1: Uint8Array, buf2: Uint8Array): boolean {
   if (buf1.length !== buf2.length) {
-      return false;
+    return false;
   }
   let result = 0;
   // Don't short circuit
@@ -230,7 +221,7 @@ export const ServiceHeaders: Record<Service, Uint8Array> = {
   [Service.UploadPack]: encodeString("001e# service=git-upload-pack\n0000"),
 };
 
-export function reader(
+export function pushMetadata(
   commands: Commands,
   capabilities: Capabilities,
   result: string,
@@ -254,55 +245,53 @@ export function reader(
  * Maps {@link Service} to a valid packet reader for
  * {@link Request.body | request body}.
  */
-export const ServiceReaders = new Map<Service, (...args: [Capabilities, Commands]) => (b: Uint8Array) => any>([
-  [
-    Service.ReceivePack,
-    (capabilities, commands) => {
-      const pre_check = /[0-9a-f]{40} [0-9a-f]{40}/;
-      const regex =
-        /^[0-9a-f]{4}([0-9a-f]{40}) ([0-9a-f]{40}) (refs\/[^\n\0 ]*?)((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
-      return (buffer) => {
-        if (pre_check.test(decodeString(buffer.slice(4, 85)))) {
-          const value = decodeString(buffer);
-          const results = regex.exec(value);
-          if (results) {
-            let kind: "create" | "delete" | "update";
-            if (results[1] === "0000000000000000000000000000000000000000") {
-              kind = "create";
-            }
-            else if (results[2] === "0000000000000000000000000000000000000000") {
-              kind = "delete";
-            }
-            else {
-              kind = "update";
-            }
-            reader(commands, capabilities, results[4], {
-              commits: [results[1], results[2]],
-              kind,
-              reference: results[3],
-            });
+export const ServiceReaders: Record<Service, (...arg: [Capabilities, Commands]) => (b: Uint8Array) => any> = {
+  [Service.ReceivePack]: (capabilities: Capabilities, commands: Commands) => {
+    const pre_check = /[\da-f]{40} [\da-f]{40}/;
+    const regex =
+      /^[\da-f]{4}(?<c4t1>[\da-f]{40}) (?<c4t2>[\da-f]{40}) (?<r7e>refs\/[^\n\0 ]*?)(?<c10s>(?: [a-z\d_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
+    return (buffer) => {
+      if (pre_check.test(decodeString(buffer.slice(4, 85)))) {
+        const value = decodeString(buffer);
+        const results = regex.exec(value);
+        if (results) {
+          // c4t1 -> commit 1, c4t2 -> commit 2, c10s -> capabilities, r7e -> reference
+          const { c4t1, c4t2, c10s, r7e } = results.groups!;
+          let kind: "create" | "delete" | "update";
+          if (results[1] === "0000000000000000000000000000000000000000") {
+            kind = "create";
           }
-        }
-      };
-    },
-  ],
-  [
-    Service.UploadPack,
-    (capabilities, commands) => {
-      const pre_check = /want|have/;
-      const regex = /^[0-9a-f]{4}(want|have) ([0-9a-f]{40})((?: [a-z0-9_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
-      return (buffer) => {
-        if (pre_check.test(decodeString(buffer.slice(4, 8)))) {
-          const value = decodeString(buffer);
-          const results = regex.exec(value);
-          if (results) {
-            reader(commands, capabilities, results[3], {
-              commits: [results[2]],
-              kind: results[1] as ("want" | "have"),
-            });
+          else if (results[2] === "0000000000000000000000000000000000000000") {
+            kind = "delete";
           }
+          else {
+            kind = "update";
+          }
+          pushMetadata(commands, capabilities, c10s, {
+            commits: [c4t1, c4t2],
+            kind,
+            reference: r7e,
+          });
         }
-      };
-    },
-  ],
-]);
+      }
+    };
+  },
+  [Service.UploadPack]: (capabilities, commands) => {
+    const pre_check = /want|have/;
+    const regex = /^[\da-f]{4}(?<k2d>want|have) (?<c4t>[\da-f]{40})(?<c10s>(?: [a-z\d_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
+    return (buffer) => {
+      if (pre_check.test(decodeString(buffer.slice(4, 8)))) {
+        const value = decodeString(buffer);
+        const results = regex.exec(value);
+        if (results) {
+          // c4t -> commit, c10s -> capabilities, k2d -> kind
+          const { c4t, c10s, k2d } = results.groups!;
+          pushMetadata(commands, capabilities, c10s, {
+            commits: [c4t],
+            kind: k2d as "want" | "have",
+          });
+        }
+      }
+    };
+  },
+};

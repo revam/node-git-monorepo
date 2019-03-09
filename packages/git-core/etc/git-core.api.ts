@@ -83,7 +83,7 @@ declare class Controller implements ServiceController {
     protected remoteURL(baseURL: string, service: Service, advertise: boolean): string;
     // (undocumented)
     serve(context: Context): Promise<void>;
-}
+    }
 
 // @public
 interface ControllerOptions {
@@ -105,29 +105,46 @@ declare enum ErrorCodes {
 declare class LogicController implements ServiceController {
     constructor(serviceController: ServiceController, overrides?: MethodOverrides);
     accept(context: Context): Promise<void>;
-    protected argumentMethod(method: keyof ServiceController, context: Context, defaultValue?: boolean): Promise<boolean>;
-    // (undocumented)
     checkForAuth(context: Context): Promise<boolean>;
-    // (undocumented)
     checkIfEnabled(context: Context): Promise<boolean>;
-    // (undocumented)
     checkIfExists(context: Context): Promise<boolean>;
+    custom(context: Context): void;
     readonly onComplete: ReadableSignal<Context>;
-    readonly onError: ReadableSignal<any>;
     readonly onUsable: ReadableSignal<Context>;
-    redirect(request: Context): Promise<void>;
-    redirect(request: Context, ststuCode: 304): Promise<void>;
-    redirect(request: Context, statusCode: number): Promise<void>;
-    redirect(request: Context, location: string, statusCode?: number): Promise<void>;
-    // (undocumented)
-    redirect(reqiest: Context, locationOrStatus?: string | number, statusCode?: number): Promise<void>;
-    reject(context: Context, statusCode?: number, reason?: string): Promise<void>;
+    redirect(context: Context, statusCode: 304): void;
+    redirect(context: Context, statusCode?: number): void;
+    redirect(context: Context, location: string, statusCode?: number): void;
+    redirect(context: Context, locationOrStatus?: string | number, statusCode?: number): void;
+    reject(context: Context, statusCode?: number, reason?: string): void;
     serve(context: Context): Promise<void>;
     use(...middleware: Middleware[]): this;
 }
 
 // @public
-declare type Middleware = (this: MiddlewareContext, context: Context) => any;
+declare class LogicControllerInstance {
+    // (undocumented)
+    constructor(controller: LogicController, context: Context);
+    accept(): Promise<void>;
+    checkForAuth(): Promise<boolean>;
+    checkIfEnabled(): Promise<boolean>;
+    checkIfExists(): Promise<boolean>;
+    readonly context: Context;
+    custom(): void;
+    redirect(statusCode: 304): void;
+    redirect(statusCode?: number): void;
+    redirect(location: string, statusCode?: number): void;
+    redirect(locationOrStatus?: string | number, statusCode?: number): void;
+    reject(statusCode?: number, reason?: string): void;
+}
+
+// @public
+declare type MethodOverride = (this: LogicControllerInstance, context: Context) => (void | boolean) | Promise<void | boolean> | PromiseLike<void | boolean>;
+
+// @public
+declare type MethodOverrides = Partial<Record<Exclude<keyof ServiceController, "serve">, boolean | MethodOverride>>;
+
+// @public
+declare type Middleware = (this: LogicControllerInstance, context: Context) => any;
 
 // @public
 interface ProcessError extends IError {

@@ -4,57 +4,50 @@ import fetch from "node-fetch";
 import { isAbsolute, join, resolve } from "path";
 import { Readable } from "stream";
 import { Context } from "./context";
-import { fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, waitForChild } from "./controller.private";
+import { fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, pathIsValid, waitForChild } from "./controller.private";
 import { ErrorCodes, Service } from "./enum";
 import { ServiceController } from "./main";
 import { IError } from "./main.private";
 import { encodeString } from "./packet-util";
 
-const RELATIVE_PATH_REGEX = /(^|[/\\])\.{1,2}[/\\]/;
-
 /**
- * A basic implementation of the {@link ServiceController} interface for both
- * the file-system and/or forwarding to other remote servers.
- *
- * @remarks
- *
- *
- * All public `check*` methods can be proxied through `options.methods`.
+ * A basic implementation of the {@link ServiceController} interface for
+ * the file-system and/or forwarding to other remote servers over http(s).
  *
  * @privateRemarks
  *
  * Should not contain any extra 'suger', only the most basic and generic
- * implementation for extending classes to build upon.
+ * implementation, so extending classes can build upon.
  *
  * @public
  */
 export class Controller implements ServiceController {
   /**
-   * Defaults for {@link Controller.checkFSIfEnabled}.
+   * Default values for {@link Controller.checkFSIfEnabled}.
    *
    * @remarks
    *
    * When no default is set for {@link Service | service} in the repository
    * configuration, the corresponding value from this object is used.
    */
-  protected readonly enabledDefaults: Readonly<Record<Service, boolean>>;
+  private readonly enabledDefaults: Readonly<Record<Service, boolean>>;
 
   /**
-   * Default repository storage location.
+   * Default storage location for repositories.
    *
    * @remarks
    *
    * Is either an absolute path, an URL leading to a remote repository
    * server, or `undefined`.
    *
-   * If value is `undefined` then each request should be rewritten for a remote
+   * If value is `undefined`, then each request should be rewritten for a remote
    * server location, or else it will silently fail.
    */
   protected readonly origin?: string;
 
   /**
-   * Indicates {@link Controller.origin | origin} points to a remote
-   * location (is an URL).
+   * Indicates that {@link Controller.origin | origin} is a remote
+   * location.
    *
    * @privateRemarks
    *
@@ -62,10 +55,11 @@ export class Controller implements ServiceController {
    * {@link Controller.originIsRemote} evaluates to `true`, otherwise
    * `false`.
    */
-  protected readonly originIsRemote: boolean;
+  private readonly originIsRemote: boolean;
 
   /**
-   * Check if `input` has either http- or https-protocol, or only https-protocol.
+   * Check if `input` has either http- or https-protocol, or only
+   * https-protocol.
    *
    * @remarks
    *
@@ -74,7 +68,7 @@ export class Controller implements ServiceController {
    * otherwise false or undefined then this function will check for http- or
    * https-protocols.
    */
-  private readonly isURL: (input: string) => boolean;
+  private readonly isRemote: (input: string) => boolean;
 
   /**
    * Create the tailing part of the remote URL.
@@ -99,11 +93,11 @@ export class Controller implements ServiceController {
       throw new TypeError("argument `options` must be of type 'object'.");
     }
     let origin = options.origin;
-    this.isURL = options.httpsOnly ? hasHttpsProtocol : hasHttpOrHttpsProtocol;
+    this.isRemote = options.httpsOnly ? hasHttpsProtocol : hasHttpOrHttpsProtocol;
     this.getRemoteTail = options.remoteTail ? options.remoteTail.bind(undefined)
       : ((s, a) => a ? `/info/refs?service=git-${s}` : `/git-${s}`);
     if (typeof origin === "string" && origin.length > 0) {
-      const isRemote = this.isURL(origin);
+      const isRemote = this.isRemote(origin);
       // Resolve path if it is not an url and not absolute.
       if (!isRemote && !isAbsolute(origin)) {
         origin = resolve(origin);
@@ -155,20 +149,34 @@ export class Controller implements ServiceController {
   }
 
   /**
-   * Prepare path and report findings.
+   * Prepare {@link Context.path | path} and report findings.
    *
    * @remarks
    *
-   * Should check path and validate if it is valid and if it is an URL.
+   * Checks {@link Context.path | path} and validate if it is valid to use and
+   * if it points to a remote location.
    *
-   * @param context - Context to prepare for.
+   * {@link Context.path | Path} may have been adjusted if found valid for use,
+   * and will otherwise not be modified.
+   *
+   * @param context - {@link Context} to prepare {@link Context.path | path}
+   *                  for.
    */
-  protected preparePath(context: Context): { isValid: boolean; isHttp: boolean } {
+  protected preparePath(context: Context): {
+    /**
+     * {@link Context.path | Path} was found to be valid for use with
+     * controller.
+     */
+    isValid: boolean;
+    /**
+     * {@link Context.path | Path} was found to be a remote location.
+     */
+    isRemote: boolean;
+  } {
     let path = context.path;
     let isValid = false;
-    let isHttp = false;
-    // Path must be provided and not contain any segments equal to "." or "..".
-    if (typeof path === "string" && !RELATIVE_PATH_REGEX.test(path)) {
+    let isRemote = false;
+    if (pathIsValid(path)) {
       // Sanetise input
       if (!path.length) {
         path = "/";
@@ -177,8 +185,8 @@ export class Controller implements ServiceController {
         path += "/";
       }
       // Check if path is a **valid** URL-string.
-      if (this.isURL(path)) {
-        isValid = isHttp = true;
+      if (this.isRemote(path)) {
+        isValid = isRemote = true;
       }
       // Then check for origin
       else if (this.origin) {
@@ -186,7 +194,11 @@ export class Controller implements ServiceController {
           if (path[0] !== "/") {
             path = `/${path}`;
           }
-          isHttp = true;
+          const lastChar = path.length - 1;
+          if (lastChar > 0 && path[lastChar] === "/") {
+            path = path.substring(0, lastChar);
+          }
+          isRemote = true;
           path = this.origin + path;
         }
         else {
@@ -203,7 +215,7 @@ export class Controller implements ServiceController {
         context.path = path;
       }
     }
-    return { isHttp, isValid };
+    return { isRemote, isValid };
   }
 
   /**
@@ -211,21 +223,21 @@ export class Controller implements ServiceController {
    */
   public async checkIfEnabled(context: Context): Promise<boolean> {
     if (context.service) {
-      const { isValid, isHttp } = this.preparePath(context);
+      const { isValid, isRemote } = this.preparePath(context);
       if (isValid) {
-        return isHttp ? this.checkHTTPIfEnabled(context) : this.checkFSIfEnabled(context);
+        return isRemote ? this.checkHTTPIfEnabled(context) : this.checkFSIfEnabled(context);
       }
     }
     return false;
   }
 
-  protected async checkHTTPIfEnabled(context: Context): Promise<boolean> {
+  private async checkHTTPIfEnabled(context: Context): Promise<boolean> {
     const url = this.remoteURL(context.path!, context.service!, true);
     const response = await fetch(url, { method: "HEAD" });
     return Boolean(response.status < 300 && response.status >= 200);
   }
 
-  protected async checkFSIfEnabled(context: Context): Promise<boolean> {
+  private async checkFSIfEnabled(context: Context): Promise<boolean> {
     const command = context.service!.replace("-", "");
     const child = spawn("git", ["-C", context.path!, "config", "--bool", `deamon.${command}`]);
     const { exitCode, stdout, stderr } = await waitForChild(child);
@@ -240,20 +252,20 @@ export class Controller implements ServiceController {
     throw createProcessError(exitCode, stderr);
   }
   public async checkIfExists(context: Context): Promise<boolean> {
-    const { isValid, isHttp } = this.preparePath(context);
+    const { isValid, isRemote } = this.preparePath(context);
     if (isValid) {
-      return isHttp ? this.checkHTTPIfExists(context) : this.checkFSIfExists(context);
+      return isRemote ? this.checkHTTPIfExists(context) : this.checkFSIfExists(context);
     }
     return false;
   }
 
-  protected async checkHTTPIfExists(context: Context): Promise<boolean> {
+  private async checkHTTPIfExists(context: Context): Promise<boolean> {
     const url = this.remoteURL(context.path!, Service.UploadPack, true);
     const response = await fetch(url, { method: "HEAD" });
     return Boolean(response.status >= 200 && response.status < 300);
   }
 
-  protected async checkFSIfExists(context: Context): Promise<boolean> {
+  private async checkFSIfExists(context: Context): Promise<boolean> {
     // Check if repository exists on disk AND is
     if (!context.path || (await fsStatusCode(context.path)) === 404) {
       return false;
@@ -269,14 +281,14 @@ export class Controller implements ServiceController {
    */
   public async serve(context: Context): Promise<void> {
     if (context.service) {
-      const { isValid, isHttp } = this.preparePath(context);
+      const { isValid, isRemote } = this.preparePath(context);
       if (isValid) {
-        return isHttp ? this.serveHTTP(context) : this.serveFS(context);
+        return isRemote ? this.serveHTTP(context) : this.serveFS(context);
       }
     }
   }
 
-  protected async serveHTTP(context: Context): Promise<void> {
+  private async serveHTTP(context: Context): Promise<void> {
     const url = this.remoteURL(context.path!, context.service!, context.advertisement);
     const response = await fetch(url, {
       body: context.readable.request(),
@@ -290,7 +302,7 @@ export class Controller implements ServiceController {
     }
   }
 
-  protected async serveFS(context: Context): Promise<void> {
+  private async serveFS(context: Context): Promise<void> {
     const statusCode = context.status = await fsStatusCode(context.path);
     if (statusCode === 200) {
       const option = context.advertisement ? "--advertise-refs" : "--stateless-rpc";

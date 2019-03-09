@@ -72,33 +72,17 @@ declare class Context implements Response {
 declare class Controller implements ServiceController {
     constructor(options?: ControllerOptions | undefined | null);
     // (undocumented)
-    protected checkFSIfEnabled(context: Context): Promise<boolean>;
-    // (undocumented)
-    protected checkFSIfExists(context: Context): Promise<boolean>;
-    // (undocumented)
-    protected checkHTTPIfEnabled(context: Context): Promise<boolean>;
-    // (undocumented)
-    protected checkHTTPIfExists(context: Context): Promise<boolean>;
-    // (undocumented)
     checkIfEnabled(context: Context): Promise<boolean>;
     // (undocumented)
     checkIfExists(context: Context): Promise<boolean>;
-    protected readonly enabledDefaults: Readonly<Record<Service, boolean>>;
     protected readonly origin?: string;
-    protected readonly originIsRemote: boolean;
     protected preparePath(context: Context): {
-        // (undocumented)
         isValid: boolean;
-        // (undocumented)
-        isHttp: boolean;
+        isRemote: boolean;
     };
     protected remoteURL(baseURL: string, service: Service, advertise: boolean): string;
     // (undocumented)
     serve(context: Context): Promise<void>;
-    // (undocumented)
-    protected serveFS(context: Context): Promise<void>;
-    // (undocumented)
-    protected serveHTTP(context: Context): Promise<void>;
 }
 
 // @public

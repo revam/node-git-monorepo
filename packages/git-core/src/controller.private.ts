@@ -6,16 +6,31 @@ import { promisify } from "util";
 
 const stat = promisify(STAT);
 
+export const CheckHTTPRegex = /^https?:\/\/[^\/]+(?=\/|$)/;
+export const CheckHTTPSRegex = /^https:\/\/[^\/]+(?=\/|$)/;
+
+export const RelativePathRegex = /(?<=^|[\/\\])\.{1,}[\/\\]|(?<=^|[^:])[\/\\]{2,}|(?<=:)\/{2}(?!.)/;
+
+/**
+ * `path` must a string not containing any of the following segments: "//",
+ * "./", "../".
+ *
+ * @param target - Path to verify.
+ */
+export function pathIsValid(target: unknown): target is string {
+  return typeof target === "string" && !RelativePathRegex.test(target);
+}
+
 export async function fsStatusCode(path?: string): Promise<200 | 404 | 403> {
-  return !path ? 404 : stat(path).then((s) => s.isDirectory() ? 200 : 404).catch((e) => e && e.code === "EACCES" ? 403 : 404);
+  return !path ? 404 : stat(path).then((s) => s.isDirectory() ? 200 : 404, (e) => e && e.code === "EACCES" ? 403 : 404);
 }
 
-export function hasHttpsProtocol(uriOrPath?: string): boolean {
-  return Boolean(uriOrPath && /^https:\/\//.test(uriOrPath));
+export function hasHttpsProtocol(uriOrPath?: string | undefined | null): boolean {
+  return Boolean(uriOrPath && CheckHTTPSRegex.test(uriOrPath));
 }
 
-export function hasHttpOrHttpsProtocol(uriOrPath?: string): boolean {
-  return Boolean(uriOrPath && /^https?:\/\//.test(uriOrPath));
+export function hasHttpOrHttpsProtocol(uriOrPath?: string | undefined | null): boolean {
+  return Boolean(uriOrPath && CheckHTTPRegex.test(uriOrPath));
 }
 
 export async function waitForBuffer(readable: Readable): Promise<Buffer> {

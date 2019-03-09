@@ -66,6 +66,10 @@
     "tsc:lib": "tsc -p . --removeComments true --sourceMap true --declaration false --declarationMap false --emitDeclarationOnly false"
   },
   "jest": {
+    "collectCoverage": true,
+    "collectCoverageFrom": [
+      "src/**/*.ts"
+    ],
     "transform": {
       "^.+\\.tsx?$": "ts-jest"
     },

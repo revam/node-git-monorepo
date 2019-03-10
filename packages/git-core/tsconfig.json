@@ -4,23 +4,19 @@
     "outDir": "dist/build",
     "target": "esnext",
     "module": "esnext",
-    "sourceMap": false,
-    "declaration": true,
     "esModuleInterop": true,
     "moduleResolution": "node",
-    "experimentalDecorators": true,
-    "importHelpers": true,
     "allowSyntheticDefaultImports": true,
     "strictNullChecks": true,
     "strictPropertyInitialization": false,
     "strictBindCallApply": true,
     "alwaysStrict": true,
     "strictFunctionTypes": true,
+    "noEmit": true,
     "noImplicitReturns": false,
     "noImplicitThis": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "stripInternal": false,
     "lib": [
       "es5",
       "es6",
@@ -52,8 +48,6 @@
     ]
   },
   "exclude": [
-    "dist/**/*",
-    "*.ts",
-    "etc/**/*"
+    "dist/**/*"
   ]
 }

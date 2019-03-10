@@ -55,15 +55,15 @@
     "api-extractor": "api-extractor run",
     "build": "npm run cleanup && npm run lint && npm run api-extractor && npm run test && npm run rollup && npm pack ./dist/package",
     "cleanup": "rm -rf dist",
-    "lint": "tslint -p . src/**/*.ts",
-    "preapi-extractor:local": "npm run tsc:declaration",
-    "preapi-extractor": "npm run tsc:declaration",
-    "prerollup": "npm run tsc:lib",
+    "lint": "tslint -p .",
+    "preapi-extractor:local": "npm run tsc:d.ts",
+    "preapi-extractor": "npm run tsc:d.ts",
+    "prerollup": "npm run tsc:js",
     "rollup": "rollup -c",
     "test": "jest --runInBand",
-    "tsc": "npm run tsc:lib && npm run tsc:declaration",
-    "tsc:declaration": "tsc -p . --removeComments false --sourceMap false --declaration true --declarationMap true --emitDeclarationOnly true",
-    "tsc:lib": "tsc -p . --removeComments true --sourceMap true --declaration false --declarationMap false --emitDeclarationOnly false"
+    "tsc": "tsc -p tsconfig.build.json",
+    "tsc:d.ts": "tsc -p tsconfig.build.d.ts.json",
+    "tsc:js": "tsc -p tsconfig.build.js.json"
   },
   "jest": {
     "collectCoverage": true,

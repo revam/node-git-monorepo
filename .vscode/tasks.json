@@ -4,6 +4,37 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "type": "shell",
+      "label": "build @revam/git-core",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "options": {
+        "cwd": "packages/git-core"
+      },
+      "presentation": {
+        "echo": true,
+        "reveal": "silent",
+        "focus": false,
+        "panel": "dedicated",
+        "showReuseMessage": true
+      },
+      "windows": {
+        "options": {
+          "shell": {
+            "executable": "C:\\Windows\\System32\\bash.exe",
+            "args": ["-i", "-c"]
+          }
+        }
+      },
+      "command": "npm run tsc:dev",
+      "problemMatcher": [
+        "$tsc",
+        "$tslint5"
+      ]
+    },
+    {
       "type": "npm",
       "script": "build:dev",
       "path": "packages/git-packet-streams/",

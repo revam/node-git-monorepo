@@ -58,10 +58,12 @@
     "lint": "tslint -p .",
     "preapi-extractor:local": "npm run tsc:d.ts",
     "preapi-extractor": "npm run tsc:d.ts",
-    "prerollup": "npm run tsc:js",
-    "rollup": "rollup -c",
-    "test": "jest --runInBand",
+    "prerollup": "npm run tsc:config && npm run tsc:js",
+    "rollup": "rollup -c dist/config/rollup.config.js",
+    "test": "jest",
     "tsc": "tsc -p tsconfig.build.json",
+    "tsc:config": "tsc -p tsconfig.config.json",
+    "tsc:dev": "npm run tsc && npm run tsc:config",
     "tsc:d.ts": "tsc -p tsconfig.build.d.ts.json",
     "tsc:js": "tsc -p tsconfig.build.js.json"
   },
@@ -73,6 +75,7 @@
     "transform": {
       "^.+\\.tsx?$": "ts-jest"
     },
+    "testEnvironment": "node",
     "testPathIgnorePatterns": [
       "node_modules",
       "dist"

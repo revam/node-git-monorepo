@@ -126,6 +126,7 @@
     "newline-before-return": false,
     "newline-per-chained-call": false,
     "no-conditional-assignment": false,
+    "no-default-import": false,
     "no-default-export": false,
     "no-magic-numbers": false,
     "no-namespace": false,

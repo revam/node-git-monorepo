@@ -258,10 +258,10 @@ export const ServiceReaders: Record<Service, (...arg: [Capabilities, Commands]) 
           // c4t1 -> commit 1, c4t2 -> commit 2, c10s -> capabilities, r7e -> reference
           const { c4t1, c4t2, c10s, r7e } = results.groups!;
           let kind: "create" | "delete" | "update";
-          if (results[1] === "0000000000000000000000000000000000000000") {
+          if (c4t1 === "0000000000000000000000000000000000000000") {
             kind = "create";
           }
-          else if (results[2] === "0000000000000000000000000000000000000000") {
+          else if (c4t2 === "0000000000000000000000000000000000000000") {
             kind = "delete";
           }
           else {

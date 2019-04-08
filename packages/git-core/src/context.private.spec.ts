@@ -58,7 +58,8 @@ describe("RegExp Advertisment", () => {
 
 describe("RegExp DirectUse", () => {
   /**
-   * Service names must be between 1 to 20 characters long.
+   * Service names must be between 1 to 20 characters long and start with
+   * "/git-".
    */
   test("should match all paths starting with a forward slash and ending with '/git-(?<service>{1,20})'", () => {
     const Paths = [
@@ -128,7 +129,8 @@ describe("RegExp DirectUse", () => {
 
 describe("RegExp ServiceName", () => {
   /**
-   * Service names must be between 1 to 20 characters long.
+   * Service names must be between 1 to 20 characters long, and start with
+   * "git-".
    */
   test("should match all strings matching 'git-(?<service>{1,20})'", () => {
     const Paths = [
@@ -521,10 +523,10 @@ describe("function createHeaders()", () => {
         ].join(", "),
       },
     ];
-    for (const incomingHeader of PreHeaders) {
-      const headers = lib.createHeaders(incomingHeader);
+    for (const rawHeader of PreHeaders) {
+      const headers = lib.createHeaders(rawHeader);
       expect(headers).toBeInstanceOf(Headers);
-      const entries = Object.entries(incomingHeader);
+      const entries = Object.entries(rawHeader);
       expect(Object.entries(headers.raw()).length).toBe(entries.length);
       for (const [key, value] of entries) {
         expect(headers.get(key)).toBe(value);

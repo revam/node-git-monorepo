@@ -4,7 +4,7 @@ import { URL } from "url";
 import * as lib from "./context.private";
 import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
-import { concat } from "./util/buffer";
+import { compare, concat } from "./util/buffer";
 
 // tslint:disable:cyclomatic-complexity
 
@@ -745,5 +745,31 @@ describe("function addHeaderToIterable()", () => {
         })()).resolves.toBeUndefined(),
       ]);
     }));
+  });
+});
+
+describe("function addMessagesToIterable()", () => {
+  test("iterate all values from the two input sources", async() => {
+    const it = lib.addMessagesToIterable(messages(), iterableStream());
+
+    function *messages(): IterableIterator<Uint8Array> {
+      yield new Uint8Array([48, 48, 48, 52]);
+    }
+    async function *iterableStream(): AsyncIterableIterator<Uint8Array> {
+      yield new Uint8Array([48, 48, 48, 48]);
+    }
+    let i = 0;
+    for await(const uint of it) {
+      switch ((i += 1)) {
+        case 1:
+          expect(compare(uint, new Uint8Array([48, 48, 48, 52])));
+          break;
+        case 2:
+          expect(compare(uint, new Uint8Array([48, 48, 48, 48])));
+          break;
+        default:
+          throw new Error("Unexpected iteration.");
+      }
+    }
   });
 });

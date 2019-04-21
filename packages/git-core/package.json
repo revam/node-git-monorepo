@@ -3,9 +3,8 @@
   "description": "Core library for other git packages",
   "version": "0.1.1",
   "private": true,
-  "main": "index.js",
-  "module": "index.mjs",
-  "types": "index.d.ts",
+  "module": "./dist/build/main.js",
+  "types": "./dist/build/main.d.ts",
   "license": "ISC",
   "author": "Mikal Stordal <mikalstordal@gmail.com>",
   "engines": {
@@ -28,27 +27,22 @@
     "module",
     "typescript"
   ],
-  "files": [
-    "index.js",
-    "index.mjs"
-  ],
   "dependencies": {
     "@types/node-fetch": "^2.1.6",
     "micro-signals": "^2.0.0",
     "node-fetch": "^2.3.0"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.0.17",
+    "@microsoft/api-extractor": "7.1.0",
+    "@revam/rollup-plugin-common": "1.0.0",
     "@types/jest": "^24.0.6",
     "@types/node": "^11.9.5",
     "jest": "^24.1.0",
-    "read-pkg": "^4.0.1",
     "rollup": "^1.2.3",
     "rollup-plugin-re": "^1.0.7",
     "ts-jest": "^24.0.0",
     "tslint": "^5.12.1",
-    "typescript": "^3.3.3",
-    "write-pkg": "^3.2.0"
+    "typescript": "3.4.4"
   },
   "scripts": {
     "api-extractor:local": "api-extractor run -l",

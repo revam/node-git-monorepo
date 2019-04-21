@@ -1,31 +1,24 @@
 {
-  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/api-extractor.schema.json",
-  "apiJsonFile": {
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/build/main.d.ts",
+  "apiReport": {
     "enabled": true,
-    "outputFolder": "dist"
+    "reportFileName": "review.api.md",
+    "reportFolder": "<projectFolder>/config",
+    "reportTempFolder": "<projectFolder>/dist"
   },
-  "apiReviewFile": {
+  "docModel": {
     "enabled": true,
-    "apiReviewFolder": "etc",
-    "tempFolder": "dist"
+    "apiJsonFilePath": "<projectFolder>/dist/git-core.api.json"
+  },
+  "messages": {
+  },
+  "tsdocMetadata": {
+    "enabled": true,
+    "tsdocMetadataFilePath": "<projectFolder>/dist/tsdoc-metadata.json"
   },
   "dtsRollup": {
     "enabled": true,
-    "trimming": false,
-    "mainDtsRollupPath": "./index.d.ts",
-    "publishFolder": "dist/package"
-  },
-  "policies": {
-    "namespaceSupport": "permissive"
-  },
-  "validationRules": {
-    "missingReleaseTags": "error"
-  },
-  "compiler": {
-    "configType": "tsconfig",
-    "rootFolder": "."
-  },
-  "project": {
-    "entryPointSourceFile": "dist/build/main.d.ts"
+    "untrimmedFilePath": "<projectFolder>/dist/package/index.d.ts"
   }
 }

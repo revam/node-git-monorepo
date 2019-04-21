@@ -16,7 +16,8 @@ import {
 } from "./context.private";
 import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
-import { encodePacket, encodeString, PacketType, readPackets } from "./packet-util";
+import { encode as encodeString } from "./util/buffer";
+import { encodePacket, PacketType, readPackets } from "./util/packet";
 
 /**
  * Generic context for use with an implementation of {@link ServiceController}.

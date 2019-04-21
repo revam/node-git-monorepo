@@ -1,11 +1,12 @@
-import { ErrorCodes } from "./enum";
-import { IError } from "./main.private";
-import * as lib from "./packet-util";
+import { ErrorCodes } from "../enum";
+import { ExtendedError } from "../main";
+import { encode } from "./buffer";
+import * as lib from "./packet";
 
 // an incomplete packet
-const incompletePacket = lib.encodeString("0018an incompl-");
+const incompletePacket = encode("0018an incompl-");
 // an invalid packet
-const invalidPacket = lib.encodeString("an invalid packet");
+const invalidPacket = encode("an invalid packet");
 
 describe("readPacketLength", () => {
   it("should read the first four bytes of buffer by default", (done) => {
@@ -15,7 +16,7 @@ describe("readPacketLength", () => {
   });
 
   it("should read the first four bytes after offset if supplied", (done) => {
-    const length = lib.readPacketLength(lib.encodeString("skip0000"), 4);
+    const length = lib.readPacketLength(encode("skip0000"), 4);
     expect(length).toBe(0);
     done();
   });
@@ -32,18 +33,18 @@ describe("readPacketLength", () => {
 describe("createPacketIterator", () => {
 
   it("should return an iterator", (done) => {
-    const packets = lib.encodeString("0007abc00000007def");
+    const packets = encode("0007abc00000007def");
     const iterator = lib.createPacketIterator(packets);
     expect(Symbol.iterator in iterator).toBe(true);
     done();
   });
 
   it("should yield packets from provided buffer", async(resolve) => {
-    const packets = lib.encodeString("0007abc00000007def");
+    const packets = encode("0007abc00000007def");
     const results = [
-      lib.encodeString("0007abc"),
-      lib.encodeString("0000"),
-      lib.encodeString("0007def"),
+      encode("0007abc"),
+      encode("0000"),
+      encode("0007def"),
     ];
     const iterator = lib.createPacketIterator(packets);
     for (const result of results) {
@@ -58,10 +59,10 @@ describe("createPacketIterator", () => {
   });
 
   it("should break at zero length if second argument is true", (resolve) => {
-    const packets = lib.encodeString("0007abc00000007def");
+    const packets = encode("0007abc00000007def");
     const results = [
-      lib.encodeString("0007abc"),
-      lib.encodeString("00000007def"),
+      encode("0007abc"),
+      encode("00000007def"),
     ];
     const iterator = lib.createPacketIterator(packets, true);
     for (const result of results) {
@@ -73,7 +74,7 @@ describe("createPacketIterator", () => {
   });
 
   it("should throw if it reads an invalid packet", (done) => {
-    let error: IError | undefined;
+    let error: ExtendedError | undefined;
     try {
       const iterator = lib.createPacketIterator(invalidPacket);
       iterator.next();
@@ -86,7 +87,7 @@ describe("createPacketIterator", () => {
   });
 
   it("should throw if it reads an incomplete packet", (done) => {
-    let error: IError | undefined;
+    let error: ExtendedError | undefined;
     try {
       const iterator = lib.createPacketIterator(incompletePacket);
       iterator.next();

@@ -6,9 +6,9 @@ import { Readable } from "stream";
 import { Context } from "./context";
 import { fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, pathIsValid, waitForChild } from "./controller.private";
 import { ErrorCodes, Service } from "./enum";
-import { ServiceController } from "./main";
-import { IError } from "./main.private";
-import { encodeString } from "./packet-util";
+import { ExtendedError, ServiceController } from "./main";
+import { makeError } from "./main.private";
+import { encode } from "./util/buffer";
 
 /**
  * A basic implementation of the {@link ServiceController} interface for
@@ -249,7 +249,14 @@ export class Controller implements ServiceController {
     if (!stdout.length && !stderr.length) {
       return this.enabledDefaults[context.service!];
     }
-    throw createProcessError(exitCode, stderr);
+    throw makeError<ProcessError>(
+      "Failed to execute git.",
+      ErrorCodes.ERR_FAILED_GIT_EXECUTION,
+      {
+        exitCode,
+        stderr,
+      },
+    );
   }
   public async checkIfExists(context: Context): Promise<boolean> {
     const { isValid, isRemote } = this.preparePath(context);
@@ -315,7 +322,7 @@ export class Controller implements ServiceController {
       context.length = undefined;
     }
     else {
-      const body = context.body = encodeString(STATUS_CODES[statusCode]!);
+      const body = context.body = encode(STATUS_CODES[statusCode]!);
       context.type = "text/plain; charset=utf-8";
       context.length = body.length;
     }
@@ -365,15 +372,7 @@ export interface ControllerOptions {
  *
  * @public
  */
-export interface ProcessError extends IError {
+export interface ProcessError extends ExtendedError {
   exitCode: number;
   stderr: string;
-}
-
-function createProcessError(exitCode: number, stderr: string): ProcessError {
-  const error: Partial<ProcessError> = new Error("Failed to execute git");
-  error.code = ErrorCodes.ERR_FAILED_GIT_EXECUTION;
-  error.exitCode = exitCode;
-  error.stderr = stderr;
-  return error as ProcessError;
 }

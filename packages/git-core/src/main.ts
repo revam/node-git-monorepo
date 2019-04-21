@@ -1,6 +1,23 @@
 import { Context } from "./context";
 
 /**
+ * An error with some extra properties attached.
+ *
+ * @public
+ */
+export interface ExtendedError extends Error {
+  /**
+   * The error code.
+   *
+   * @remarks
+   *
+   * If the error was thrown from within the library, then this code corresponds
+   * to an {@link ErrorCodes | error code}, otherwise it can be any string.
+   */
+  code: string;
+}
+
+/**
  * High-level controller for serving git repositories.
  *
  * @public

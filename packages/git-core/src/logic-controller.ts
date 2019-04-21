@@ -12,8 +12,8 @@ import {
   UsableSignal,
 } from "./logic-controller.private";
 import { ServiceController } from "./main";
-import { checkServiceController, IError } from "./main.private";
-import { encodeString } from "./packet-util";
+import { checkServiceController, makeError } from "./main.private";
+import { encode } from "./util/buffer";
 
 const SymbolPrivate = Symbol("private");
 const SymbolOnComplete = Symbol("on complete");
@@ -70,7 +70,7 @@ export class LogicController implements ServiceController {
    */
   public constructor(serviceController: ServiceController, overrides?: MethodOverrides) {
     if (!checkServiceController(serviceController)) {
-      throw new TypeError("argument `serviceController` must be a valid implementation of ServiceController interface");
+      throw new TypeError("argument `serviceController` must be a valid implementation of the ServiceController interface");
     }
     if (overrides !== undefined && (overrides === null || typeof overrides !== "object")) {
       throw new TypeError("argument `overrides` must undefined or of type 'object'.");
@@ -226,9 +226,10 @@ export class LogicController implements ServiceController {
     if (context.status < 300 && context.length === undefined) {
       updateStatus(context, Status.Failure);
       this.reject(context, 500, `Respsonse from upstream was ${context.status}, but contained no body.`);
-      const error = new Error("Response is within the 2xx range, but contains no body.") as IError;
-      error.code = ErrorCodes.ERR_INVALID_BODY_FOR_2XX;
-      throw error;
+      throw makeError(
+        "Response is within the 2xx range, but contains no body.",
+        ErrorCodes.ERR_INVALID_BODY_FOR_2XX,
+      );
     }
     // Reject and mark any response with a status above or equal to 400 as a
     // failure.
@@ -267,7 +268,7 @@ export class LogicController implements ServiceController {
       if (typeof reason !== "string") {
         reason = STATUS_CODES[context.status]!;
       }
-      const body = context.body = encodeString(reason);
+      const body = context.body = encode(reason);
       context.type = "text/plain; charset=utf-8";
       context.length = body.length;
     }
@@ -622,7 +623,7 @@ export class LogicControllerInstance {
  *
  * @param this - Refers to a {@link LogicControllerInstance | bound instance} of
  *               the {@link LogicController | controller} calling the
- *               {@link OverrideMethod | method}.
+ *               {@link MethodOverride | method}.
  * @param context - {@link Context} to use.
  * @public
  */
@@ -652,7 +653,7 @@ export type MethodOverrides = Partial<Record<Exclude<keyof ServiceController, "s
  *
  * @param this - Refers to a {@link LogicControllerInstance | bound instance} of
  *               the {@link LogicController | controller} calling the
- *               {@link OverrideMethod | method}.
+ *               {@link MethodOverride | method}.
  * @param context - {@link Context} to check.
  * @returns Either a boolean or undefined.
  *

@@ -102,6 +102,11 @@ declare enum ErrorCodes {
 }
 
 // @public
+interface ExtendedError extends Error {
+    code: string;
+}
+
+// @public
 declare class LogicController implements ServiceController {
     constructor(serviceController: ServiceController, overrides?: MethodOverrides);
     accept(context: Context): Promise<void>;
@@ -147,7 +152,7 @@ declare type MethodOverrides = Partial<Record<Exclude<keyof ServiceController, "
 declare type Middleware = (this: LogicControllerInstance, context: Context) => any;
 
 // @public
-interface ProcessError extends IError {
+interface ProcessError extends ExtendedError {
     // (undocumented)
     exitCode: number;
     // (undocumented)

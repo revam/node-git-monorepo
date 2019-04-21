@@ -4,7 +4,7 @@ import { URL } from "url";
 import * as lib from "./context.private";
 import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
-import { concatBuffers } from "./packet-util";
+import { concat } from "./util/buffer";
 
 // tslint:disable:cyclomatic-complexity
 
@@ -715,7 +715,7 @@ describe("function addHeaderToIterable()", () => {
   test("should not add a header if given iterable iterates and the first value starts with a header", async() => {
     await Promise.all<any>(Object.values(Service).filter((s): s is Service => checkEnum(s, Service)).map(async(service) => {
       const header = lib.ServiceHeaders[service];
-      async function *it1(): AsyncIterableIterator<Uint8Array> { yield concatBuffers([header, new Uint8Array([48, 48, 48, 48])]); }
+      async function *it1(): AsyncIterableIterator<Uint8Array> { yield concat([header, new Uint8Array([48, 48, 48, 48])]); }
       async function *it2(): AsyncIterableIterator<Uint8Array> { yield header; yield new Uint8Array([48, 48, 48, 48]); }
       return Promise.all<any>([
         expect((async() => {
@@ -723,7 +723,7 @@ describe("function addHeaderToIterable()", () => {
           let count = 0;
           for await (const value of itWithNoHeader) {
             if (count === 0) {
-              expect(value).toEqual(concatBuffers([header, new Uint8Array([48, 48, 48, 48])]));
+              expect(value).toEqual(concat([header, new Uint8Array([48, 48, 48, 48])]));
             }
             count += 1;
           }

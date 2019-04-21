@@ -1,20 +1,12 @@
-import { TextDecoder, TextEncoder } from "util";
-import { ErrorCodes } from "./enum";
-import { IError } from "./main.private";
+import { ErrorCodes } from "../enum";
+import { makeError } from "../main.private";
+import { concat, decode, encode } from "./buffer";
 
 export type PacketReaderFunction = (packet: Uint8Array) => any;
 
 export enum PacketType {
   Message = "\u0002",
   Error = "\u0003",
-}
-
-export function encodeString(source: string): Uint8Array {
-  return ENCODER.encode(source);
-}
-
-export function decodeString(source: Uint8Array): string {
-  return DECODER.decode(source);
 }
 
 /**
@@ -27,7 +19,7 @@ export function encodePacket(type: PacketType, message: string): Uint8Array {
   if (!message.endsWith("\n")) {
     message += "\n";
   }
-  return ENCODER.encode((message.length + 4).toString(16).padStart(4, "0") + message);
+  return encode((message.length + 4).toString(16).padStart(4, "0") + message);
 }
 
 /**
@@ -55,7 +47,7 @@ export async function *readPackets(
       break;
     }
     if (array) {
-      r.value = concatBuffers([array, r.value]);
+      r.value = concat([array, r.value]);
       array = undefined;
     }
     done = r.done;
@@ -86,8 +78,6 @@ export async function *readPackets(
   }
 }
 
-const ENCODER = new TextEncoder();
-const DECODER = new TextDecoder("utf8", { fatal: true, ignoreBOM: true });
 /**
  * Reads next packet length after `offset`.
  * @param buffer - Packet buffer
@@ -98,45 +88,11 @@ export function readPacketLength(buffer: Uint8Array, offset: number = 0) {
   if (buffer.length - offset < 4) {
     return -1;
   }
-  const input = DECODER.decode(buffer.slice(offset, offset + 4));
+  const input = decode(buffer.slice(offset, offset + 4));
   if (!/^[0-9a-f]{4}$/.test(input)) {
     return -1;
   }
   return Number.parseInt(input, 16);
-}
-
-export function concatBuffers(buffers: Uint8Array[]): Uint8Array {
-  const length = buffers.reduce((p, i) => p + i.length, 0);
-  const result = new Uint8Array(length);
-  buffers.reduce((p, i) => { result.set(i, p); return p + i.length; }, 0);
-  return result;
-}
-
-/**
- * Concats packet buffers. Can split the buffer at desired index,
- * inserting the rest buffers inbetween the split chunks.
- * @param buffers - Buffers to concat
- * @param splitBufferAtIndex - Index of buffer to split
- * @internal
- */
-export function concatPacketBuffers(
-  buffers?: Uint8Array[],
-  splitBufferAtIndex: number = -1,
-  offset?: number,
-): Uint8Array {
-  if (!buffers || !buffers.length) {
-    return new Uint8Array(0);
-  }
-  buffers = buffers.slice();
-  if (splitBufferAtIndex >= 0 && splitBufferAtIndex < buffers.length) {
-    const buffer = buffers[splitBufferAtIndex];
-    const _offset = findNextZeroPacketInBuffer(buffer, offset);
-    if (_offset >= 0) {
-      buffers[splitBufferAtIndex] = buffer.slice(0, _offset);
-      buffers.push(buffer.slice(_offset));
-    }
-  }
-  return Buffer.concat(buffers);
 }
 
 /**
@@ -161,18 +117,16 @@ export function findNextZeroPacketInBuffer(
       if (offset + length <= buffer.length) {
         offset += length;
       } else {
-        const error: Partial<IError> = new Error(
+        throw makeError(
           `Incomplete packet ending at position ${offset + length} in buffer (${buffer.length})`,
+          ErrorCodes.ERR_INCOMPLETE_PACKET,
         );
-        error.code = ErrorCodes.ERR_INCOMPLETE_PACKET;
-        throw error;
       }
     } else {
-      const error: Partial<IError> = new Error(
+      throw makeError(
         `Invalid packet starting at position ${offset} in buffer (${buffer.length})`,
+        ErrorCodes.ERR_INVALID_PACKET,
       );
-      error.code = ErrorCodes.ERR_INVALID_PACKET;
-      throw error;
     }
   } while (offset < buffer.length);
   return -1;
@@ -210,19 +164,17 @@ export function *createPacketIterator(
         if (breakOnIncompletePacket) {
           return buffer.slice(offset);
         } else {
-          const error: Partial<IError> = new Error(
+          throw makeError(
             `Incomplete packet ending at position ${packetEnd} in buffer (${buffer.length})`,
+            ErrorCodes.ERR_INCOMPLETE_PACKET,
           );
-          error.code = ErrorCodes.ERR_INCOMPLETE_PACKET;
-          throw error;
         }
       }
     } else {
-      const error: Partial<IError> = new Error(
+      throw makeError(
         `Invalid packet starting at position ${offset} in buffer (${buffer.length})`,
+        ErrorCodes.ERR_INVALID_PACKET,
       );
-      error.code = ErrorCodes.ERR_INVALID_PACKET;
-      throw error;
     }
   } while (offset < buffer.length);
 }

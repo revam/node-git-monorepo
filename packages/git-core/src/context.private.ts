@@ -4,7 +4,7 @@ import { URL } from "url";
 import { Body, Capabilities, CommandReceivePack, Commands, CommandUploadPack } from "./context";
 import { Service } from "./enum";
 import { checkEnum } from "./enum.private";
-import { decodeString, encodeString } from "./packet-util";
+import { compare, decode, encode } from "./util/buffer";
 
 export const SymbolPromise = Symbol("promise");
 
@@ -181,7 +181,7 @@ export function addHeaderToIterable(
   async function *it(): AsyncIterableIterator<Uint8Array> {
     const result = await iterable.next();
     if (result.value) {
-      if (!bufferEquals(header, result.value.slice(0, header.length))) {
+      if (!compare(header, result.value.slice(0, header.length))) {
         yield header;
       }
       yield result.value;
@@ -200,25 +200,12 @@ export async function *addMessagesToIterable(
   yield* iterable;
 }
 
-// http://codahale.com/a-lesson-in-timing-attacks/
-function bufferEquals(buf1: Uint8Array, buf2: Uint8Array): boolean {
-  if (buf1.length !== buf2.length) {
-    return false;
-  }
-  let result = 0;
-  // Don't short circuit
-  for (let i = 0; i < buf1.byteLength; i += 1) {
-    result |= buf1[i] ^ buf2[i]; // tslint:disable-line:no-bitwise
-  }
-  return result === 0;
-}
-
 /**
  * Advertisement Headers for response
  */
 export const ServiceHeaders: Record<Service, Uint8Array> = {
-  [Service.ReceivePack]: encodeString("001f# service=git-receive-pack\n0000"),
-  [Service.UploadPack]: encodeString("001e# service=git-upload-pack\n0000"),
+  [Service.ReceivePack]: encode("001f# service=git-receive-pack\n0000"),
+  [Service.UploadPack]: encode("001e# service=git-upload-pack\n0000"),
 };
 
 export function pushMetadata(
@@ -251,8 +238,8 @@ export const ServiceReaders: Record<Service, (...arg: [Capabilities, Commands]) 
     const regex =
       /^[\da-f]{4}(?<c4t1>[\da-f]{40}) (?<c4t2>[\da-f]{40}) (?<r7e>refs\/[^\n\0 ]*?)(?<c10s>(?: [a-z\d_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
     return (buffer) => {
-      if (pre_check.test(decodeString(buffer.slice(4, 85)))) {
-        const value = decodeString(buffer);
+      if (pre_check.test(decode(buffer.slice(4, 85)))) {
+        const value = decode(buffer);
         const results = regex.exec(value);
         if (results) {
           // c4t1 -> commit 1, c4t2 -> commit 2, c10s -> capabilities, r7e -> reference
@@ -280,8 +267,8 @@ export const ServiceReaders: Record<Service, (...arg: [Capabilities, Commands]) 
     const pre_check = /want|have/;
     const regex = /^[\da-f]{4}(?<k2d>want|have) (?<c4t>[\da-f]{40})(?<c10s>(?: [a-z\d_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
     return (buffer) => {
-      if (pre_check.test(decodeString(buffer.slice(4, 8)))) {
-        const value = decodeString(buffer);
+      if (pre_check.test(decode(buffer.slice(4, 8)))) {
+        const value = decode(buffer);
         const results = regex.exec(value);
         if (results) {
           // c4t -> commit, c10s -> capabilities, k2d -> kind

@@ -1,7 +1,7 @@
 import { Headers } from "node-fetch";
 import * as lib from "./context";
 import { Service } from "./enum";
-import { concatBuffers } from "./packet-util";
+import { concat } from "./util/buffer";
 
 type ClassTypeArgs<T extends new (...args: any[]) => any> = T extends new (...args: infer R) => any ? R : any;
 
@@ -36,7 +36,7 @@ describe("class Context", () => {
       for await (const b of value.request.body) {
         buffers.push(b);
       }
-      const buffer = concatBuffers(buffers);
+      const buffer = concat(buffers);
       expect(buffer).toEqual(body);
       const raw = value.request.headers.raw();
       for (const key in headers) {

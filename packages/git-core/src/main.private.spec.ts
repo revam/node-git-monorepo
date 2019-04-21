@@ -1,3 +1,5 @@
+import { ErrorCodes } from "./enum";
+import { ExtendedError } from "./main";
 import * as lib from "./main.private";
 
 describe("function checkServiceDriver()", () => {
@@ -45,5 +47,37 @@ describe("function checkServiceDriver()", () => {
       serve() { return; },
     })).toBe(true);
     expect(lib.checkServiceController(A)).toBe(true);
+  });
+});
+
+describe("function makeError()", () => {
+  test("make basic errors", () => {
+    const error = lib.makeError("Some message", ErrorCodes.ERR_FAILED_GIT_EXECUTION);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe("Some message");
+    expect(error.code).toBe(ErrorCodes.ERR_FAILED_GIT_EXECUTION);
+  });
+
+  test("make an error extending base interface", () => {
+    interface ExtendingExtendedError extends ExtendedError {
+      a: "b";
+      b: 1;
+      c?: boolean;
+    }
+
+    const error = lib.makeError<ExtendingExtendedError>(
+      "Some other error",
+      ErrorCodes.ERR_INCOMPLETE_PACKET,
+      {
+        a: "b",
+        b: 1,
+      },
+    );
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe("Some other error");
+    expect(error.code).toBe(ErrorCodes.ERR_INCOMPLETE_PACKET);
+    expect(error.a).toBe("b");
+    expect(error.b).toBe(1);
+    expect(error.c).toBeUndefined();
   });
 });

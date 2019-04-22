@@ -1,6 +1,6 @@
 import { Signal } from "micro-signals";
 import { Context } from "./context";
-import { LogicControllerInstance } from "./logic-controller";
+import { LogicControllerInstance, Middleware } from "./logic-controller";
 
 /**
  * Check {@link Context.state | context state} for status.
@@ -26,17 +26,12 @@ export function checkIfPending(context: Context): boolean {
  *
  * @remarks
  *
- * We can only promote status once, except for failures, which can only be
- * set after request was accepted.
+ * We can only promote status once, except for failures, which can be
+ * set at any time.
  */
 export function updateStatus(context: Context, status: Status): void {
-  // We can only update promote status once,
-  if (checkIfPending(context)) {
+  if (checkIfPending(context) || status === Status.Failure) {
     context.state[SymbolStatus as any] = status;
-  }
-  // except for failures, which can still be set if status is `Status.Accepted`.
-  else if (checkStatus(context, Status.Accepted) && status === Status.Failure) {
-    context.state[SymbolStatus as any] = Status.Failure;
   }
 }
 
@@ -65,18 +60,29 @@ export const enum Status {
    */
   Redirect,
   /**
-   * Indicate the request was neither accepted nor rejected, but handled by a
-   * listener in {@link LogicController.onUsable}.
+   * Indicate the request was neither accepted nor rejected, but otherwise
+   * handled by third-party using the library.
    */
   Custom,
 }
 
 export class UsableSignal extends Signal<Context> {
-  // Dispatch payload to observers one at the time, till request is not pending.
-  public async dispatchAsync(context: Context, thisArg: LogicControllerInstance): Promise<void> {
+  /**
+   * All listeners to this signal are {@link Middleware | middleware}.
+   */
+  protected _listeners: Set<Middleware>;
+
+  /**
+   * Dispatch payload to observers one at the time, till request is not pending.
+   *
+   * @param context - {@link Context} to dispatch to listeners.
+   * @param instance - {@link LogicControllerInstance | Instance} to bind to
+   *                   listeners as `this`.
+   */
+  public async dispatchAsync(context: Context, instance: LogicControllerInstance): Promise<void> {
     if (this._listeners.size && checkIfPending(context)) {
       for (const fn of this._listeners) {
-        await fn.call(thisArg, context);
+        await fn.call(instance, context);
         if (!checkIfPending(context)) {
           break;
         }
@@ -86,10 +92,14 @@ export class UsableSignal extends Signal<Context> {
 }
 
 export class CompleteSignal extends Signal<Context> {
-  // Dispatch payload to observers in parallel, and await results.
+  /**
+   * Dispatch payload to observers in parallel, and await results.
+   *
+   * @param context- {@link Context} to dispatch to listeners.
+   */
   public async dispatchAsync(context: Context): Promise<void> {
     if (this._listeners.size && !checkIfPending(context)) {
-      await Promise.all(Array.from(this._listeners).map(async (fn) => fn.call(void 0, context)));
+      await Promise.all(Array.from(this._listeners).map(async (fn) => fn.call(undefined, context)));
     }
   }
 }

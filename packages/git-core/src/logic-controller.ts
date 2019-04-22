@@ -27,19 +27,32 @@ const SymbolOnUsable = Symbol("on usable");
  */
 export class LogicController implements ServiceController {
   /**
-   * The parent signal of `onComplete`.
-   * @internal
+   * The parent signal of {@link LogicController.onComplete}.
+   *
+   * @remarks
+   *
+   * Only accessible by {@link LogicController | **this class**}, and not
+   * extending classes.
    */
   private [SymbolOnComplete]: CompleteSignal;
 
   /**
-   * The parent signal of `onUsable`.
-   * @internal
+   * The parent signal of {@link LogicController.onUsable}.
+   *
+   * @remarks
+   *
+   * Only accessible by {@link LogicController | **this class**}, and not
+   * extending classes.
    */
   private [SymbolOnUsable]: UsableSignal;
 
   /**
-   * Service driver - doing the heavy-lifting for us.
+   * Private declaration(s).
+   *
+   * @privateRemarks
+   *
+   * Contains the underlying {@link ServiceController | service controller} and
+   * {@link MethodOverrides | method-override declarations}.
    */
   private readonly [SymbolPrivate]: { controller: ServiceController; methods?: MethodOverrides };
 
@@ -54,14 +67,14 @@ export class LogicController implements ServiceController {
    * If an observer returns a promise, will wait till the promise resolves
    * before continuing.
    */
-  public readonly onComplete: ReadableSignal<Context> = this[SymbolOnComplete].readOnly();
+  public readonly onComplete: ReadableSignal<Context>;
 
   /**
    * Payload is dispatched to each observer in series till the (observer-)stack
    * is empty or the request is no longer pending. If an observer returns a
    * promise, will wait till the promise resolves before continuing.
    */
-  public readonly onUsable: ReadableSignal<Context> = this[SymbolOnUsable].readOnly();
+  public readonly onUsable: ReadableSignal<Context>;
 
   /**
    * Create a new {@link LogicController} instance.
@@ -85,13 +98,15 @@ export class LogicController implements ServiceController {
       }
     }
     this[SymbolOnComplete] = new CompleteSignal();
+    this.onComplete = this[SymbolOnComplete].readOnly();
     this[SymbolOnUsable] = new UsableSignal();
+    this.onUsable = this[SymbolOnUsable].readOnly();
     this[SymbolPrivate] = { controller: serviceController, methods: overrides };
   }
 
   /**
    * Uses {@link Middleware | middleware}. Adds all `middleware` as listeners
-   * in signal {@link LogicController.onUsable | `onUsable`}.
+   * to signal {@link LogicController.onUsable | `onUsable`}.
    *
    * @param middleware - Middleware to use.
    */
@@ -105,9 +120,22 @@ export class LogicController implements ServiceController {
    *
    * @remarks
    *
-   * Will only proccess **once** the same instance of {@link Context}.
+   * Will only proccess **once** on the same instance of {@link Context}.
    *
-   * Short outline of behaviour:
+   * Throws if any observer in either
+   * {@link LogicController.onUsable | `onUsable`} or
+   * {@link LogicController.onComplete | `onComplete`} throws, or if the
+   * underlying {@link ServiceController | controller} throws and no error
+   * handler is configured.
+   *
+   * Also see {@link LogicController.accept},
+   * {@link LogicController.reject}, and
+   * {@link ServiceController.serve}.
+   *
+   * @privateRemarks
+   *
+   * **_Short_ outline of behaviour**:
+   *
    * 1. Initialise `context` if not already initialised.
    * 2. Check if context is still pending
    *    - If status have been set, return here.
@@ -125,16 +153,6 @@ export class LogicController implements ServiceController {
    *    serve `context`.
    * 9. Dispatch `context` to all listeners of
    *    {@link LogicController.onComplete}.
-   *
-   * Throws if any observer in either
-   * {@link LogicController.onUsable | `onUsable`} or
-   * {@link LogicController.onComplete | `onComplete`} throws, or if the
-   * underlying {@link ServiceController | controller} throws and no error
-   * handler is configured.
-   *
-   * Also see {@link LogicController.accept},
-   * {@link LogicController.reject}, and
-   * {@link ServiceController.serve}.
    *
    * @param context - {@link Context} to use.
    */
@@ -474,7 +492,13 @@ export class LogicController implements ServiceController {
  * @public
  */
 export class LogicControllerInstance {
-  /* @internal */
+  /**
+   * Private declaration(s).
+   *
+   * @privateRemarks
+   *
+   * The bound {@link LogicController} for instance.
+   */
   private [SymbolPrivate]: LogicController;
 
   /**
@@ -482,6 +506,17 @@ export class LogicControllerInstance {
    */
   public readonly context: Context;
 
+  /**
+   * Create an new instance.
+   *
+   * @privateRemarks
+   *
+   * Should only be called by {@link LogicController}.
+   *
+   * @param controller - {@link LogicController} to bind.
+   * @param context - {@link Context} to bind.
+   * @internal
+   */
   public constructor(controller: LogicController, context: Context) {
     this[SymbolPrivate] = controller;
     this.context = context;

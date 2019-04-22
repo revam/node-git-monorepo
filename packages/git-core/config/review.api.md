@@ -126,6 +126,7 @@ export class LogicController implements ServiceController {
 
 // @public
 export class LogicControllerInstance {
+    // @internal
     constructor(controller: LogicController, context: Context);
     accept(): Promise<void>;
     checkForAuth(): Promise<boolean>;

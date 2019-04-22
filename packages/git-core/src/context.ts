@@ -173,8 +173,6 @@ export class Context implements Response {
    *
    * Is set to `undefined` when promise resolves, and is only present when not
    * advertising.
-   *
-   * @internal
    */
   private [SymbolPromise]?: Promise<void> | undefined;
 

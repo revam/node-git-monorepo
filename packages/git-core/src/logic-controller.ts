@@ -215,10 +215,10 @@ export class LogicController implements ServiceController {
     try {
       await this[SymbolPrivate].controller.serve(context);
     } catch (error) {
-      context.status = error && (error.status || error.statusCode) || 500;
+      const statusCode = error && (error.status || error.statusCode) || 500;
       context.body = undefined;
       updateStatus(context, Status.Failure);
-      this.reject(context);
+      this.reject(context, statusCode);
       throw error;
     }
     // If no status code is below 300 with no body, reset response
@@ -228,7 +228,7 @@ export class LogicController implements ServiceController {
       this.reject(context, 500, `Respsonse from upstream was ${context.status}, but contained no body.`);
       throw makeError(
         "Response is within the 2xx range, but contains no body.",
-        ErrorCodes.ERR_INVALID_BODY_FOR_2XX,
+        ErrorCodes.InvalidBodyFor2XX,
       );
     }
     // Reject and mark any response with a status above or equal to 400 as a

@@ -3,6 +3,7 @@ import { ChildProcess } from "child_process";
 import { stat as STAT } from "fs";
 import { Readable } from "stream";
 import { promisify } from "util";
+import { Service } from "./enum";
 
 const stat = promisify(STAT);
 
@@ -19,6 +20,17 @@ export const RelativePathRegex = /(?<=^|[\/\\])\.{1,}[\/\\]|(?<=^|[^:])[\/\\]{2,
  */
 export function pathIsValid(target: unknown): target is string {
   return typeof target === "string" && !RelativePathRegex.test(target);
+}
+
+/**
+ * Default tail function. See {@link ControllerOptions.remoteTail} for more
+ * info.
+ *
+ * @param service - Service to request use of.
+ * @param advertise - If we should request for only advertisement.
+ */
+export function defaultTail(service: Service, advertise: boolean) {
+  return advertise ? `/info/refs?service=git-${service}` : `/git-${service}`;
 }
 
 export async function fsStatusCode(path?: string): Promise<200 | 404 | 403> {

@@ -95,11 +95,9 @@ export interface ControllerOptions {
 }
 
 // @public
-export enum ErrorCodes {
-    ERR_FAILED_GIT_EXECUTION = "ERR_FAILED_GIT_EXECUTION",
-    ERR_INCOMPLETE_PACKET = "ERR_INCOMPLETE_PACKET",
-    ERR_INVALID_BODY_FOR_2XX = "ERR_INVALID_BODY_FOR_2XX",
-    ERR_INVALID_PACKET = "ERR_INVALID_PACKET"
+export const enum ErrorCodes {
+    InvalidBodyFor2XX = "ERR_INVALID_BODY_FOR_2XX",
+    InvalidPacket = "ERR_INVALID_PACKET"
 }
 
 // @public
@@ -150,14 +148,6 @@ export type MethodOverrides = Partial<Record<Exclude<keyof ServiceController, "s
 
 // @public
 export type Middleware = (this: LogicControllerInstance, context: Context) => any;
-
-// @public
-export interface ProcessError extends ExtendedError {
-    // (undocumented)
-    exitCode: number;
-    // (undocumented)
-    stderr: string;
-}
 
 // @public (undocumented)
 export type ReadonlyCommands = ReadonlyArray<Readonly<CommandReceivePack | CommandUploadPack>>;

@@ -11,7 +11,14 @@ export enum PacketType {
 
 /**
  * Encode packet of type `type`.
- * @param message - Source to encode.
+ *
+ * @remarks
+ *
+ * If the message do not end with a new-line (LN), a new-line (LN) will be
+ * added to the message.
+ *
+ * @param type - {@link PacketType | Packet type} to encode.
+ * @param message - Source message to encode.
  * @internal
  */
 export function encodePacket(type: PacketType, message: string): Uint8Array {
@@ -96,7 +103,8 @@ export function readPacketLength(buffer: Uint8Array, offset: number = 0) {
 }
 
 /**
- * Returns the first position of a zero packet after offset.
+ * Returns the first position of a zero-packet (0000) after offset.
+ *
  * @param buffer - A valid packet buffer
  * @param offset - A valid packet start position
  * @internal
@@ -105,27 +113,26 @@ export function findNextZeroPacketInBuffer(
   buffer: Uint8Array,
   offset: number = 0,
 ): number {
-  if (!buffer || !buffer.length) {
+  if (!buffer || buffer.length === 0) {
     return -1;
   }
   do {
     const length = readPacketLength(buffer, offset);
     if (length === 0) {
       return offset;
-      // All packet lengths less than 4, except 0, are invalid.
+    // All packet lengths less than 4, except 0, are invalid.
     } else if (length > 3) {
-      if (offset + length <= buffer.length) {
-        offset += length;
-      } else {
+      offset += length;
+      if (offset > buffer.length) {
         throw makeError(
-          `Incomplete packet ending at position ${offset + length} in buffer (${buffer.length})`,
-          ErrorCodes.ERR_INCOMPLETE_PACKET,
+          `Invalid packet ending position at index ${offset} in buffer with length ${buffer.length}.`,
+          ErrorCodes.InvalidPacket,
         );
       }
     } else {
       throw makeError(
-        `Invalid packet starting at position ${offset} in buffer (${buffer.length})`,
-        ErrorCodes.ERR_INVALID_PACKET,
+        `Invalid packet starting position at index ${offset} in buffer with length ${buffer.length}.`,
+        ErrorCodes.InvalidPacket,
       );
     }
   } while (offset < buffer.length);
@@ -161,19 +168,20 @@ export function *createPacketIterator(
         yield buffer.slice(offset, packetEnd);
         offset += length;
       } else {
+        // Break if packet length exceeds rest of available buffer.
         if (breakOnIncompletePacket) {
           return buffer.slice(offset);
         } else {
           throw makeError(
-            `Incomplete packet ending at position ${packetEnd} in buffer (${buffer.length})`,
-            ErrorCodes.ERR_INCOMPLETE_PACKET,
+            `Invalid packet ending position at index ${packetEnd} in buffer with length ${buffer.length}.`,
+            ErrorCodes.InvalidPacket,
           );
         }
       }
     } else {
       throw makeError(
-        `Invalid packet starting at position ${offset} in buffer (${buffer.length})`,
-        ErrorCodes.ERR_INVALID_PACKET,
+        `Invalid packet starting position at index ${offset} in buffer with length ${buffer.length}.`,
+        ErrorCodes.InvalidPacket,
       );
     }
   } while (offset < buffer.length);

@@ -4,10 +4,9 @@ import fetch from "node-fetch";
 import { isAbsolute, join, resolve } from "path";
 import { Readable } from "stream";
 import { Context } from "./context";
-import { fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, pathIsValid, waitForChild } from "./controller.private";
-import { ErrorCodes, Service } from "./enum";
-import { ExtendedError, ServiceController } from "./main";
-import { makeError } from "./main.private";
+import { defaultTail, fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, pathIsValid, waitForChild } from "./controller.private";
+import { Service } from "./enum";
+import { ServiceController } from "./main";
 import { encode } from "./util/buffer";
 
 /**
@@ -94,8 +93,7 @@ export class Controller implements ServiceController {
     }
     let origin = options.origin;
     this.isRemote = options.httpsOnly ? hasHttpsProtocol : hasHttpOrHttpsProtocol;
-    this.getRemoteTail = options.remoteTail ? options.remoteTail.bind(undefined)
-      : ((s, a) => a ? `/info/refs?service=git-${s}` : `/git-${s}`);
+    this.getRemoteTail = options.remoteTail ? options.remoteTail.bind(undefined) : defaultTail;
     if (typeof origin === "string" && origin.length > 0) {
       const isRemote = this.isRemote(origin);
       // Resolve path if it is not an url and not absolute.
@@ -137,7 +135,7 @@ export class Controller implements ServiceController {
   }
 
   /**
-   * Combine `baseURL` with the result of `Controller.getRemoteTail`.
+   * Combine `baseURL` with the result of {@link Controller.getRemoteTail}.
    *
    * @param baseURL - Remote repository location as a URL without trailing slash.
    * @param service - {@link Service | service} to use.
@@ -240,24 +238,15 @@ export class Controller implements ServiceController {
   private async checkFSIfEnabled(context: Context): Promise<boolean> {
     const command = context.service!.replace("-", "");
     const child = spawn("git", ["-C", context.path!, "config", "--bool", `deamon.${command}`]);
-    const { exitCode, stdout, stderr } = await waitForChild(child);
+    const { exitCode, stdout } = await waitForChild(child);
     if (exitCode === 0) {
       const output = stdout.toString("utf8");
       return command === "uploadpack" ? output !== "false" : output === "true";
     }
     // Return default value for setting when not found in configuration
-    if (!stdout.length && !stderr.length) {
-      return this.enabledDefaults[context.service!];
-    }
-    throw makeError<ProcessError>(
-      "Failed to execute git.",
-      ErrorCodes.ERR_FAILED_GIT_EXECUTION,
-      {
-        exitCode,
-        stderr,
-      },
-    );
+    return this.enabledDefaults[context.service!];
   }
+
   public async checkIfExists(context: Context): Promise<boolean> {
     const { isValid, isRemote } = this.preparePath(context);
     if (isValid) {
@@ -336,7 +325,19 @@ export class Controller implements ServiceController {
  */
 export interface ControllerOptions {
   /**
-   * Default values for .
+   * Default values for file-system checks for {@link ServiceController.checkIfEnabled}.
+   *
+   * @remarks
+   *
+   * If provided with a boolean, then all services will use the value provided,
+   * if provided with an object, then services mentioned will be set, while the
+   * rest will use the global defaults.
+   *
+   * **Global defaults**:
+   *
+   * - UploadPack → true
+   * - ReceivePack → true
+   *
    */
   enabledDefaults?: boolean | Partial<Record<Service, boolean>>;
   /**
@@ -365,14 +366,4 @@ export interface ControllerOptions {
    * @param advertise - Should look for advertisement.
    */
   remoteTail?(service: Service, advertise: boolean): string;
-}
-
-/**
- * An error thrown from the execution of a child process.
- *
- * @public
- */
-export interface ProcessError extends ExtendedError {
-  exitCode: number;
-  stderr: string;
 }

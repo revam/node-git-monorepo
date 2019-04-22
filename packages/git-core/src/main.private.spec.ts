@@ -51,11 +51,13 @@ describe("function checkServiceDriver()", () => {
 });
 
 describe("function makeError()", () => {
+  const FakeErrorCodes = "ERR_FAKE_ERROR_FOR_TEST" as ErrorCodes;
+
   test("make basic errors", () => {
-    const error = lib.makeError("Some message", ErrorCodes.ERR_FAILED_GIT_EXECUTION);
+    const error = lib.makeError("Some message", FakeErrorCodes);
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe("Some message");
-    expect(error.code).toBe(ErrorCodes.ERR_FAILED_GIT_EXECUTION);
+    expect(error.code).toBe(FakeErrorCodes);
   });
 
   test("make an error extending base interface", () => {
@@ -67,7 +69,7 @@ describe("function makeError()", () => {
 
     const error = lib.makeError<ExtendingExtendedError>(
       "Some other error",
-      ErrorCodes.ERR_INCOMPLETE_PACKET,
+      FakeErrorCodes,
       {
         a: "b",
         b: 1,
@@ -75,7 +77,7 @@ describe("function makeError()", () => {
     );
     expect(error).toBeInstanceOf(Error);
     expect(error.message).toBe("Some other error");
-    expect(error.code).toBe(ErrorCodes.ERR_INCOMPLETE_PACKET);
+    expect(error.code).toBe(FakeErrorCodes);
     expect(error.a).toBe("b");
     expect(error.b).toBe(1);
     expect(error.c).toBeUndefined();

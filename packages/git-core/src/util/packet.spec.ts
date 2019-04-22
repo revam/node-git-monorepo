@@ -1,6 +1,6 @@
 import { ErrorCodes } from "../enum";
 import { ExtendedError } from "../main";
-import { encode } from "./buffer";
+import { compare, encode } from "./buffer";
 import * as lib from "./packet";
 
 // an incomplete packet
@@ -8,7 +8,81 @@ const incompletePacket = encode("0018an incompl-");
 // an invalid packet
 const invalidPacket = encode("an invalid packet");
 
-describe("readPacketLength", () => {
+describe("function encodePacket()", () => {
+  test("Encode some packets", () => {
+    const sources: Array<[lib.PacketType, string]> = [
+      [lib.PacketType.Message, "Some encoded message"],
+      [lib.PacketType.Error, "Some encoded error"],
+    ];
+    // Manually encoded packets, with the "right" algorithm.
+    const results = [
+      // "001A\x02Some encoded message\n"
+      new Uint8Array([
+        48,
+        48,
+        49,
+        97,
+        2,
+        83,
+        111,
+        109,
+        101,
+        32,
+        101,
+        110,
+        99,
+        111,
+        100,
+        101,
+        100,
+        32,
+        109,
+        101,
+        115,
+        115,
+        97,
+        103,
+        101,
+        10,
+      ]),
+      // "0018\x03Some encoded error\n"
+      new Uint8Array([
+        48,
+        48,
+        49,
+        56,
+        3,
+        83,
+        111,
+        109,
+        101,
+        32,
+        101,
+        110,
+        99,
+        111,
+        100,
+        101,
+        100,
+        32,
+        101,
+        114,
+        114,
+        111,
+        114,
+        10,
+      ]),
+    ];
+    for (let i = 0; i > sources.length; i += 1) {
+      const [type, source] = sources[i];
+      const result = results[i];
+      const packed = lib.encodePacket(type, source);
+      expect(compare(packed, result)).toBe(true);
+    }
+  });
+});
+
+describe("function readPacketLength()", () => {
   it("should read the first four bytes of buffer by default", (done) => {
     const length = lib.readPacketLength(incompletePacket);
     expect(length).toBe(24);
@@ -30,7 +104,7 @@ describe("readPacketLength", () => {
   });
 });
 
-describe("createPacketIterator", () => {
+describe("function createPacketIterator()", () => {
 
   it("should return an iterator", (done) => {
     const packets = encode("0007abc00000007def");
@@ -73,7 +147,7 @@ describe("createPacketIterator", () => {
     resolve();
   });
 
-  it("should throw if it reads an invalid packet", (done) => {
+  it("should throw if it reads a packet with an invalid start position", (done) => {
     let error: ExtendedError | undefined;
     try {
       const iterator = lib.createPacketIterator(invalidPacket);
@@ -81,12 +155,12 @@ describe("createPacketIterator", () => {
     } catch (err) {
       error = err;
     } finally {
-      expect(error && error.code).toMatch(ErrorCodes.ERR_INVALID_PACKET);
+      expect(error && error.code).toMatch(ErrorCodes.InvalidPacket);
     }
     done();
   });
 
-  it("should throw if it reads an incomplete packet", (done) => {
+  it("should throw if it reads a packet with an invalid end position", (done) => {
     let error: ExtendedError | undefined;
     try {
       const iterator = lib.createPacketIterator(incompletePacket);
@@ -94,7 +168,7 @@ describe("createPacketIterator", () => {
     } catch (err) {
       error = err;
     } finally {
-      expect(error && error.code).toMatch(ErrorCodes.ERR_INCOMPLETE_PACKET);
+      expect(error && error.code).toMatch(ErrorCodes.InvalidPacket);
     }
     done();
   });

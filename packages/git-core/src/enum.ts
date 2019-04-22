@@ -3,24 +3,22 @@
  *
  * @public
  */
-export enum ErrorCodes {
-  /**
-   * Something went wrong when executing git bin.
-   */
-  ERR_FAILED_GIT_EXECUTION = "ERR_FAILED_GIT_EXECUTION",
+export const enum ErrorCodes {
   /**
    * Response status is within the 2xx range, but contains no body. Possible
-   * driver error.
+   * driver error at remote end.
    */
-  ERR_INVALID_BODY_FOR_2XX = "ERR_INVALID_BODY_FOR_2XX",
+  InvalidBodyFor2XX = "ERR_INVALID_BODY_FOR_2XX",
   /**
-   * Packet starting position is invalid.
+   * Packet start or end position was invalid.
+   *
+   * @remarks
+   *
+   * If start position was invalid, then the packet length could not be
+   * determined. If the end position was invalid, then the packet length exceeds
+   * the rest of the available buffer.
    */
-  ERR_INVALID_PACKET = "ERR_INVALID_PACKET",
-  /**
-   * An incomplete packet exceeds the rest of available buffer.
-   */
-  ERR_INCOMPLETE_PACKET = "ERR_INCOMPLETE_PACKET",
+  InvalidPacket = "ERR_INVALID_PACKET",
 }
 
 /**

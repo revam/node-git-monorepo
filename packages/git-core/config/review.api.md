@@ -8,6 +8,15 @@ import { Headers } from 'node-fetch';
 import { Readable } from 'stream';
 import { ReadableSignal } from 'micro-signals';
 
+// @public @sealed
+export class BasicController extends LogicController implements ServiceController {
+    constructor(options?: BasicControllerOptions);
+}
+
+// @public
+export interface BasicControllerOptions extends LogicControllerOptions, FetchControllerOptions {
+}
+
 // @public (undocumented)
 export type Body = Uint8Array | Promise<Uint8Array> | PromiseLike<Uint8Array> | Iterable<Uint8Array> | IterableIterator<Uint8Array> | AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array> | undefined | null;
 

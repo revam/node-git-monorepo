@@ -34,7 +34,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "7.1.0",
-    "@revam/rollup-plugin-common": "1.0.0",
+    "@revam/rollup-plugin-common": "1.1.0",
     "@types/jest": "^24.0.6",
     "@types/node": "^11.9.5",
     "jest": "^24.1.0",

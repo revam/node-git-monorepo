@@ -75,19 +75,14 @@ export class Context implements Response {
 export class Controller implements ServiceController {
     constructor(options?: ControllerOptions | undefined | null);
     checkIfEnabled(context: Context): Promise<boolean>;
-    // (undocumented)
     checkIfExists(context: Context): Promise<boolean>;
     protected readonly origin?: string;
-    protected preparePath(context: Context): {
-        isValid: boolean;
-        isRemote: boolean;
-    };
-    protected remoteURL(baseURL: string, service: Service, advertise: boolean): string;
     serve(context: Context): Promise<void>;
     }
 
 // @public
 export interface ControllerOptions {
+    allowEmptyPath?: boolean;
     enabledDefaults?: boolean | Partial<Record<Service, boolean>>;
     httpsOnly?: boolean;
     origin?: string;

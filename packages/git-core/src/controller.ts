@@ -1,6 +1,6 @@
 import { spawn } from "child_process";
 import { STATUS_CODES } from "http";
-import fetch from "node-fetch";
+import fetch, { RequestInit, Response } from "node-fetch";
 import { isAbsolute, join, resolve } from "path";
 import { Readable } from "stream";
 import { Context } from "./context";
@@ -8,6 +8,10 @@ import { defaultTail, fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, pa
 import { Service } from "./enum";
 import { ServiceController } from "./main";
 import { encode } from "./util/buffer";
+
+const GlobalHeaders = {
+  "User-Agent": "<% user_agent %>",
+};
 
 /**
  * A basic implementation of the {@link ServiceController} interface for
@@ -80,7 +84,12 @@ export class Controller implements ServiceController {
    * @param advertise - Should look for advertisement.
    * @returns Tail of remote URL.
    */
-  private readonly getRemoteTail: (service: Service, advertise: boolean) => string;
+  private readonly remoteTail: (service: Service, advertise: boolean) => string;
+
+  /**
+   *
+   */
+  private readonly allowEmptyPath: boolean;
 
   /**
    * Creates a new instance of {@link Controller}.
@@ -91,9 +100,10 @@ export class Controller implements ServiceController {
     if (!(options === undefined || typeof options === "object" && options !== null)) {
       throw new TypeError("argument `options` must be of type 'object'.");
     }
+    this.allowEmptyPath = Boolean(options.allowEmptyPath);
     let origin = options.origin;
     this.isRemote = options.httpsOnly ? hasHttpsProtocol : hasHttpOrHttpsProtocol;
-    this.getRemoteTail = options.remoteTail ? options.remoteTail.bind(undefined) : defaultTail;
+    this.remoteTail = options.remoteTail ? options.remoteTail.bind(undefined) : defaultTail;
     if (typeof origin === "string" && origin.length > 0) {
       const isRemote = this.isRemote(origin);
       // Resolve path if it is not an url and not absolute.
@@ -135,66 +145,59 @@ export class Controller implements ServiceController {
   }
 
   /**
-   * Combine `baseURL` with the result of {@link Controller.getRemoteTail}.
+   * Fetch or advertise {@link Service | service} from a remote location
+   * (`url`), optionally with initial request options (`options`) set.
    *
-   * @param baseURL - Remote repository location as a URL without trailing slash.
+   * @param url - Remote repository location as a URL without trailing slash.
    * @param service - {@link Service | service} to use.
    * @param advertise - Should look for advertisement.
-   * @returns The full URL-string.
+   * @param options - {@link node-fetch#RequestInit | Options} to initiaise
+   *                  request with.
    */
-  protected remoteURL(baseURL: string, service: Service, advertise: boolean): string {
-    return baseURL + this.getRemoteTail(service, advertise);
+  private async remoteFetch(url: string, service: Service, advertise: boolean, options?: RequestInit): Promise<Response> {
+    return fetch(url + this.remoteTail(service, advertise), options);
   }
 
   /**
-   * Prepare {@link Context.path | path} and report findings.
+   * Check if `path` is valid to use and if it points to a remote location.
+   * Returns a path valid for use.
    *
-   * @remarks
-   *
-   * Checks {@link Context.path | path} and validate if it is valid to use and
-   * if it points to a remote location.
-   *
-   * {@link Context.path | Path} may have been adjusted if found valid for use,
-   * and will otherwise not be modified.
-   *
-   * @param context - {@link Context} to prepare {@link Context.path | path}
-   *                  for.
+   * @param path - Path or URL leading to a local or remote repository.
    */
-  protected preparePath(context: Context): {
+  private preparePath(path?: string): {
     /**
-     * {@link Context.path | Path} was found to be valid for use with
-     * controller.
+     * Path was found to be valid for use with controller.
      */
     isValid: boolean;
     /**
-     * {@link Context.path | Path} was found to be a remote location.
+     * Path was found to be a remote location.
      */
     isRemote: boolean;
+    /**
+     * The prepared path.
+     */
+    path: string;
   } {
-    let path = context.path;
     let isValid = false;
     let isRemote = false;
     if (pathIsValid(path)) {
-      // Sanetise input
-      if (!path.length) {
-        path = "/";
-      }
-      else if (!path.endsWith("/")) {
-        path += "/";
-      }
-      // Check if path is a **valid** URL-string.
+      // Check if path have a protocol and is a valid base URL.
       if (this.isRemote(path)) {
         isValid = isRemote = true;
       }
       // Then check for origin
-      else if (this.origin) {
+      else if (this.origin && (path || this.allowEmptyPath)) {
         if (this.originIsRemote) {
-          if (path[0] !== "/") {
-            path = `/${path}`;
-          }
-          const lastChar = path.length - 1;
-          if (lastChar > 0 && path[lastChar] === "/") {
-            path = path.substring(0, lastChar);
+          if (path.length) {
+            // Append preceding slash if not found
+            if (path[0] !== "/") {
+              path = `/${path}`;
+            }
+            const lastChar = path.length - 1;
+            // Remove trailing slash if found
+            if (lastChar > 0 && path[lastChar] === "/") {
+              path = path.substring(0, lastChar);
+            }
           }
           isRemote = true;
           path = this.origin + path;
@@ -208,12 +211,8 @@ export class Controller implements ServiceController {
       else if (isAbsolute(path)) {
         isValid = true;
       }
-      // Set path, but only if it is valid.
-      if (isValid) {
-        context.path = path;
-      }
     }
-    return { isRemote, isValid };
+    return { isRemote, isValid, path: path || "" };
   }
 
   /**
@@ -221,55 +220,79 @@ export class Controller implements ServiceController {
    */
   public async checkIfEnabled(context: Context): Promise<boolean> {
     if (context.service) {
-      const { isValid, isRemote } = this.preparePath(context);
+      const { isValid, isRemote, path } = this.preparePath(context.path);
       if (isValid) {
-        return isRemote ? this.checkHTTPIfEnabled(context) : this.checkFSIfEnabled(context);
+        return isRemote ? this.checkHTTPIfEnabled(path, context.service) : this.checkFSIfEnabled(path, context.service);
       }
     }
     return false;
   }
 
-  private async checkHTTPIfEnabled(context: Context): Promise<boolean> {
-    const url = this.remoteURL(context.path!, context.service!, true);
-    const response = await fetch(url, { method: "HEAD" });
-    return Boolean(response.status < 300 && response.status >= 200);
+  /**
+   * Check a remote location if `service` is enabled for repository.
+   *
+   * @param url - URL leading to remote repository.
+   * @param service - {@link Service} to check.
+   */
+  private async checkHTTPIfEnabled(url: string, service: Service): Promise<boolean> {
+    const response = await this.remoteFetch(url, service, true, { method: "HEAD", headers: GlobalHeaders });
+    return response.status === 200;
   }
 
-  private async checkFSIfEnabled(context: Context): Promise<boolean> {
-    const command = context.service!.replace("-", "");
-    const child = spawn("git", ["-C", context.path!, "config", "--bool", `deamon.${command}`]);
-    const { exitCode, stdout } = await waitForChild(child);
-    if (exitCode === 0) {
-      const output = stdout.toString("utf8");
-      return command === "uploadpack" ? output !== "false" : output === "true";
+  /**
+   * Check the local file-system if `service` is enabled for repository.
+   *
+   * @param path - Path leading to local repository.
+   * @param service - {@link Service} to check.
+   */
+  private async checkFSIfEnabled(path: string, service: Service): Promise<boolean> {
+    const status = await fsStatusCode(path);
+    if (status === 200) {
+      const command = service.replace("-", "");
+      const child = spawn("git", ["-C", path, "config", "--bool", `deamon.${command}`]);
+      const { exitCode, stdout } = await waitForChild(child);
+      if (exitCode === 0) {
+        const output = stdout.toString("utf8");
+        return command === "uploadpack" ? output !== "false" : output === "true";
+      }
     }
     // Return default value for setting when not found in configuration
-    return this.enabledDefaults[context.service!];
+    return this.enabledDefaults[service];
   }
 
+  /**
+   * {@inheritdoc ServiceController.checkIfExists}
+   */
   public async checkIfExists(context: Context): Promise<boolean> {
-    const { isValid, isRemote } = this.preparePath(context);
+    const { isValid, isRemote, path } = this.preparePath(context.path);
     if (isValid) {
-      return isRemote ? this.checkHTTPIfExists(context) : this.checkFSIfExists(context);
+      return isRemote ? this.checkHTTPIfExists(path) : this.checkFSIfExists(path);
     }
     return false;
   }
 
-  private async checkHTTPIfExists(context: Context): Promise<boolean> {
-    const url = this.remoteURL(context.path!, Service.UploadPack, true);
-    const response = await fetch(url, { method: "HEAD" });
-    return Boolean(response.status >= 200 && response.status < 300);
+  /**
+   * Check a remote location if repository exists.
+   *
+   * @param url - URL leading to remote repository.
+   */
+  private async checkHTTPIfExists(url: string): Promise<boolean> {
+    const response = await this.remoteFetch(url, Service.UploadPack, true, { method: "HEAD", headers: GlobalHeaders });
+    return response.status === 200;
   }
 
-  private async checkFSIfExists(context: Context): Promise<boolean> {
-    // Check if repository exists on disk AND is
-    if (!context.path || (await fsStatusCode(context.path)) === 404) {
-      return false;
-    }
-    // Check if context.path is a git repository
-    const child = spawn("git", ["ls-remote", context.path, "HEAD"], { stdio: ["ignore", null, null] });
-    const { exitCode } = await waitForChild(child);
-    return exitCode === 0;
+  /**
+   * Check the local file-system if repository exists.
+   *
+   * @privateRemarks
+   *
+   * We _assume_ the repository exists if we get an access forbidden.
+   *
+   * @param path - Path leading to local repository.
+   */
+  private async checkFSIfExists(path: string): Promise<boolean> {
+    const status = await fsStatusCode(path);
+    return status !== 404;
   }
 
   /**
@@ -277,36 +300,53 @@ export class Controller implements ServiceController {
    */
   public async serve(context: Context): Promise<void> {
     if (context.service) {
-      const { isValid, isRemote } = this.preparePath(context);
+      const { isValid, isRemote, path } = this.preparePath(context.path);
       if (isValid) {
-        return isRemote ? this.serveHTTP(context) : this.serveFS(context);
+        return isRemote ? this.serveHTTP(context, path) : this.serveFS(context, path);
       }
     }
+    // Set response to `400 Bad Request`, no need for hiding failure here.
+    // Such logic should be handled by the `LogicController`.
+    context.status = 400;
+    const body = context.body = encode("Bad Request");
+    context.type = "text/plain; charset=utf-8";
+    context.length = body.length;
   }
 
-  private async serveHTTP(context: Context): Promise<void> {
-    const url = this.remoteURL(context.path!, context.service!, context.advertisement);
-    const response = await fetch(url, {
+  /**
+   * Serve `context` from a remote location.
+   *
+   * @param context - {@link Context} to serve.
+   * @param url - URL leading to remote repository.
+   */
+  private async serveHTTP(context: Context, url: string): Promise<void> {
+    const response = await this.remoteFetch(url, context.service!, context.advertisement, {
       body: context.readable.request(),
       headers: context.request.headers,
       method: context.advertisement ? "GET" : "POST",
     });
     context.status = response.status;
-    context.body = (response.body as Readable)[Symbol.asyncIterator]();
+    context.body = (response.body as Readable);
     for (const [header, value] of response.headers) {
       context.setHeader(header, value);
     }
   }
 
-  private async serveFS(context: Context): Promise<void> {
-    const statusCode = context.status = await fsStatusCode(context.path);
+  /**
+   * Serve `context` from local file-system.
+   *
+   * @param context - {@link Context} to serve.
+   * @param path - Path leading to local repository.
+   */
+  private async serveFS(context: Context, path: string): Promise<void> {
+    const statusCode = context.status = await fsStatusCode(path);
     if (statusCode === 200) {
       const option = context.advertisement ? "--advertise-refs" : "--stateless-rpc";
-      const child = spawn("git", ["-C", context.path!, context.service!, option, "."]);
+      const child = spawn("git", ["-C", path, context.service!, option, "."]);
       if (!context.advertisement) {
         context.readable.request().pipe(child.stdin);
       }
-      context.body = child.stdout[Symbol.asyncIterator]();
+      context.body = child.stdout;
       context.type = `application/x-git-${context.service}-${context.advertisement ? "advertisement" : "result"}`;
       context.length = undefined;
     }
@@ -366,4 +406,11 @@ export interface ControllerOptions {
    * @param advertise - Should look for advertisement.
    */
   remoteTail?(service: Service, advertise: boolean): string;
+  /**
+   * Validates {@link Context.path | path} successfully when it is an empty
+   * string while {@link ControllerOptions.origin | origin} is also set.
+   *
+   * @defaultValue false
+   */
+  allowEmptyPath?: boolean;
 }

@@ -1,6 +1,14 @@
-import common from "@revam/rollup-plugin-common";
+import common, { readPackage } from "@revam/rollup-plugin-common";
 import { OutputOptions, RollupOptions } from "rollup";
 import replace from "rollup-plugin-re";
+
+interface SimplePackageJson {
+  name: string;
+  version: string;
+  homepage: string;
+}
+
+const pkg = readPackage<SimplePackageJson>();
 
 const output: OutputOptions[] = [
   {
@@ -20,6 +28,14 @@ const options: RollupOptions = {
   input: "dist/build/main.js",
   output: output as any,
   plugins: [
+    replace({
+      patterns: [
+        {
+          replace: `'${pkg.name}'/${pkg.version} (+${pkg.homepage})`,
+          test: /<% user_agent %>/g,
+        },
+      ],
+    }),
     replace({
       patterns: [{
         replace: "const $1 = Object.create(null);\n$2",

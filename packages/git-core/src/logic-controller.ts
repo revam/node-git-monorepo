@@ -24,7 +24,7 @@ const SymbolOnUsable = Symbol("on usable");
  * @remarks
  *
  * Have some pluggable aspects and makes configuring application-spesific
- * business-logic on top of an existing controller (e.g. {@link Controller})
+ * business-logic on top of an existing controller (e.g. {@link (FetchController:class)})
  * easier.
  *
  * @public

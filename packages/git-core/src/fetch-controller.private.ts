@@ -23,7 +23,7 @@ export function pathIsValid(target: unknown): target is string {
 }
 
 /**
- * Default tail function. See {@link ControllerOptions.remoteTail} for more
+ * Default tail function. See {@link FetchControllerOptions.remoteTail} for more
  * info.
  *
  * @param service - Service to request use of.

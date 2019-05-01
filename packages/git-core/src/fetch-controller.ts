@@ -4,8 +4,8 @@ import fetch, { RequestInit, Response } from "node-fetch";
 import { isAbsolute, join, resolve } from "path";
 import { Readable } from "stream";
 import { Context } from "./context";
-import { defaultTail, fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, pathIsValid, waitForChild } from "./controller.private";
 import { Service } from "./enum";
+import { defaultTail, fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, pathIsValid, waitForChild } from "./fetch-controller.private";
 import { ServiceController } from "./main";
 import { encode } from "./util/buffer";
 
@@ -24,9 +24,9 @@ const GlobalHeaders = {
  *
  * @public
  */
-export class Controller implements ServiceController {
+export class FetchController implements ServiceController {
   /**
-   * Default values for {@link Controller.checkFSIfEnabled}.
+   * Default values for {@link (FetchController:class).checkFSIfEnabled}.
    *
    * @remarks
    *
@@ -49,13 +49,13 @@ export class Controller implements ServiceController {
   protected readonly origin?: string;
 
   /**
-   * Indicates that {@link Controller.origin | origin} is a remote
+   * Indicates that {@link (FetchController:class).origin | origin} is a remote
    * location.
    *
    * @privateRemarks
    *
-   * Is `true` if {@link Controller.origin | origin} is defined and
-   * {@link Controller.originIsRemote} evaluates to `true`, otherwise
+   * Is `true` if {@link (FetchController:class).origin | origin} is defined and
+   * {@link (FetchController:class).originIsRemote} evaluates to `true`, otherwise
    * `false`.
    */
   private readonly originIsRemote: boolean;
@@ -67,7 +67,7 @@ export class Controller implements ServiceController {
    * @remarks
    *
    * It is determined if it only checks for https protocol by setting
-   * {@link ControllerOptions.httpsOnly} to true. If it is
+   * {@link FetchControllerOptions.httpsOnly} to true. If it is
    * otherwise false or undefined then this function will check for http- or
    * https-protocols.
    */
@@ -92,11 +92,11 @@ export class Controller implements ServiceController {
   private readonly allowEmptyPath: boolean;
 
   /**
-   * Creates a new instance of {@link Controller}.
+   * Creates a new instance of {@link (FetchController:class)}.
    *
-   * @param options - {@link ControllerOptions | Optional options}.
+   * @param options - {@link FetchControllerOptions | Optional options}.
    */
-  public constructor(options: ControllerOptions | undefined | null = {}) {
+  public constructor(options: FetchControllerOptions | undefined | null = {}) {
     if (!(options === undefined || typeof options === "object" && options !== null)) {
       throw new TypeError("argument `options` must be of type 'object'.");
     }
@@ -359,11 +359,11 @@ export class Controller implements ServiceController {
 }
 
 /**
- * Options for {@link Controller}.
+ * Options for {@link (FetchController:class)}.
  *
  * @public
  */
-export interface ControllerOptions {
+export interface FetchControllerOptions {
   /**
    * Default values for file-system checks for {@link ServiceController.checkIfEnabled}.
    *
@@ -408,7 +408,7 @@ export interface ControllerOptions {
   remoteTail?(service: Service, advertise: boolean): string;
   /**
    * Validates {@link Context.path | path} successfully when it is an empty
-   * string while {@link ControllerOptions.origin | origin} is also set.
+   * string while {@link FetchControllerOptions.origin | origin} is also set.
    *
    * @defaultValue false
    */

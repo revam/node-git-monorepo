@@ -102,5 +102,5 @@ export interface ServiceController {
 export * from "./enum";
 export { checkServiceController } from "./main.private";
 export * from "./context";
-export * from "./controller";
+export * from "./fetch-controller";
 export * from "./logic-controller";

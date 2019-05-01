@@ -1,4 +1,4 @@
-import * as lib from "./controller.private";
+import * as lib from "./fetch-controller.private";
 
 describe("RegExp RelativePathRegex", () => {
   test("values that match", () => {

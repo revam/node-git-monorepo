@@ -72,24 +72,6 @@ export class Context implements Response {
 }
 
 // @public
-export class Controller implements ServiceController {
-    constructor(options?: ControllerOptions | undefined | null);
-    checkIfEnabled(context: Context): Promise<boolean>;
-    checkIfExists(context: Context): Promise<boolean>;
-    protected readonly origin?: string;
-    serve(context: Context): Promise<void>;
-    }
-
-// @public
-export interface ControllerOptions {
-    allowEmptyPath?: boolean;
-    enabledDefaults?: boolean | Partial<Record<Service, boolean>>;
-    httpsOnly?: boolean;
-    origin?: string;
-    remoteTail?(service: Service, advertise: boolean): string;
-}
-
-// @public
 export const enum ErrorCodes {
     InvalidPacket = "ERR_INVALID_PACKET"
 }
@@ -97,6 +79,24 @@ export const enum ErrorCodes {
 // @public
 export interface ExtendedError extends Error {
     code: string;
+}
+
+// @public
+export class FetchController implements ServiceController {
+    constructor(options?: FetchControllerOptions | undefined | null);
+    checkIfEnabled(context: Context): Promise<boolean>;
+    checkIfExists(context: Context): Promise<boolean>;
+    protected readonly origin?: string;
+    serve(context: Context): Promise<void>;
+    }
+
+// @public
+export interface FetchControllerOptions {
+    allowEmptyPath?: boolean;
+    enabledDefaults?: boolean | Partial<Record<Service, boolean>>;
+    httpsOnly?: boolean;
+    origin?: string;
+    remoteTail?(service: Service, advertise: boolean): string;
 }
 
 // @public

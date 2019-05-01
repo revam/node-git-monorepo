@@ -52,14 +52,14 @@ export class Context implements Response {
     initialise(): Promise<void>;
     readonly isInitialised: boolean;
     length: number | undefined;
-    readonly method: "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
+    readonly method: "HEAD" | "GET" | "OPTIONS" | "PATCH" | "POST" | "PUT";
     path: string | undefined;
     readonly readable: {
         request(): Readable;
         response(): Readable;
     };
     readonly request: Readonly<Request>;
-    readonly response: Response;
+    response: Response;
     readonly service: Service | undefined;
     setHeader(headerName: string, value: number | string | string[]): void;
     setHeader(headerName: string): void;

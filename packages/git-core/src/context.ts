@@ -154,7 +154,7 @@ export class Context implements Response {
   /**
    * Outgoing response.
    */
-  public readonly response: Response;
+  public response: Response;
 
   /**
    * Application/library defined properties for request.

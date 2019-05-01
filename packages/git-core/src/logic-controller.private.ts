@@ -1,15 +1,14 @@
 import { Signal } from "micro-signals";
 import { Context } from "./context";
-import { LogicControllerInstance, Middleware } from "./logic-controller";
+import { LogicController, LogicControllerInstance, Middleware } from "./logic-controller";
 
 /**
- * Check {@link Context.state | context state} for status.
+ * Check {@link Context.state | context state} for {@link LogicController.Status}.
  *
  * @param context - Context to check.
- * @param status - Status to check for.
  */
-export function checkStatus(context: Context, status: Status): boolean {
-  return SymbolStatus in context.state && context.state[SymbolStatus as any] === status;
+export function checkStatus(context: Context): LogicController.Status {
+  return SymbolStatus in context.state ? context.state[SymbolStatus as any] : LogicController.Status.None;
 }
 
 /**
@@ -29,42 +28,11 @@ export function checkIfPending(context: Context): boolean {
  * We can only promote status once, except for failures, which can be
  * set at any time.
  */
-export function updateStatus(context: Context, status: Status): void {
-  if (checkIfPending(context) || status === Status.Failure) {
-    context.state[SymbolStatus as any] = status;
-  }
+export function updateStatus(context: Context, status: LogicController.Status): void {
+  context.state[SymbolStatus as any] = status;
 }
 
-export const SymbolStatus: symbol = Symbol("status");
-
-/**
- * Request service status.
- *
- * @public
- */
-export const enum Status {
-  /**
-   * Indicate the request was accepted.
-   */
-  Accepted,
-  /**
-   * Indicate the request was rejected.
-   */
-  Rejected,
-  /**
-   * Indicate the request was initially accepted, but ended in failure.
-   */
-  Failure,
-  /**
-   * Indicate the repository has moved and the request is being redirected.
-   */
-  Redirect,
-  /**
-   * Indicate the request was neither accepted nor rejected, but otherwise
-   * handled by third-party using the library.
-   */
-  Custom,
-}
+export const SymbolStatus = Symbol("status");
 
 export class UsableSignal extends Signal<Context> {
   /**

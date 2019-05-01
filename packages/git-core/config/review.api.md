@@ -96,7 +96,6 @@ export interface ControllerOptions {
 
 // @public
 export const enum ErrorCodes {
-    InvalidBodyFor2XX = "ERR_INVALID_BODY_FOR_2XX",
     InvalidPacket = "ERR_INVALID_PACKET"
 }
 
@@ -107,12 +106,12 @@ export interface ExtendedError extends Error {
 
 // @public
 export class LogicController implements ServiceController {
-    constructor(serviceController: ServiceController, overrides?: MethodOverrides);
+    constructor(upstream: ServiceController, options?: LogicControllerOptions);
     accept(context: Context): Promise<void>;
     checkForAuth(context: Context): Promise<boolean>;
     checkIfEnabled(context: Context): Promise<boolean>;
     checkIfExists(context: Context): Promise<boolean>;
-    custom(context: Context): void;
+    static checkStatus(context: Context): LogicController.Status;
     readonly onComplete: ReadableSignal<Context>;
     readonly onUsable: ReadableSignal<Context>;
     redirect(context: Context, statusCode: 304): void;
@@ -121,7 +120,20 @@ export class LogicController implements ServiceController {
     redirect(context: Context, locationOrStatus?: string | number, statusCode?: number): void;
     reject(context: Context, statusCode?: number, reason?: string): void;
     serve(context: Context): Promise<void>;
+    setCustom(context: Context): void;
     use(...middleware: Middleware[]): this;
+}
+
+// @public (undocumented)
+export namespace LogicController {
+    export const enum Status {
+        Accepted = "Accepted",
+        Custom = "Custom",
+        Failure = "Failure",
+        None = "None",
+        Redirect = "Redirect",
+        Rejected = "Rejected"
+    }
 }
 
 // @public
@@ -133,12 +145,18 @@ export class LogicControllerInstance {
     checkIfEnabled(): Promise<boolean>;
     checkIfExists(): Promise<boolean>;
     readonly context: Context;
-    custom(): void;
     redirect(statusCode: 304): void;
     redirect(statusCode?: number): void;
     redirect(location: string, statusCode?: number): void;
     redirect(locationOrStatus?: string | number, statusCode?: number): void;
     reject(statusCode?: number, reason?: string): void;
+    setCustom(): void;
+}
+
+// @public
+export interface LogicControllerOptions {
+    overrides?: MethodOverrides;
+    privacyMode?: boolean;
 }
 
 // @public

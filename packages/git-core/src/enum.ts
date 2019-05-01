@@ -5,11 +5,6 @@
  */
 export const enum ErrorCodes {
   /**
-   * Response status is within the 2xx range, but contains no body. Possible
-   * driver error at remote end.
-   */
-  InvalidBodyFor2XX = "ERR_INVALID_BODY_FOR_2XX",
-  /**
    * Packet start or end position was invalid.
    *
    * @remarks

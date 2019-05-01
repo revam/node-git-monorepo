@@ -12,17 +12,23 @@ type ArgumentsType<T extends (...args: any[]) => any> = T extends (...args: infe
 
 describe("RegExp Advertisment", () => {
   test("should match all paths starting with a forward slash and ending with '/info/refs'", () => {
-    const Paths = [
-      "/info/refs",
-      "/info/refs/info/refs",
-      "/test/info/refs",
-      "/path/to/repo/info/refs",
-      "/path/to/repo@tag/info/refs",
-      "/path/to/another/repo/info/refs",
-      "/git-core/info/refs",
+    const Paths: Array<[string, { path?: string }]> = [
+      ["/info/refs", { path: undefined }],
+      ["/info/refs/info/refs", { path: "info/refs" }],
+      ["/test/info/refs", { path: "test" }],
+      ["/path/to/repo/info/refs", { path: "path/to/repo" }],
+      ["/path/to/repo@tag/info/refs", { path: "path/to/repo@tag" }],
+      ["/path/to/another/repo/info/refs", { path: "path/to/another/repo" }],
+      ["/git-core/info/refs", { path: "git-core" }],
     ];
-    for (const path of Paths) {
-      match(path, true);
+    for (const [path, groups] of Paths) {
+      const result = lib.Advertisement.exec(path);
+      expect(result).toBeInstanceOf(Array);
+      expect(result && result.groups).toBeDefined();
+      if (!result || !result.groups) {
+        throw void 0; // Should throw before reaching here.
+      }
+      expect(result.groups).toEqual(groups);
     }
   });
 
@@ -47,13 +53,9 @@ describe("RegExp Advertisment", () => {
       "/git-sideload-pack",
     ];
     for (const path of Paths) {
-      match(path, false);
+      expect(lib.Advertisement.test(path)).toBe(false);
     }
   });
-
-  function match(path: string, result: boolean): void | never {
-    expect(lib.Advertisement.test(path)).toBe(result);
-  }
 });
 
 describe("RegExp DirectUse", () => {
@@ -62,25 +64,31 @@ describe("RegExp DirectUse", () => {
    * "/git-".
    */
   test("should match all paths starting with a forward slash and ending with '/git-(?<service>{1,20})'", () => {
-    const Paths = [
-      "/git-service",
-      "/git-core",
-      "/git-upload-pack",
-      "/git-download-pack",
-      "/git-sideload-pack",
-      "/path/to/repo/git-service",
-      "/path/to/repo/git-core",
-      "/path/to/repo/git-upload-pack",
-      "/path/to/repo/git-download-pack",
-      "/path/to/repo/git-sideload-pack",
-      "/path/to/repo@tag/git-service",
-      "/path/to/repo@tag/git-core",
-      "/path/to/repo@tag/git-upload-pack",
-      "/path/to/repo@tag/git-download-pack",
-      "/path/to/repo@tag/git-sideload-pack",
+    const Paths: Array<[string, { path?: string; service?: string }]> = [
+      ["/git-service", { path: undefined, service: "service" }],
+      ["/git-core", { path: undefined, service: "core" }],
+      ["/git-upload-pack", { path: undefined, service: "upload-pack" }],
+      ["/git-download-pack", { path: undefined, service: "download-pack" }],
+      ["/git-sideload-pack", { path: undefined, service: "sideload-pack" }],
+      ["/path/to/repo/git-service", { path: "path/to/repo", service: "service" }],
+      ["/path/to/repo/git-core", { path: "path/to/repo", service: "core" }],
+      ["/path/to/repo/git-upload-pack", { path: "path/to/repo", service: "upload-pack" }],
+      ["/path/to/repo/git-download-pack", { path: "path/to/repo", service: "download-pack" }],
+      ["/path/to/repo/git-sideload-pack", { path: "path/to/repo", service: "sideload-pack" }],
+      ["/path/to/repo@tag/git-service", { path: "path/to/repo@tag", service: "service" }],
+      ["/path/to/repo@tag/git-core", { path: "path/to/repo@tag", service: "core" }],
+      ["/path/to/repo@tag/git-upload-pack", { path: "path/to/repo@tag", service: "upload-pack" }],
+      ["/path/to/repo@tag/git-download-pack", { path: "path/to/repo@tag", service: "download-pack" }],
+      ["/path/to/repo@tag/git-sideload-pack", { path: "path/to/repo@tag", service: "sideload-pack" }],
     ];
-    for (const path of Paths) {
-      match(path, true);
+    for (const [url, groups] of Paths) {
+      const result = lib.DirectUse.exec(url);
+      expect(result).toBeInstanceOf(Array);
+      expect(result && result.groups).toBeDefined();
+      if (!result || !result.groups) {
+        throw void 0; // Should throw before reaching here.
+      }
+      expect(result.groups).toEqual(groups);
     }
   });
 
@@ -118,13 +126,9 @@ describe("RegExp DirectUse", () => {
       "/info/refs",
     ];
     for (const path of Paths) {
-      match(path, false);
+      expect(lib.DirectUse.test(path)).toBe(false);
     }
   });
-
-  function match(path: string, result: boolean): void | never {
-    expect(lib.DirectUse.test(path)).toBe(result);
-  }
 });
 
 describe("RegExp ServiceName", () => {
@@ -133,15 +137,21 @@ describe("RegExp ServiceName", () => {
    * "git-".
    */
   test("should match all strings matching 'git-(?<service>{1,20})'", () => {
-    const Paths = [
-      "git-service",
-      "git-core",
-      "git-upload-pack",
-      "git-download-pack",
-      "git-sideload-pack",
+    const Paths: Array<[string, { service: string }]> = [
+      ["git-service", { service: "service" }],
+      ["git-core", { service: "core" }],
+      ["git-upload-pack", { service: "upload-pack" }],
+      ["git-download-pack", { service: "download-pack" }],
+      ["git-sideload-pack", { service: "sideload-pack" }],
     ];
-    for (const path of Paths) {
-      match(path, true);
+    for (const [parameter, groups] of Paths) {
+      const result = lib.ServiceName.exec(parameter);
+      expect(result).toBeInstanceOf(Array);
+      expect(result && result.groups).toBeDefined();
+      if (!result || !result.groups) {
+        throw void 0; // Should throw before reaching here.
+      }
+      expect(result.groups).toEqual(groups);
     }
   });
 
@@ -238,7 +248,7 @@ describe("function inferValues()", () => {
       "git%SERVICE%",
       "git-%SERVICE%",
     ];
-    for (const {content_type, input, inputPath, method, outputPath, service, url} of iterateIn(Paths)) {
+    for (const { content_type, input, inputPath, method, outputPath, service, url } of iterateIn(Paths)) {
       const methodIsGET = method === "GET" || method === "HEAD";
       const methodIsPOST = method === "POST";
       const urlContainsService = lib.ServiceName.test(url && url.searchParams.get("service") || "");
@@ -356,7 +366,7 @@ describe("function inferValues()", () => {
     "application/x-git-receive-pack-request",
   ]);
 
-  function * iterateIn(array: string[]): IterableIterator<{
+  function* iterateIn(array: string[]): IterableIterator<{
     content_type?: string | undefined | null;
     input: ArgumentsType<typeof lib.inferValues>;
     inputPath?: string;
@@ -371,7 +381,7 @@ describe("function inferValues()", () => {
     // Track paths, to hinder multiple iterations over same path.
     const TakenPaths = new Set<string>();
     for (const method of lib.AllowedMethods) {
-      for (const service of Object.values({ a: undefined, ...Service})) {
+      for (const service of Object.values({ a: undefined, ...Service })) {
         if (checkEnum(service, Service) || service === undefined) {
           for (let ending of Endings) {
             // Fill service or skip ending path
@@ -547,26 +557,26 @@ describe("function createReadable()", () => {
       expect(readable).toBeInstanceOf(Readable);
     }).not.toThrow();
     expect(() => {
-      async function *gen(): AsyncIterableIterator<Uint8Array> { return; }
+      async function* gen(): AsyncIterableIterator<Uint8Array> { return; }
       const readable = lib.createReadable(gen());
       expect(readable).toBeInstanceOf(Readable);
     }).not.toThrow();
   });
 
-  test("should iterate all values provided by iterator", async() => {
+  test("should iterate all values provided by iterator", async () => {
     const array = new Uint8Array([48, 48, 48, 48]);
-    async function *generator(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array([48, 48, 48, 48]); }
+    async function* generator(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array([48, 48, 48, 48]); }
     const readable = lib.createReadable(generator());
     let count = 0;
     await new Promise((resolve, reject) => {
-        const writable = new Writable({
-          write(buffer: Buffer) {
-            count += 1;
-            expect(new Uint8Array(buffer.buffer)).toEqual(array);
-          },
-          decodeStrings: false,
-        });
-        readable.on("error", reject).on("end", resolve).pipe(writable);
+      const writable = new Writable({
+        write(buffer: Buffer) {
+          count += 1;
+          expect(new Uint8Array(buffer.buffer)).toEqual(array);
+        },
+        decodeStrings: false,
+      });
+      readable.on("error", reject).on("end", resolve).pipe(writable);
     });
     expect(count).toBe(1);
   });
@@ -579,12 +589,12 @@ describe("function createAsyncIterator()", () => {
     expect(it).toBe(it[Symbol.asyncIterator]());
   });
 
-  test("should work for `undefined` and `null`", async () =>  Promise.all<any>([
+  test("should work for `undefined` and `null`", async () => Promise.all<any>([
     expect(iterateValues([undefined], () => { throw new Error("Should not throw here."); })).resolves.toBeUndefined(),
     expect(iterateValues([null], () => { throw new Error("Should not throw here."); })).resolves.toBeUndefined(),
   ]));
 
-  test("should work for `Uint8Array` and promise-likes leading to `Uint8Array`", async() => Promise.all<any>([
+  test("should work for `Uint8Array` and promise-likes leading to `Uint8Array`", async () => Promise.all<any>([
     expect(iterateValues(
       [new Uint8Array([49, 50, 51])],
       (a) => expect(a).toEqual(new Uint8Array([49, 50, 51])),
@@ -599,8 +609,8 @@ describe("function createAsyncIterator()", () => {
     )).resolves.toBeUndefined(),
   ]));
 
-  test("should work for `Iterable<Uint8Array>`, `IterableIterator<Uint8Array>``", async() => {
-    function *gen(): IterableIterator<Uint8Array> { yield new Uint8Array([61, 62, 63]); }
+  test("should work for `Iterable<Uint8Array>`, `IterableIterator<Uint8Array>``", async () => {
+    function* gen(): IterableIterator<Uint8Array> { yield new Uint8Array([61, 62, 63]); }
     return Promise.all<any>([
       expect(iterateValues(
         [{ *[Symbol.iterator]() { yield new Uint8Array([58, 59, 60]); } }],
@@ -613,8 +623,8 @@ describe("function createAsyncIterator()", () => {
     ]);
   });
 
-  test("should work for `AsyncIterable<Uint8Array>`, `AsyncIterableIterator<Uint8Array>``", async() => {
-    async function *gen(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array([61, 62, 63]); }
+  test("should work for `AsyncIterable<Uint8Array>`, `AsyncIterableIterator<Uint8Array>``", async () => {
+    async function* gen(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array([61, 62, 63]); }
     return Promise.all<any>([
       expect(iterateValues(
         [{ async *[Symbol.asyncIterator]() { yield new Uint8Array([58, 59, 60]); } }],
@@ -661,7 +671,7 @@ describe("function createAsyncIterator()", () => {
     args: ArgumentsType<typeof lib.createAsyncIterator>,
     fn: (value: AsyncIterableIteratorType<typeof lib.createAsyncIterator>) => any,
   ): Promise<void | never> {
-    for await(const _ of lib.createAsyncIterator(...args)) {
+    for await (const _ of lib.createAsyncIterator(...args)) {
       fn(_);
     }
   }
@@ -676,10 +686,10 @@ describe("function addHeaderToIterable()", () => {
     expect(() => lib.addHeaderToIterable(Service.UploadPack, undefined as any)).toThrow();
   });
 
-  test("should not add anything if given iterable does not iterate anything", async() => {
-    async function *it(): AsyncIterableIterator<Uint8Array> { return; }
-    await Promise.all(Object.values(Service).filter((s): s is Service => checkEnum(s, Service)).map(async(service) =>
-      expect((async() => {
+  test("should not add anything if given iterable does not iterate anything", async () => {
+    async function* it(): AsyncIterableIterator<Uint8Array> { return; }
+    await Promise.all(Object.values(Service).filter((s): s is Service => checkEnum(s, Service)).map(async (service) =>
+      expect((async () => {
         const itWithNoHeader = lib.addHeaderToIterable(service, it());
         let count = 0;
         for await (const _ of itWithNoHeader) {
@@ -691,10 +701,10 @@ describe("function addHeaderToIterable()", () => {
     ));
   });
 
-  test("should add a header if given iterable iterates, but the first value does not start with a header", async() => {
-    async function *it(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array([48, 48, 48, 48]); }
-    await Promise.all(Object.values(Service).filter((s): s is Service => checkEnum(s, Service)).map(async(service) =>
-      expect((async() => {
+  test("should add a header if given iterable iterates, but the first value does not start with a header", async () => {
+    async function* it(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array([48, 48, 48, 48]); }
+    await Promise.all(Object.values(Service).filter((s): s is Service => checkEnum(s, Service)).map(async (service) =>
+      expect((async () => {
         const itWithNoHeader = lib.addHeaderToIterable(service, it());
         let count = 0;
         const header = lib.ServiceHeaders[service];
@@ -712,13 +722,13 @@ describe("function addHeaderToIterable()", () => {
     ));
   });
 
-  test("should not add a header if given iterable iterates and the first value starts with a header", async() => {
-    await Promise.all<any>(Object.values(Service).filter((s): s is Service => checkEnum(s, Service)).map(async(service) => {
+  test("should not add a header if given iterable iterates and the first value starts with a header", async () => {
+    await Promise.all<any>(Object.values(Service).filter((s): s is Service => checkEnum(s, Service)).map(async (service) => {
       const header = lib.ServiceHeaders[service];
-      async function *it1(): AsyncIterableIterator<Uint8Array> { yield concat([header, new Uint8Array([48, 48, 48, 48])]); }
-      async function *it2(): AsyncIterableIterator<Uint8Array> { yield header; yield new Uint8Array([48, 48, 48, 48]); }
+      async function* it1(): AsyncIterableIterator<Uint8Array> { yield concat([header, new Uint8Array([48, 48, 48, 48])]); }
+      async function* it2(): AsyncIterableIterator<Uint8Array> { yield header; yield new Uint8Array([48, 48, 48, 48]); }
       return Promise.all<any>([
-        expect((async() => {
+        expect((async () => {
           const itWithNoHeader = lib.addHeaderToIterable(service, it1());
           let count = 0;
           for await (const value of itWithNoHeader) {
@@ -729,7 +739,7 @@ describe("function addHeaderToIterable()", () => {
           }
           expect(count).toBe(1);
         })()).resolves.toBeUndefined(),
-        expect((async() => {
+        expect((async () => {
           const itWithNoHeader = lib.addHeaderToIterable(service, it2());
           let count = 0;
           for await (const value of itWithNoHeader) {
@@ -749,17 +759,17 @@ describe("function addHeaderToIterable()", () => {
 });
 
 describe("function addMessagesToIterable()", () => {
-  test("iterate all values from the two input sources", async() => {
+  test("iterate all values from the two input sources", async () => {
     const it = lib.addMessagesToIterable(messages(), iterableStream());
 
-    function *messages(): IterableIterator<Uint8Array> {
+    function* messages(): IterableIterator<Uint8Array> {
       yield new Uint8Array([48, 48, 48, 52]);
     }
-    async function *iterableStream(): AsyncIterableIterator<Uint8Array> {
+    async function* iterableStream(): AsyncIterableIterator<Uint8Array> {
       yield new Uint8Array([48, 48, 48, 48]);
     }
     let i = 0;
-    for await(const uint of it) {
+    for await (const uint of it) {
       switch ((i += 1)) {
         case 1:
           expect(compare(uint, new Uint8Array([48, 48, 48, 52])));

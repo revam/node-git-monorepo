@@ -54,7 +54,6 @@ const options: RollupOptions = {
           "changelog.md",
           "license.txt",
           "readme.md",
-          ["dist/tsdoc-metadata.json", "tsdoc-metadata.json"],
         ],
       },
       package: {

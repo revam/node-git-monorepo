@@ -11,10 +11,12 @@ import { ReadableSignal } from 'micro-signals';
 // @public @sealed
 export class BasicController extends LogicController implements ServiceController {
     constructor(options?: BasicControllerOptions);
+    static from(raw?: string | ServiceController | BasicControllerOptions): ServiceController;
 }
 
 // @public
 export interface BasicControllerOptions extends LogicControllerOptions, FetchControllerOptions {
+    configure?(controller: BasicController): void;
 }
 
 // @public (undocumented)

@@ -1,6 +1,5 @@
 import common, { readPackage } from "@revam/rollup-plugin-common";
 import { OutputOptions, RollupOptions } from "rollup";
-import replace from "rollup-plugin-re";
 
 interface SimplePackageJson {
   name: string;
@@ -23,31 +22,15 @@ const output: OutputOptions[] = [
   },
 ];
 
+const Variables = {
+  user_agent: `'${pkg.name}'/${pkg.version} (+${pkg.homepage})`,
+};
+
 const options: RollupOptions = {
   external: ["database-query"],
   input: "dist/build/main.js",
   output: output as any,
   plugins: [
-    replace({
-      patterns: [
-        {
-          replace: `'${pkg.name}'/${pkg.version} (+${pkg.homepage})`,
-          test: /<% user_agent %>/g,
-        },
-      ],
-    }),
-    replace({
-      patterns: [{
-        replace: "const $1 = Object.create(null);\n$2",
-        test: /var (\w+);\n\(function \(\1\) {\n([^}]+)\n}\)\(\1 \|\| \(\1 = {}\)\);/g,
-      }],
-    }),
-    replace({
-      patterns: [{
-        replace: "$1.$2 = $3;",
-        test: /[ \t]+(\w+)\["([^"]+)"\] = ("[^"]+");/g,
-      }],
-    }),
     common({
       copyFiles: {
         files: [
@@ -97,8 +80,48 @@ const options: RollupOptions = {
           "version",
         ],
       },
+      replace: {
+        patterns: [
+          // Remove templating of const enumerables (const enum)
+          {
+            regex: /\${(?:"([^"]*)"|(\d+))}/,
+            replace: "$1$2",
+          },
+          // Load variables from environment variables or default values.
+          {
+            regex: /<% (\b\w+(?:(?:\b\.(\w+|"[^\"]+"))+)?\b) %>/g,
+            replace(match) {
+              const target = match[1];
+              if (target) {
+                if (target in process.env) {
+                  return process.env[target]!;
+                }
+                // FIXME: split and tranverse keys
+                if (target in Variables) {
+                  return Variables[target];
+                }
+              }
+              // NOTE: Maybe throw instead?
+              return "";
+            },
+          },
+          {
+            regex: /var (\w+);\n\(function \(\1\) {\n([^}]+)\n}\)\(\1 \|\| \(\1 = {}\)\);/g,
+            replace: "const $1 = Object.create(null);\n$2",
+          },
+        ],
+      },
       useBanner: true,
-      verbose: true,
+    }),
+    common({
+      replace: {
+        patterns: [
+          {
+            regex: /[ \t]+(\w+)\["([^"]+)"\] = ("[^"]+");/g,
+            replace: "$1.$2 = $3;",
+          },
+        ],
+      },
     }),
   ],
 };

@@ -1,6 +1,7 @@
 
 import { ChildProcess } from "child_process";
 import { stat as STAT } from "fs";
+import { join } from "path";
 import { Readable } from "stream";
 import { promisify } from "util";
 import { Service } from "./enum";
@@ -34,7 +35,7 @@ export function defaultTail(service: Service, advertise: boolean) {
 }
 
 export async function fsStatusCode(path?: string): Promise<200 | 404 | 403> {
-  return !path ? 404 : stat(path).then((s) => s.isDirectory() ? 200 : 404, (e) => e && e.code === "EACCES" ? 403 : 404);
+  return !path ? 404 : stat(join(path, "HEAD")).then((s) => s.isFile() ? 200 : 404, (e) => e && e.code === "EACCES" ? 403 : 404);
 }
 
 export function hasHttpsProtocol(uriOrPath?: string | undefined | null): boolean {

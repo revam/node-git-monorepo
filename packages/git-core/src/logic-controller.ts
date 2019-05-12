@@ -163,9 +163,9 @@ export class LogicController implements ServiceController {
             await this[SymbolOnUsable].dispatchAsync(context, instance);
             break;
 
-          // Return early if no service or path is available.
+          // Return early if no service is available.
           case 1:
-            if (context.service === undefined || context.path === undefined) {
+            if (context.service === undefined) {
               this.__failure(context, this.checkForPrivacy(400)); // 400 Bad Request
             }
             break;

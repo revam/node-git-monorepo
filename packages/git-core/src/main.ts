@@ -54,7 +54,7 @@ export interface ServiceController {
    *
    * A gernal outline may be to check if the
    * {@link Context.service | service} is enabled for the
-   * {@link Context.path | given path}.
+   * {@link Context.pathname | given path}.
    *
    * @param context - The {@link Context | context} to evaluate.
    * @returns True if service is enabled for requested repository, otherwise

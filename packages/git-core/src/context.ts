@@ -56,7 +56,7 @@ export class Context implements Response {
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
     headers: Headers | Record<string, string>,
     advertisement: boolean,
-    path?: string,
+    pathname?: string,
     service?: Service,
   );
   public constructor(
@@ -65,7 +65,7 @@ export class Context implements Response {
     body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
     headers?: Headers | Record<string, string>,
     advertisement?: boolean,
-    path?: string,
+    pathname?: string,
     service?: Service,
   );
   public constructor(...rest: [
@@ -100,9 +100,9 @@ export class Context implements Response {
     if (typeof advertisement !== "boolean") {
       throw new TypeError("argument `advertisement`must be of type 'boolean'.");
     }
-    let path = rest.length >= 6 ? rest[5] : undefined;
-    if (!(path === undefined || typeof path === "string")) {
-      throw new TypeError("argument `path` must be undefined or of type 'string'.");
+    let pathname = rest.length >= 6 ? rest[5] : undefined;
+    if (!(pathname === undefined || typeof pathname === "string")) {
+      throw new TypeError("argument `pathname` must be undefined or of type 'string'.");
     }
     let service = rest.length >= 7 ? rest[6] : undefined;
     if (!(service === undefined || typeof service === "string" && checkEnum(service, Service))) {
@@ -110,7 +110,7 @@ export class Context implements Response {
     }
     // Advertisement, path and service is inferred if none of them is supplied.
     if (rest.length < 5) {
-      [advertisement, path, service] = inferValues(url, method, headers.get("Content-Type"));
+      [advertisement, pathname, service] = inferValues(url, method, headers.get("Content-Type"));
     }
     // Set some properties early.
     this.__capabilities = new Map();
@@ -124,7 +124,8 @@ export class Context implements Response {
     // Set properties.
     this.__messages = [];
     this.advertisement = advertisement;
-    this.path = path;
+    // Ensure pathname is set.
+    this.pathname = pathname || "";
     this.readable = Object.freeze({
       request: (): Readable => createReadable(this.request.body),
       response: (): Readable => createReadable(this.toAsyncIterator()),
@@ -314,15 +315,15 @@ export class Context implements Response {
   public readonly advertisement: boolean;
 
   /**
-   * Requested resource path.
+   * Requested project path.
    *
    * @remarks
    *
-   * If `path` was not supplied to {@link Context | constructor} or could not
-   * be infered from the preceding arguments, then its value is set to
+   * If `pathname` was not supplied to {@link (Context:class) | constructor} or
+   * could not be infered from the preceding arguments, then its value is set to
    * `undefined`.
    */
-  public path: string | undefined;
+  public pathname: string;
 
   /**
    * Requester want to use {@link Service | service}.

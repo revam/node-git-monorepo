@@ -51,8 +51,8 @@ export class Context implements Response {
     constructor(url: string, method: string);
     constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>);
     constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>);
-    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>, advertisement: boolean, path?: string, service?: Service);
-    constructor(url?: string, method?: string, body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers?: Headers | Record<string, string>, advertisement?: boolean, path?: string, service?: Service);
+    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>, advertisement: boolean, pathname?: string, service?: Service);
+    constructor(url?: string, method?: string, body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers?: Headers | Record<string, string>, advertisement?: boolean, pathname?: string, service?: Service);
     addError(errorMessage: string): void;
     addMessage(message: string): void;
     readonly advertisement: boolean;
@@ -63,8 +63,8 @@ export class Context implements Response {
     initialise(): Promise<void>;
     readonly isInitialised: boolean;
     length: number | undefined;
-    readonly method: "HEAD" | "GET" | "OPTIONS" | "PATCH" | "POST" | "PUT";
-    path: string | undefined;
+    readonly method: "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
+    pathname: string;
     readonly readable: {
         request(): Readable;
         response(): Readable;

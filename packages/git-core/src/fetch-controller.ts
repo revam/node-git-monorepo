@@ -220,7 +220,7 @@ export class FetchController implements ServiceController {
    */
   public async checkIfEnabled(context: Context): Promise<boolean> {
     if (context.service) {
-      const { isValid, isRemote, path } = this.preparePath(context.path);
+      const { isValid, isRemote, path } = this.preparePath(context.pathname);
       if (isValid) {
         return isRemote ? this.checkHTTPIfEnabled(path, context.service) : this.checkFSIfEnabled(path, context.service);
       }
@@ -264,7 +264,7 @@ export class FetchController implements ServiceController {
    * {@inheritdoc ServiceController.checkIfExists}
    */
   public async checkIfExists(context: Context): Promise<boolean> {
-    const { isValid, isRemote, path } = this.preparePath(context.path);
+    const { isValid, isRemote, path } = this.preparePath(context.pathname);
     if (isValid) {
       return isRemote ? this.checkHTTPIfExists(path) : this.checkFSIfExists(path);
     }
@@ -300,7 +300,7 @@ export class FetchController implements ServiceController {
    */
   public async serve(context: Context): Promise<void> {
     if (context.service) {
-      const { isValid, isRemote, path } = this.preparePath(context.path);
+      const { isValid, isRemote, path } = this.preparePath(context.pathname);
       if (isValid) {
         return isRemote ? this.serveHTTP(context, path) : this.serveFS(context, path);
       }
@@ -407,8 +407,9 @@ export interface FetchControllerOptions {
    */
   remoteTail?(service: Service, advertise: boolean): string;
   /**
-   * Validates {@link Context.path | path} successfully when it is an empty
-   * string while {@link FetchControllerOptions.origin | origin} is also set.
+   * Validates {@link Context.pathname | pathname} successfully when it is an
+   * empty string while {@link FetchControllerOptions.origin | origin} is also
+   * set.
    *
    * @defaultValue false
    */

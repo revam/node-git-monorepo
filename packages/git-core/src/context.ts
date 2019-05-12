@@ -112,6 +112,9 @@ export class Context implements Response {
     if (rest.length < 5) {
       [advertisement, path, service] = inferValues(url, method, headers.get("Content-Type"));
     }
+    // Set some properties early.
+    this.__capabilities = new Map();
+    this.__commands = [];
     // Read and analyse packets if we have a valid service and requester does **not** want advertisement.
     if (service && !advertisement) {
       body = readPackets(body, ServiceReaders[service](this.__capabilities, this.__commands));
@@ -119,8 +122,6 @@ export class Context implements Response {
       this[SymbolPromise] = body.next().then(() => { delete this[SymbolPromise]; });
     }
     // Set properties.
-    this.__capabilities = new Map();
-    this.__commands = [];
     this.__messages = [];
     this.advertisement = advertisement;
     this.path = path;

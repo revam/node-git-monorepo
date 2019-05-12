@@ -123,7 +123,7 @@ export class LogicController implements ServiceController {
    * @param middleware - Middleware to use.
    */
   public use(...middleware: Middleware[]): this {
-    middleware.forEach((m) => this.onUsable.add(m));
+    middleware.forEach((m) => this[SymbolOnUsable].add(m));
     return this;
   }
 

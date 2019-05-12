@@ -1,14 +1,7 @@
 import { STATUS_CODES } from "http";
 import { ReadableSignal } from "micro-signals";
 import { Context } from "./context";
-import {
-  callWithInstance,
-  checkIfPending,
-  checkStatus,
-  CompleteSignal,
-  updateStatus,
-  UsableSignal,
-} from "./logic-controller.private";
+import { CompleteSignal, UsableSignal } from "./logic-controller.private";
 import { ServiceController } from "./main";
 import { checkServiceController } from "./main.private";
 import { encode } from "./util/buffer";
@@ -59,6 +52,17 @@ export class LogicController implements ServiceController {
    * {@link MethodOverrides | method-override declarations}.
    */
   private readonly [SymbolPrivate]: { controller: ServiceController; methods?: MethodOverrides };
+
+  /**
+   * Symbol used to check if {@link Context} has been previously served.
+   */
+  private readonly __symbolCheck: symbol;
+
+  /**
+   * Symbol used to store {@link LogicControllerInstance} within
+   * {@link Context.state}.
+   */
+  private readonly __symbolInstance: symbol;
 
   /**
    * {@inheritdoc LogicControllerOptions.privacyMode}
@@ -114,6 +118,8 @@ export class LogicController implements ServiceController {
     this.onUsable = this[SymbolOnUsable].readOnly();
     this[SymbolPrivate] = { controller: upstream, methods: overrides };
     this.privacyMode = privacyMode;
+    this.__symbolCheck = Symbol("logic controller check");
+    this.__symbolInstance = Symbol("logic controller instance");
   }
 
   /**
@@ -147,58 +153,68 @@ export class LogicController implements ServiceController {
    * @param context - {@link Context} to use.
    */
   public async serve(context: Context): Promise<void> {
-    if (!context.isInitialised) {
-      await context.initialise();
-    }
-    if (checkIfPending(context)) {
+    if (this.checkIfPending(context)) {
       let step = 0;
-      do {
-        switch (step++) { // tslint:disable-line:increment-decrement
-          // Dispatch context to all observers of `LogicController.onUsable`.
-          case 0:
-            // Store/retrive instance from context.state under private symbol.
-            const instance = SymbolPrivate in context.state ?
-              context.state[SymbolPrivate as any] as LogicControllerInstance :
-              context.state[SymbolPrivate as any] = new LogicControllerInstance(this, context);
-            await this[SymbolOnUsable].dispatchAsync(context, instance);
-            break;
+      try {
+        do {
+          switch (step++) { // tslint:disable-line:increment-decrement
+            // Dispatch context to all observers of `LogicController.onUsable`.
+            case 0:
+              const signal = this[SymbolOnUsable];
+              if (signal.isUsable) {
+                await this[SymbolOnUsable].dispatchAsync(context, this, this.__findInstance(context));
+              }
+              break;
 
-          // Return early if no service is available.
-          case 1:
-            if (context.service === undefined) {
-              this.__failure(context, this.checkForPrivacy(400)); // 400 Bad Request
-            }
-            break;
+            // Return early if no service is available.
+            case 1:
+              if (context.service === undefined) {
+                this.__failure(context, this.checkForPrivacy(400)); // 400 Bad Request
+              }
+              break;
 
-          // Check if requested repository exists
-          case 2:
-            if (!(this.checkIfDisabled("checkIfExists") || await this.checkIfExists(context))) {
-              this.reject(context, 404); // 404 Not Found
-            }
-            break;
+            case 2:
+            // Wait till initialised before continuing.
+              if (!context.isInitialised) {
+                await context.initialise(); // May throw on invalid packet in body
+              }
 
-          // Check if service is enabled
-          case 3:
-            if (!(this.checkIfDisabled("checkIfEnabled") || await this.checkIfEnabled(context))) {
-              this.reject(context, this.checkForPrivacy(403)); // 403 Forbidden
-            }
-            break;
+            // Check if repository exists
+              // It is done like this to keep it sync when possible.
+              if (!(this.checkIfDisabled("checkIfExists") || await this.checkIfExists(context))) {
+                this.reject(context, 404); // 404 Not Found
+              }
+              break;
 
-          // Check for authenctication and/or authorization
-          case 4:
-            if (!(this.checkIfDisabled("checkForAuth") || await this.checkForAuth(context))) {
-              this.reject(context, this.checkForPrivacy(401)); // 401 Unauthorized
-            }
-            break;
+            // Check if service is enabled
+            case 3:
+              if (!(this.checkIfDisabled("checkIfEnabled") || await this.checkIfEnabled(context))) {
+                this.reject(context, this.checkForPrivacy(403)); // 403 Forbidden
+              }
+              break;
 
-          // Accept and serve request from context
-          case 5:
-            await this.accept(context); // xxx Unknown
+            // Check for authenctication and/or authorization
+            case 4:
+              if (!(this.checkIfDisabled("checkForAuth") || await this.checkForAuth(context))) {
+                this.reject(context, this.checkForPrivacy(401)); // 401 Unauthorized
+              }
+              break;
+
+            // Serve request from upstream
+            case 5:
+              await this.accept(context); // xxx Unknown
+          }
+        // Check status between each step because an async interaction MAY have changed it.
+        } while (this.checkIfPending(context));
+      }
+      // ALLWAYS dispatch on complete (when request have not previously been served by a controller).
+      finally {
+        const signal = this[SymbolOnComplete];
+        if (signal.isUsable) {
+          // Dispatch context to all observers of `LogicController.onComplete`.
+          await signal.dispatchAsync(context);
         }
-      // Check status between each step because an async interaction MAY have changed it.
-      } while (checkIfPending(context));
-      // Dispatch context to all observers of `LogicController.onComplete`.
-      await this[SymbolOnComplete].dispatchAsync(context);
+      }
     }
   }
 
@@ -215,10 +231,10 @@ export class LogicController implements ServiceController {
    * @param context - {@link Context} to use.
    */
   public async accept(context: Context): Promise<void> {
-    if (!checkIfPending(context)) {
+    if (!this.checkIfPending(context)) {
       return;
     }
-    updateStatus(context, LogicController.Status.Accepted);
+    this.__updateStatus(context, LogicController.Status.Accepted);
     try {
       await this[SymbolPrivate].controller.serve(context);
     } catch (error) {
@@ -248,10 +264,10 @@ export class LogicController implements ServiceController {
    * @param reason - Reason for rejection.
    */
   public reject(context: Context, statusCode?: number, reason?: string): void {
-    if (!checkIfPending(context)) {
+    if (!this.checkIfPending(context)) {
       return;
     }
-    updateStatus(context, LogicController.Status.Rejected);
+    this.__updateStatus(context, LogicController.Status.Rejected);
     this.__reject(context, statusCode, reason);
   }
 
@@ -297,10 +313,10 @@ export class LogicController implements ServiceController {
    */
   public redirect(context: Context, locationOrStatus?: string | number, statusCode?: number): void;
   public redirect(context: Context, location?: string | number, statusCode?: number): void {
-    if (!checkIfPending(context)) {
+    if (!this.checkIfPending(context)) {
       return;
     }
-    updateStatus(context, LogicController.Status.Redirect);
+    this.__updateStatus(context, LogicController.Status.Redirect);
     if (typeof location === "number") {
       statusCode = location;
       location = undefined;
@@ -338,10 +354,10 @@ export class LogicController implements ServiceController {
    * @param context - {@link Context} to mark.
    */
   public setCustom(context: Context): void {
-    if (!checkIfPending(context)) {
+    if (!this.checkIfPending(context)) {
       return;
     }
-    updateStatus(context, LogicController.Status.Custom);
+    this.__updateStatus(context, LogicController.Status.Custom);
   }
 
   // tslint:disable:promise-function-async
@@ -380,7 +396,7 @@ export class LogicController implements ServiceController {
    * @param reason - Reason for failure.
    */
   private __failure(context: Context, statusCode?: number, reason?: string): void {
-    updateStatus(context, LogicController.Status.Failure);
+    this.__updateStatus(context, LogicController.Status.Failure);
     context.body = undefined;
     this.__reject(context, statusCode, reason);
   }
@@ -468,10 +484,8 @@ export class LogicController implements ServiceController {
     }
     if (fnOrValue) {
       // Store/retrive instance from context.state under private symbol.
-      const instance = SymbolPrivate in context.state ?
-        context.state[SymbolPrivate as any] as LogicControllerInstance :
-        context.state[SymbolPrivate as any] = new LogicControllerInstance(this, context);
-      const result = await callWithInstance(fnOrValue, context, instance);
+      const instance = this.__findInstance(context);
+      const result = await fnOrValue.call(instance, context);
       if (typeof result === "boolean") {
         return result;
       }
@@ -487,12 +501,44 @@ export class LogicController implements ServiceController {
   }
 
   /**
+   * Create or find an instance for `context`.
+   * @param context - {@link (Context:class) | Context} to find instance for.
+   */
+  private __findInstance(context: Context): LogicControllerInstance {
+    return this.__symbolInstance in context.state ?
+      context.state[this.__symbolInstance as any]
+    : context.state[this.__symbolInstance as any] = new LogicControllerInstance(this, context);
+  }
+
+  /**
+   * Check if `context` is still pending or has been used.
+   *
+   * @param context - {@link (Context:class) | Context} to check.
+   */
+  public checkIfPending(context: Context): boolean {
+    return !(this.__symbolCheck in context.state);
+  }
+
+  /**
    * Check {@link (LogicController:namespace).Status | status} for `context`.
    *
    * @param context - {@link (Context:class) | Context} to use.
    */
-  public static checkStatus(context: Context): LogicController.Status {
-    return checkStatus(context);
+  public checkStatus(context: Context): LogicController.Status {
+    return this.__symbolCheck in context.state ? context.state[this.__symbolCheck as any] : LogicController.Status.None;
+  }
+
+  /**
+   * Update {@link (LogicController:namespace).Status | status} in
+   * {@link (Context:class).state}.
+   *
+   * @remarks
+   *
+   * We can only set status once, except for failures, which can be
+   * set at any time.
+   */
+  private __updateStatus(context: Context, status: LogicController.Status): void {
+    context.state[this.__symbolCheck as any] = status;
   }
 }
 

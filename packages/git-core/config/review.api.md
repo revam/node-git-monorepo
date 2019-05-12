@@ -117,7 +117,8 @@ export class LogicController implements ServiceController {
     checkForAuth(context: Context): Promise<boolean>;
     checkIfEnabled(context: Context): Promise<boolean>;
     checkIfExists(context: Context): Promise<boolean>;
-    static checkStatus(context: Context): LogicController.Status;
+    checkIfPending(context: Context): boolean;
+    checkStatus(context: Context): LogicController.Status;
     readonly onComplete: ReadableSignal<Context>;
     readonly onUsable: ReadableSignal<Context>;
     redirect(context: Context, statusCode: 304): void;

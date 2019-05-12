@@ -31,24 +31,32 @@ export class Context implements Response {
 
   public constructor();
   public constructor(
+    ip: string,
+  );
+  public constructor(
+    ip: string,
     url: string,
   );
   public constructor(
+    ip: string,
     url: string,
     method: string,
   );
   public constructor(
+    ip: string,
     url: string,
     method: string,
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
   );
   public constructor(
+    ip: string,
     url: string,
     method: string,
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
     headers: Headers | Record<string, string>,
   );
   public constructor(
+    ip: string,
     url: string,
     method: string,
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
@@ -58,6 +66,7 @@ export class Context implements Response {
     service?: Service,
   );
   public constructor(
+    ip?: string,
     url?: string,
     method?: string,
     body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
@@ -69,6 +78,7 @@ export class Context implements Response {
   public constructor(...rest: [
     string?,
     string?,
+    string?,
     (AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>)?,
     (Headers | Record<string, string>)?,
     boolean?,
@@ -76,38 +86,44 @@ export class Context implements Response {
     Service?
   ]) {
     // tslint:disable:cyclomatic-complexity
-    // url and method must be provided at the same time.
-    const url = rest.length >= 1 ? rest[0] : "/";
+    const ip = rest.length >= 1 ? rest[0] : "127.0.0.1";
+    if (typeof ip !== "string") {
+      throw new TypeError("argument `ip` must be of type 'string'.");
+    }
+    if (!ip) {
+      throw new TypeError("argument `ip` must not be empty.");
+    }
+    const url = rest.length >= 2 ? rest[1] : "/";
     if (typeof url !== "string") {
       throw new TypeError("argument `url` must be of type 'string'.");
     }
     if (!url.length || url[0] !== "/") {
       throw new TypeError("argument `url` must start with '/'.");
     }
-    const method = rest.length >= 2 ? (rest[1] && rest[1].toUpperCase()) : "GET";
+    const method = rest.length >= 3 ? (rest[2] && rest[2].toUpperCase()) : "GET";
     if (!(typeof method === "string" && checkMethod(method))) {
       throw new TypeError("argument `method` must be one of the following HTTP verbs: GET, HEAD, PATCH, POST, PUT");
     }
-    let body = rest.length >= 3 ? asyncIterator(rest[2]) : createEmptyAsyncIterator();
-    const incomingHeaders = rest.length >= 4 ? rest[3] : {};
+    let body = rest.length >= 4 ? asyncIterator(rest[3]) : createEmptyAsyncIterator();
+    const incomingHeaders = rest.length >= 5 ? rest[4] : {};
     if (incomingHeaders === null || typeof incomingHeaders !== "object") {
       throw new TypeError("argument `headers` must be of type 'object'.");
     }
     const headers = createHeaders(incomingHeaders);
-    let advertisement = rest.length >= 5 ? rest[4] : false;
+    let advertisement = rest.length >= 6 ? rest[5] : false;
     if (typeof advertisement !== "boolean") {
       throw new TypeError("argument `advertisement`must be of type 'boolean'.");
     }
-    let pathname = rest.length >= 6 ? rest[5] : undefined;
+    let pathname = rest.length >= 7 ? rest[6] : undefined;
     if (!(pathname === undefined || typeof pathname === "string")) {
       throw new TypeError("argument `pathname` must be undefined or of type 'string'.");
     }
-    let service = rest.length >= 7 ? rest[6] : undefined;
+    let service = rest.length >= 8 ? rest[7] : undefined;
     if (!(service === undefined || typeof service === "string" && checkEnum(service, Service))) {
       throw new TypeError("argument `service` must be a value from enum Service.");
     }
     // Advertisement, path and service is inferred if none of them is supplied.
-    if (rest.length < 5) {
+    if (rest.length < 6) {
       [advertisement, pathname, service] = inferValues(url, method, headers.get("Content-Type"));
     }
     // Set some properties early.
@@ -131,6 +147,7 @@ export class Context implements Response {
     this.request = Object.freeze({
       body,
       headers,
+      ip,
       method,
       url,
     });
@@ -264,7 +281,7 @@ export class Context implements Response {
     let body = createAsyncIterator(this.body);
     // Only do the following if object is not already marked and if response
     // body, service and response "Content-Type" header is set.
-    if (checkObject(body) && this.body && this.service && this.type) {
+    if (checkObject(body) && this.service && this.body && this.type) {
       // Add header or messages to packed git stream if header "Content-Type" is
       // equal to computed value.
       const content_type = `application/x-git-${this.service}-${this.advertisement ? "advertisement" : "result"}`;
@@ -299,9 +316,9 @@ export class Context implements Response {
           this.length += messages.reduce((p, c) => p + c.length, 0);
         }
       }
-      // Mark body in case method is called multiple times.
-      markObject(body);
     }
+    // Mark body in case method is called multiple times.
+    markObject(body);
     // Replace response body with new body
     return this.body = body;
   }
@@ -571,8 +588,17 @@ export interface Request {
   headers: Headers;
   /**
    * HTTP verb used with incoming request.
+   *
+   * @remarks
+   *
+   * All other verbs not mentioned here are invalid for use with
+   * {@link Context}.
    */
   method: "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
+  /**
+   * String representation of remote IP address.
+   */
+  ip: string;
   /**
    * URL-string without origin of incoming request.
    */

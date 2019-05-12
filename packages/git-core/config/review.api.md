@@ -47,12 +47,13 @@ export interface CommandUploadPack {
 // @public
 export class Context implements Response {
     constructor();
-    constructor(url: string);
-    constructor(url: string, method: string);
-    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>);
-    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>);
-    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>, advertisement: boolean, pathname?: string, service?: Service);
-    constructor(url?: string, method?: string, body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers?: Headers | Record<string, string>, advertisement?: boolean, pathname?: string, service?: Service);
+    constructor(ip: string);
+    constructor(ip: string, url: string);
+    constructor(ip: string, url: string, method: string);
+    constructor(ip: string, url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>);
+    constructor(ip: string, url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>);
+    constructor(ip: string, url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>, advertisement: boolean, pathname?: string, service?: Service);
+    constructor(ip?: string, url?: string, method?: string, body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers?: Headers | Record<string, string>, advertisement?: boolean, pathname?: string, service?: Service);
     addError(errorMessage: string): void;
     addMessage(message: string): void;
     readonly advertisement: boolean;
@@ -182,6 +183,7 @@ export type ReadonlyCommands = ReadonlyArray<Readonly<CommandReceivePack | Comma
 export interface Request {
     body: AsyncIterableIterator<Uint8Array>;
     headers: Headers;
+    ip: string;
     method: "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
     url: string;
 }

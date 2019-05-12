@@ -1,6 +1,6 @@
 {
   "name": "@revam/git-core",
-  "description": "Core library for other git packages",
+  "description": "Framework-independent core-components for creating a git http(s) server with javascript/typescript",
   "version": "0.1.1",
   "private": true,
   "module": "./dist/build/main.js",

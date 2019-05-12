@@ -4,13 +4,11 @@ import {
   addHeaderToIterable,
   addMessagesToIterable,
   checkMethod,
-  checkObject,
   createAsyncIterator,
   createEmptyAsyncIterator,
   createHeaders,
   createReadable,
   inferValues,
-  markObject,
   ServiceReaders,
   SymbolPromise,
 } from "./context.private";
@@ -266,9 +264,9 @@ export class Context implements Response {
     let body = createAsyncIterator(this.body);
     // Only do the following if object is not already marked and if response
     // body, service and response "Content-Type" header is set.
-    if (!checkObject(body) && this.body && this.service && this.type) {
+    if (checkObject(body) && this.body && this.service && this.type) {
       // Add header or messages to packed git stream if header "Content-Type" is
-      // equal to below constant.
+      // equal to computed value.
       const content_type = `application/x-git-${this.service}-${this.advertisement ? "advertisement" : "result"}`;
       if (this.type === content_type) {
         // Add header if advertisement is expected and no header is previously
@@ -290,7 +288,7 @@ export class Context implements Response {
           }
         }
       }
-      // Or add messages if type is "text/plain".
+      // Else add messages if type is "text/plain" and messages are available.
       else if (/^text\/plain(;|$)/.test(this.type) && this.__messages.length) {
         // Consume messages by setting length to zero afterwards
         const messages = this.__messages.map(([t, m]) => `${t === PacketType.Message ? "Message" : "Error"}: ${m}\n`).map(encodeString);
@@ -301,9 +299,9 @@ export class Context implements Response {
           this.length += messages.reduce((p, c) => p + c.length, 0);
         }
       }
+      // Mark body in case method is called multiple times.
+      markObject(body);
     }
-    // Mark body in case method is called multiple times.
-    markObject(body);
     // Replace response body with new body
     return this.body = body;
   }
@@ -610,4 +608,24 @@ function asyncIterator<T>(iterable?: AsyncIterable<T> | AsyncIterableIterator<T>
     throw new TypeError("argument `iterable` must be an async iterable.");
   }
   return iterable[Symbol.asyncIterator]() as AsyncIterableIterator<T>;
+}
+
+const SymbolChecked = Symbol("checked");
+
+/**
+ * Mark object with an unique symbol.
+ *
+ * @param obj - Object to mark.
+ */
+function markObject(obj: object): void {
+  obj[SymbolChecked] = undefined;
+}
+
+/**
+ * Check object for mark from {@link markObject}.
+ *
+ * @param obj - Object to check.
+ */
+function checkObject(obj: object): boolean {
+  return !(SymbolChecked in obj);
 }

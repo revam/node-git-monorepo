@@ -104,26 +104,6 @@ export function createReadable(iterable: AsyncIterable<Uint8Array> | AsyncIterab
   });
 }
 
-const SymbolChecked = Symbol("checked");
-
-/**
- * Mark object with an unique symbol.
- *
- * @param obj - Object to mark.
- */
-export function markObject(obj: object): void {
-  obj[SymbolChecked] = undefined;
-}
-
-/**
- * Check object for mark from {@link markObject}.
- *
- * @param obj - Object to check.
- */
-export function checkObject(obj: object): boolean {
-  return SymbolChecked in obj;
-}
-
 /**
  * Create an empty async iterable iterator.
  */

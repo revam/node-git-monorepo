@@ -447,24 +447,6 @@ describe("function inferValues()", () => {
   }
 });
 
-describe("function checkObject()", () => {
-  test("should check for an unique symbol in `obj`", () => {
-    const obj = {};
-    expect(lib.checkObject(obj)).toBe(false);
-    lib.markObject(obj);
-    expect(lib.checkObject(obj)).toBe(true);
-  });
-});
-
-describe("function markObject()", () => {
-  test("should mark `obj` with an unique symbol", () => {
-    const obj = {};
-    expect(lib.checkObject(obj)).toBe(false);
-    lib.markObject(obj);
-    expect(lib.checkObject(obj)).toBe(true);
-  });
-});
-
 describe("function checkMethod()", () => {
   test("disallowed values", () => {
     const Values = new Set([

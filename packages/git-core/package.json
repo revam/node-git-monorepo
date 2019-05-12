@@ -40,6 +40,7 @@
     "jest": "^24.1.0",
     "rollup": "^1.2.3",
     "ts-jest": "^24.0.0",
+    "ts-node": "8.1.0",
     "tslint": "^5.12.1",
     "typescript": "3.4.4"
   },
@@ -49,6 +50,8 @@
     "api-extractor:rollup": "api-extractor run -c aeconfig.rollup.json",
     "build": "npm run cleanup && npm run review && npm run package",
     "cleanup": "rm -rf dist coverage",
+    "example:basic-fs-server": "ts-node examples/basic-fs-server.ts",
+    "example:github-proxy-server": "ts-node examples/github-proxy-server.ts",
     "lint": "tslint -p .",
     "package": "npm pack ./dist/package",
     "preapi-extractor": "npm run tsc:d.ts",

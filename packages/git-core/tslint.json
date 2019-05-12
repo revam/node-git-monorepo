@@ -81,8 +81,6 @@
     ],
     "one-line": [
       true,
-      "check-catch",
-      "check-finally",
       "check-whitespace",
       "check-open-brace"
     ],

@@ -1,5 +1,5 @@
 
-import { ChildProcess } from "child_process";
+import { ChildProcessWithoutNullStreams } from "child_process";
 import { stat as STAT } from "fs";
 import { join } from "path";
 import { Readable } from "stream";
@@ -58,7 +58,7 @@ export async function waitForBuffer(readable: Readable): Promise<Buffer> {
 // Based on function exec() from
 // https://github.com/Microsoft/vscode/blob/2288e7cecd10bfaa491f6e04faf0f45ffa6adfc3/extensions/git/src/git.ts
 // Copyright (c) 2017-2018 Microsoft Corporation. MIT License
-export async function waitForChild(child: ChildProcess): Promise<{ exitCode: number; stdout: Buffer; stderr: string }> {
+export async function waitForChild(child: ChildProcessWithoutNullStreams): Promise<{ exitCode: number; stdout: Buffer; stderr: string }> {
   try {
     const [exitCode, stdout, stderr] = await Promise.all([
       new Promise<number>((_, r) => child.once("error", r).once("exit", _)),

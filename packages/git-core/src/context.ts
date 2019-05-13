@@ -382,14 +382,21 @@ export class Context implements Response {
   //#region request delegation
 
   /**
-   * URL-string without origin of incoming request.
+   * {@inheritdoc Request.ip}
+   */
+  public get ip() {
+    return this.request.ip;
+  }
+
+  /**
+   * {@inheritdoc Request.url}
    */
   public get url() {
     return this.request.url;
   }
 
   /**
-   * HTTP verb used with incoming request.
+   * {@inheritdoc Request.method}
    */
   public get method() {
     return this.request.method;
@@ -439,11 +446,7 @@ export class Context implements Response {
   }
 
   /**
-   * Response body to send.
-   *
-   * @remarks
-   *
-   * See {@link Body} for possible values.
+   * {@inheritdoc Response.body}
    */
   public get body(): Body {
     return this.response.body;
@@ -453,7 +456,7 @@ export class Context implements Response {
   }
 
   /**
-   * Outgoing response headers.
+   * {@inheritdoc Response.headers}
    */
   public get headers(): Headers {
     return this.response.headers;
@@ -463,7 +466,7 @@ export class Context implements Response {
   }
 
   /**
-   * Status code for outgoing response.
+   * {@inheritdoc Response.status}
    */
   public get status(): number {
     return this.response.status;

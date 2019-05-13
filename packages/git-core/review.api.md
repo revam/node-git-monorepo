@@ -62,9 +62,10 @@ export class Context implements Response {
     commands(): Promise<ReadonlyCommands>;
     headers: Headers;
     initialise(): Promise<void>;
+    readonly ip: string;
     readonly isInitialised: boolean;
     length: number | undefined;
-    readonly method: "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
+    readonly method: "HEAD" | "GET" | "OPTIONS" | "PATCH" | "POST" | "PUT";
     pathname: string;
     readonly readable: {
         request(): Readable;

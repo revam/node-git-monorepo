@@ -158,6 +158,16 @@ export class Context implements Response {
     };
     this.service = service;
     this.state = Object.create(null);
+    // Mark properties as non-writable (i.e. read-only).
+    Object.defineProperties(this, {
+      __capabilities: { writable: false },
+      __commands: { writable: false },
+      __messages: { writable: false },
+      advertisement: { writable: false },
+      readable: { writable: false },
+      request: { writable: false },
+      service: { writable: false },
+    });
     // tslint:enable:cyclomatic-complexity
   }
 

@@ -274,7 +274,7 @@ describe("function inferValues()", () => {
   });
 
   // Some endings to combine with path
-  const Endings: ReadonlySet<string> = new Set([
+  const Endings: ReadonlyArray<string> = [
     // Depends on path
     "",
     // Invalid
@@ -347,9 +347,9 @@ describe("function inferValues()", () => {
     "/git-%SERVICE%?foo=bar",
     // Valid
     "/git-%SERVICE%?service=%SERVICE%",
-  ]);
+  ];
 
-  const ContentTypes: ReadonlySet<string | undefined | null> = new Set([
+  const ContentTypes: ReadonlyArray<string | undefined | null> = [
     undefined,
     null,
     "",
@@ -364,7 +364,7 @@ describe("function inferValues()", () => {
     "application/x-git-service-request",
     "application/x-git-upload-pack-request",
     "application/x-git-receive-pack-request",
-  ]);
+  ];
 
   function* iterateIn(array: string[]): IterableIterator<{
     content_type?: string | undefined | null;
@@ -376,58 +376,40 @@ describe("function inferValues()", () => {
     service?: Service;
     url?: URL;
   }> {
-    // Test with and without a leading forward slash (/)
-    array = array.reduce<string[]>((p, c) => p.push(c, `/${c}`) && p || p, []);
-    // Track paths, to hinder multiple iterations over same path.
-    const TakenPaths = new Set<string>();
+    // Combine endings with base paths, both with and without a leading slash.
+    const Paths = Endings.reduce<Array<[string, string]>>(
+      (a, e) => { array.forEach((p) => a.push([p, p + e], [`/${p}`, `/${p + e}`])); return a; },
+      [],
+    );
     for (const method of lib.AllowedMethods) {
       for (const service of Object.values({ a: undefined, ...Service })) {
-        if (checkEnum(service, Service) || service === undefined) {
-          for (let ending of Endings) {
-            // Fill service or skip ending path
-            if (ending.match("%SERVICE%")) {
-              if (service) {
-                ending = ending.replace("%SERVICE%", service);
-              }
-              else {
-                continue;
-              }
+        for (let [basePath, path] of Paths) {
+          // Fill service or skip path
+          if (path.match("%SERVICE%")) {
+            if (service) {
+              path = path.replace("%SERVICE%", service);
+              basePath = basePath.replace("%SERVICE%", service);
             }
-            // Emurate all base paths
-            for (let basePath of array) {
-              // Fill service or skip base path
-              if (basePath.match("%SERVICE%")) {
-                if (service) {
-                  basePath = basePath.replace("%SERVICE%", service);
-                }
-                else {
-                  continue;
-                }
-              }
-              const path = basePath + ending;
-              // Check path.
-              if (TakenPaths.has(path)) {
-                continue;
-              }
-              TakenPaths.add(path);
-              // Extract resulting path from basePath to test against result of function.
-              const outputPath = basePath.match(/^\/?(?<path>[^\?#]*)(?:\?|#|$)/)!.groups!.path;
-              let url: URL | undefined;
-              try { url = new URL(path, "https://127.0.0.1"); } catch { /**/ }
-              const inputPath = url && url.pathname;
-              for (const content_type of ContentTypes) {
-                yield {
-                  content_type,
-                  input: [path, method, content_type],
-                  inputPath,
-                  method,
-                  outputPath,
-                  path,
-                  service,
-                  url,
-                };
-              }
+            else {
+              continue;
             }
+          }
+          // Extract resulting path from basePath to test against result of function.
+          const outputPath = basePath.match(/^\/?(?<path>[^\?#]*)(?:\?|#|$)/)!.groups!.path;
+          let url: URL | undefined;
+          try { url = new URL(path, "https://127.0.0.1"); } catch { /**/ }
+          const inputPath = url && url.pathname;
+          for (const content_type of ContentTypes) {
+            yield {
+              content_type,
+              input: [path, method, content_type],
+              inputPath,
+              method,
+              outputPath,
+              path,
+              service,
+              url,
+            };
           }
         }
       }

@@ -10,7 +10,7 @@ import { compare, concat } from "./util/buffer";
 
 type ArgumentsType<T extends (...args: any[]) => any> = T extends (...args: infer R) => any ? R : any;
 
-describe("RegExp Advertisment", () => {
+describe("RegExp ServicePath", () => {
   test("should match all paths starting with a forward slash and ending with '/info/refs'", () => {
     const Paths: Array<[string, { path?: string }]> = [
       ["/info/refs", { path: undefined }],
@@ -21,44 +21,17 @@ describe("RegExp Advertisment", () => {
       ["/path/to/another/repo/info/refs", { path: "path/to/another/repo" }],
       ["/git-core/info/refs", { path: "git-core" }],
     ];
-    for (const [path, groups] of Paths) {
-      const result = lib.Advertisement.exec(path);
+    for (const [path, { path: p2h1 }] of Paths) {
+      const result = lib.ServicePath.exec(path);
       expect(result).toBeInstanceOf(Array);
       expect(result && result.groups).toBeDefined();
       if (!result || !result.groups) {
         throw void 0; // Should throw before reaching here.
       }
-      expect(result.groups).toEqual(groups);
+      expect(result.groups).toEqual({ info: "info", p2h1, p2h2: undefined, s5e2: undefined });
     }
   });
 
-  test("should not match anything else", () => {
-    const Paths = [
-      "info/refs",
-      "info/refs/info/refs",
-      "test/info/refs",
-      "path/to/repo/info/refs",
-      "path/to/repo@tag/info/refs",
-      "path/to/another/repo/info/refs",
-      "git-core/info/refs",
-
-      "test",
-      "path/to/repo",
-      "path/to/repo@tag",
-      "path/to/another/repo",
-      "git-core",
-
-      "/git-upload-pack",
-      "/git-download-pack",
-      "/git-sideload-pack",
-    ];
-    for (const path of Paths) {
-      expect(lib.Advertisement.test(path)).toBe(false);
-    }
-  });
-});
-
-describe("RegExp DirectUse", () => {
   /**
    * Service names must be between 1 to 20 characters long and start with
    * "/git-".
@@ -81,19 +54,27 @@ describe("RegExp DirectUse", () => {
       ["/path/to/repo@tag/git-download-pack", { path: "path/to/repo@tag", service: "download-pack" }],
       ["/path/to/repo@tag/git-sideload-pack", { path: "path/to/repo@tag", service: "sideload-pack" }],
     ];
-    for (const [url, groups] of Paths) {
-      const result = lib.DirectUse.exec(url);
+    for (const [url, { path: p2h2, service: s5e2 }] of Paths) {
+      const result = lib.ServicePath.exec(url);
       expect(result).toBeInstanceOf(Array);
       expect(result && result.groups).toBeDefined();
       if (!result || !result.groups) {
         throw void 0; // Should throw before reaching here.
       }
-      expect(result.groups).toEqual(groups);
+      expect(result.groups).toEqual({ info: undefined, p2h1: undefined, p2h2, s5e2 });
     }
   });
 
   test("should not match anything else", () => {
     const Paths = [
+      "info/refs",
+      "info/refs/info/refs",
+      "test/info/refs",
+      "path/to/repo/info/refs",
+      "path/to/repo@tag/info/refs",
+      "path/to/another/repo/info/refs",
+      "git-core/info/refs",
+
       "git-service",
       "git-core",
       "git-upload-pack",
@@ -122,11 +103,9 @@ describe("RegExp DirectUse", () => {
       "path/to/repo@tag",
       "path/to/another/repo",
       "git-core",
-
-      "/info/refs",
     ];
     for (const path of Paths) {
-      expect(lib.DirectUse.test(path)).toBe(false);
+      expect(lib.ServicePath.test(path)).toBe(false);
     }
   });
 });
@@ -252,8 +231,10 @@ describe("function inferValues()", () => {
       const methodIsGET = method === "GET" || method === "HEAD";
       const methodIsPOST = method === "POST";
       const urlContainsService = lib.ServiceName.test(url && url.searchParams.get("service") || "");
-      const pathIsAdvertisement = lib.Advertisement.test(inputPath || "");
-      const pathIsDirect = inputPath && lib.DirectUse.test(inputPath) && inputPath.endsWith(`/git-${service}`) || false;
+      const regexResult = lib.ServiceName.exec(inputPath || "");
+      const pathIsValid = Boolean(regexResult && regexResult.groups);
+      const pathIsAdvertisement = regexResult && regexResult.groups && regexResult.groups.info;
+      const pathIsDirect = inputPath && pathIsValid && !pathIsAdvertisement && inputPath.endsWith(`/git-${service}`) || false;
       // Full match (with advertisement)
       if (methodIsGET && pathIsAdvertisement && urlContainsService) {
         // True if service is defined and in search

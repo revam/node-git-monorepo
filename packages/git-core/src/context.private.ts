@@ -14,9 +14,9 @@ export function checkMethod(method: string): method is "GET" | "HEAD" | "OPTIONS
   return AllowedMethods.has(method);
 }
 
-export const Advertisement = /^\/(?:(?<path>.+)\/)?info\/refs$/;
-export const DirectUse = /^\/(?:(?<path>.+)\/)?git-(?<service>\b[a-z\-]{1,20}\b)$/;
 export const ServiceName = /^git-(?<service>\b[a-z\-]{1,20}\b)$/;
+
+export const ServicePath = /^\/(?:(?<p2h1>.+)\/)?(?<info>info)\/refs$|^\/(?:(?<p2h2>.+)\/)?git-(?<s5e2>\b[a-z\-]{1,20}\b)$/;
 
 /**
  * Infer {@link Request.advertisement | advertisement},
@@ -47,29 +47,23 @@ export function inferValues(
     return [false];
   }
   // Get advertisement from a service
-  let results = Advertisement.exec(url.pathname);
+  let results = ServicePath.exec(url.pathname);
   if (results) {
-    const {path} = results.groups!;
-    if (method === "GET" || method === "HEAD") {
-      let service: unknown;
+    const {info, p2h1, p2h2, s5e2} = results.groups!;
+    if (info && method === "GET" || method === "HEAD") {
+      let s5e1: unknown;
       results = ServiceName.exec(url.searchParams.get("service") || "");
       if (results) {
-        service = results.groups!.service;
+        s5e1 = results.groups!.service;
       }
-      if (checkEnum(service, Service)) {
-        return [true, path, service];
+      if (checkEnum(s5e1, Service)) {
+        return [true, p2h1, s5e1];
       }
     }
-    return [false, path];
-  }
-  // Use a service directly
-  results = DirectUse.exec(url.pathname);
-  if (results) {
-    const {path, service} = results.groups!;
-    if (method === "POST" && checkEnum(service, Service) && content_type === `application/x-git-${service}-request`) {
-      return [false, path, service];
+    else if (!info && method === "POST" && checkEnum(s5e2, Service) && content_type === `application/x-git-${s5e2}-request`) {
+      return [false, p2h2, s5e2];
     }
-    return [false, path];
+    return [false, p2h1 || p2h2];
   }
   return [false];
 }

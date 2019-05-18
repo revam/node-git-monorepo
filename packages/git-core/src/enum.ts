@@ -5,7 +5,7 @@
  */
 export const enum ErrorCodes {
   /**
-   * Packet start or end position was invalid.
+   * Invalid packet start or end position.
    *
    * @remarks
    *
@@ -14,6 +14,16 @@ export const enum ErrorCodes {
    * the rest of the available buffer.
    */
   InvalidPacket = "ERR_INVALID_PACKET",
+  /**
+   * Read packet did not result in a valid {@link Commands | command} for used
+   * {@link Service}.
+   *
+   * @remarks
+   *
+   * Don't know how this should happen with a _normal_ git client, but it is
+   * possible, and don't hurt to report it when it happens.
+   */
+  MalformedCommand = "ERR_MALFORMED_SERVICE_COMMAND",
 }
 
 /**

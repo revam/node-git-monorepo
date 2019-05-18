@@ -86,7 +86,8 @@ export class Context implements Response {
 
 // @public
 export const enum ErrorCodes {
-    InvalidPacket = "ERR_INVALID_PACKET"
+    InvalidPacket = "ERR_INVALID_PACKET",
+    MalformedCommand = "ERR_MALFORMED_SERVICE_COMMAND"
 }
 
 // @public

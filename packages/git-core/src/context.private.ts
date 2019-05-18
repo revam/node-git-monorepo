@@ -1,9 +1,10 @@
 import { Headers } from "node-fetch";
 import { Readable } from "stream";
 import { URL } from "url";
-import { Body, Capabilities, CommandReceivePack, Commands, CommandUploadPack } from "./context";
-import { Service } from "./enum";
+import { Body, Capabilities, Commands } from "./context";
+import { ErrorCodes, Service } from "./enum";
 import { checkEnum } from "./enum.private";
+import { makeError } from "./main.private";
 import { compare, decode, encode } from "./util/buffer";
 
 export const SymbolPromise = Symbol("promise");
@@ -182,21 +183,21 @@ export const ServiceHeaders: Record<Service, Uint8Array> = {
   [Service.UploadPack]: encode("001e# service=git-upload-pack\n0000"),
 };
 
-export function pushMetadata(
-  commands: Commands,
-  capabilities: Capabilities,
-  result: string,
-  metadata: CommandReceivePack | CommandUploadPack,
-) {
-  commands.push(metadata);
-  if (result) {
-    for (const c of result.trim().split(" ")) {
+/**
+ * Parse input and fill output.
+ *
+ * @param output - Container/map to fill.
+ * @param input - Raw capabilites string.
+ */
+function parseCapabilities(output: Capabilities, input?: string): void {
+  if (input) {
+    for (const c of input.trim().split(" ")) {
       if (/=/.test(c)) {
         const [k, v] = c.split("=");
-        capabilities.set(k, v);
+        output.set(k, v);
       }
       else {
-        capabilities.set(c, undefined);
+        output.set(c, undefined);
       }
     }
   }
@@ -228,13 +229,15 @@ export const ServiceReaders: Record<Service, (...arg: [Capabilities, Commands]) 
           else {
             kind = "update";
           }
-          pushMetadata(commands, capabilities, c10s, {
+          commands.push({
             commits: [c4t1, c4t2],
             kind,
             reference: r7e,
           });
+          return parseCapabilities(capabilities, c10s);
         }
       }
+      throw makeError(`Malformed ${Service.ReceivePack} command in body.`, ErrorCodes.MalformedCommand, { service: Service.ReceivePack });
     };
   },
   [Service.UploadPack]: (capabilities, commands) => {
@@ -247,12 +250,14 @@ export const ServiceReaders: Record<Service, (...arg: [Capabilities, Commands]) 
         if (results) {
           // c4t -> commit, c10s -> capabilities, k2d -> kind
           const { c4t, c10s, k2d } = results.groups!;
-          pushMetadata(commands, capabilities, c10s, {
+          commands.push({
             commits: [c4t],
             kind: k2d as "want" | "have",
           });
+          return parseCapabilities(capabilities, c10s);
         }
       }
+      throw makeError(`Malformed ${Service.UploadPack} command in body.`, ErrorCodes.MalformedCommand, { service: Service.UploadPack });
     };
   },
 };

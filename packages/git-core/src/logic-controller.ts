@@ -154,8 +154,8 @@ export class LogicController implements ServiceController {
    */
   public async serve(context: Context): Promise<void> {
     if (this.checkIfPending(context)) {
-      let step = 0;
       try {
+        let step = 0;
         do {
           switch (step++) { // tslint:disable-line:increment-decrement
             // Dispatch context to all observers of `LogicController.onUsable`.
@@ -173,13 +173,8 @@ export class LogicController implements ServiceController {
               }
               break;
 
-            case 2:
-            // Wait till initialised before continuing.
-              if (!context.isInitialised) {
-                await context.initialise(); // May throw on invalid packet in body
-              }
-
             // Check if repository exists
+            case 2:
               // It is done like this to keep it sync when possible.
               if (!(this.checkIfDisabled("checkIfExists") || await this.checkIfExists(context))) {
                 this.reject(context, 404); // 404 Not Found
@@ -207,7 +202,7 @@ export class LogicController implements ServiceController {
         // Check status between each step because an async interaction MAY have changed it.
         } while (this.checkIfPending(context));
       }
-      // ALLWAYS dispatch on complete (when request have not previously been served by a controller).
+      // ALWAYS dispatch on complete (when request have not previously been served by controller).
       finally {
         const signal = this[SymbolOnComplete];
         if (signal.isUsable) {
@@ -236,6 +231,10 @@ export class LogicController implements ServiceController {
     }
     this.__updateStatus(context, LogicController.Status.Accepted);
     try {
+      // Before we serve from upstream, check if the body-parser encountered any errors.
+      if (!context.isInitialised) {
+        await context.awaitInitialised(); // May throw here
+      }
       await this[SymbolPrivate].controller.serve(context);
     } catch (error) {
       const statusCode = error && (error.status || error.statusCode) || 500;
@@ -245,7 +244,7 @@ export class LogicController implements ServiceController {
     }
     // Report as failure if status is set above 400.
     if (context.status >= 400) {
-      this.__failure(context);
+      this.__failure(context, context.status);
     }
   }
 
@@ -268,6 +267,9 @@ export class LogicController implements ServiceController {
       return;
     }
     this.__updateStatus(context, LogicController.Status.Rejected);
+    if (!statusCode) {
+      statusCode = context.status;
+    }
     this.__reject(context, statusCode, reason);
   }
 
@@ -391,11 +393,11 @@ export class LogicController implements ServiceController {
    * {@link Context.body | body}.
    *
    * @param context - {@link Context} to mark and use.
-   * @param statusCode - Optional. The status sent with response. Must be in the
-   *                     `4xx` or `5xx` range. Defaults to `500`.
+   * @param statusCode - The status sent with response. Must be in the `4xx` or
+   *                     `5xx` range.
    * @param reason - Reason for failure.
    */
-  private __failure(context: Context, statusCode?: number, reason?: string): void {
+  private __failure(context: Context, statusCode: number, reason?: string): void {
     this.__updateStatus(context, LogicController.Status.Failure);
     context.body = undefined;
     this.__reject(context, statusCode, reason);
@@ -408,14 +410,11 @@ export class LogicController implements ServiceController {
    *                     `4xx` or `5xx` range. Defaults to `500`.
    * @param reason - Reason for rejection.
    */
-  private __reject(context: Context, statusCode?: number, reason?: string): void {
-    if (!statusCode) {
-      statusCode = context.status;
-    }
+  private __reject(context: Context, statusCode: number, reason?: string): void {
     context.status = (statusCode < 600 && statusCode >= 400) ? statusCode : 500;
     if (!context.body || typeof reason === "string") {
       if (typeof reason !== "string") {
-        reason = STATUS_CODES[context.status]!;
+        reason = STATUS_CODES[context.status] || "";
       }
       this.__encodeBody(context, reason);
     }

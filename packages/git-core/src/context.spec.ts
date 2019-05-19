@@ -1652,6 +1652,16 @@ describe("class Context", () => {
     });
   });
 
+  describe("public method awaitInitialise():", () => {
+    test("should return a promise", async () => {
+      const context = new lib.Context();
+      expect(context).toBeInstanceOf(lib.Context);
+      const promise = context.awaitInitialised();
+      await expect(promise).toBeInstanceOf(Promise);
+      await expect(promise).resolves.toBeUndefined();
+    });
+  });
+
   describe("public method capabilities():", () => {
     test("should return a promise", async() => {
       const context = new lib.Context();
@@ -1669,16 +1679,6 @@ describe("class Context", () => {
       const promise = context.commands();
       await expect(promise).toBeInstanceOf(Promise);
       await expect(promise).resolves.toBeInstanceOf(Array);
-    });
-  });
-
-  describe("public method initialise():", () => {
-    test("should return a promise", async () => {
-      const context = new lib.Context();
-      expect(context).toBeInstanceOf(lib.Context);
-      const promise = context.initialise();
-      await expect(promise).toBeInstanceOf(Promise);
-      await expect(promise).resolves.toBeUndefined();
     });
   });
 

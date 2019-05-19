@@ -204,16 +204,25 @@ export class Context implements Response {
   private [SymbolPromise]?: Promise<void> | undefined;
 
   /**
-   * Check if request body has been analysed and is ready for use.
+   * Context is properly initialised.
+   *
+   * @remarks
+   *
+   * Check if {@link Request.body | request body} has been parsed, and
+   * the {@link Commands | commands} and {@link Capabilities | capabilities} are
+   * ready for use.
+   *
+   * We can check this by checking if the self-removing promise is still
+   * attached to the context.
    */
   public get isInitialised(): boolean {
     return !(SymbolPromise in this);
   }
 
   /**
-   * Resolves when request has been analysed.
+   * Resolves when {@link Request.body | request body} has been parsed.
    */
-  public async initialise(): Promise<void> {
+  public async awaitInitialised(): Promise<void> {
     return this[SymbolPromise];
   }
 
@@ -231,7 +240,7 @@ export class Context implements Response {
    */
   public async capabilities(): Promise<Capabilities> {
     if (!this.isInitialised) {
-      await this.initialise();
+      await this.awaitInitialised();
     }
     return new Map(this.__capabilities);
   }
@@ -249,7 +258,7 @@ export class Context implements Response {
    */
   public async commands(): Promise<ReadonlyCommands> {
     if (!this.isInitialised) {
-      await this.initialise();
+      await this.awaitInitialised();
     }
     return this.__commands.slice();
   }

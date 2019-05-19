@@ -57,11 +57,11 @@ export class Context implements Response {
     addError(errorMessage: string): void;
     addMessage(message: string): void;
     readonly advertisement: boolean;
+    awaitInitialised(): Promise<void>;
     body: Body;
     capabilities(): Promise<Capabilities>;
     commands(): Promise<ReadonlyCommands>;
     headers: Headers;
-    initialise(): Promise<void>;
     readonly ip: string;
     readonly isInitialised: boolean;
     length: number | undefined;

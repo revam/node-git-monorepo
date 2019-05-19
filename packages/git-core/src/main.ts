@@ -86,14 +86,6 @@ export interface ServiceController {
    * At the bare minimum the response status-code should be set. If the request
    * was OK than a body should also be set.
    *
-   * @privateRemarks
-   *
-   * Even though the other methods are more lax, the serve method **must**
-   * return a promise.
-   *
-   * If the {@link Response.status | status code} is set to an error code (4xx or 5xx),
-   * then it will be marked as a failure by the {@link LogicController | controller}.
-   *
    * @param context - The {@link Context | context} to use.
    */
   serve(context: Context): Promise<void>;

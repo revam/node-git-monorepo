@@ -12,12 +12,12 @@ const SymbolOnUsable = Symbol("on usable");
 
 /**
  * A {@link ServiceController} for controlling other {@link ServiceController}s
- * with a sane default logic.
+ * with sane default business-logic.
  *
  * @remarks
  *
- * Have some pluggable aspects and makes configuring application-spesific
- * business-logic on top of an existing controller (e.g. {@link (FetchController:class)})
+ * Have some plugable aspects and makes configuring application-specific
+ * business-logic on top of a controller (e.g. {@link (FetchController:class)})
  * easier.
  *
  * @public
@@ -140,11 +140,9 @@ export class LogicController implements ServiceController {
    *
    * Will only proccess **once** on the same instance of {@link Context}.
    *
-   * Throws if any observer in either
-   * {@link (LogicController:class).onUsable | `onUsable`} or
-   * {@link (LogicController:class).onComplete | `onComplete`} throws, or if the
-   * underlying {@link ServiceController | controller} throws and no error
-   * handler is configured.
+   * Throws if the upstream {@link ServiceController | controller} throws, or if
+   * any listener of {@link (LogicController:class).onUsable | `onUsable`} or
+   * {@link (LogicController:class).onComplete | `onComplete`} throws.
    *
    * Also see {@link (LogicController:class).accept},
    * {@link (LogicController:class).reject}, and
@@ -223,6 +221,8 @@ export class LogicController implements ServiceController {
    * upstream {@link ServiceController | controller}, then it is marked as a
    * failure and the response body from upstream is discarded.
    *
+   * Also see {@link ServiceController.serve} for upstream behaviour.
+   *
    * @param context - {@link Context} to use.
    */
   public async accept(context: Context): Promise<void> {
@@ -233,16 +233,18 @@ export class LogicController implements ServiceController {
     try {
       // Before we serve from upstream, check if the body-parser encountered any errors.
       if (!context.isInitialised) {
-        await context.awaitInitialised(); // May throw here
+        await context.awaitInitialised(); // May throw
       }
-      await this[SymbolPrivate].controller.serve(context);
-    } catch (error) {
+      await this[SymbolPrivate].controller.serve(context); // May throw
+    }
+    // If any of the above threw, set status/body and mark as failure.
+    catch (error) {
       const statusCode = error && (error.status || error.statusCode) || 500;
       const reason: string | undefined = error && (error.expose === true && error.message) ? error.message : undefined;
       this.__failure(context, statusCode, reason);
       throw error;
     }
-    // Report as failure if status is set above 400.
+    // Report as failure if status is above or equal to 400.
     if (context.status >= 400) {
       this.__failure(context, context.status);
     }

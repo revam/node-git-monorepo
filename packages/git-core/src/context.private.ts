@@ -44,7 +44,8 @@ export function inferValues(
   // Bail on malformed url path (but don't throw)
   try {
     url = new URL(urlPath, "https://127.0.0.1/");
-  } catch {
+  }
+  catch {
     return [false];
   }
   // Get advertisement from a service
@@ -120,10 +121,10 @@ export function createAsyncIterator(body: Body): AsyncIterableIterator<Uint8Arra
     if (body instanceof Uint8Array || "then" in body) {
       return (async function*(): AsyncIterableIterator<Uint8Array> { yield body; })();
     }
-    else if (Symbol.asyncIterator in body && body === body[Symbol.asyncIterator]()) {
+    if (Symbol.asyncIterator in body && body === body[Symbol.asyncIterator]()) {
       return body as AsyncIterableIterator<Uint8Array>;
     }
-    else if (Symbol.iterator in body || Symbol.asyncIterator in body) {
+    if (Symbol.iterator in body || Symbol.asyncIterator in body) {
       return (async function*(): AsyncIterableIterator<Uint8Array> { yield* body; })();
     }
   }

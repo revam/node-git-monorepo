@@ -67,10 +67,12 @@ export async function *readPackets(
           const length = readPacketLength(result.value);
           if (length === 0) {
             done = true;
-          } else {
+          }
+          else {
             array = result.value;
           }
-        } else {
+        }
+        else {
           await reader(result.value);
         }
       }
@@ -121,7 +123,8 @@ export function findNextZeroPacketInBuffer(
     if (length === 0) {
       return offset;
     // All packet lengths less than 4, except 0, are invalid.
-    } else if (length > 3) {
+    }
+    if (length > 3) {
       offset += length;
       if (offset > buffer.length) {
         throw makeError(
@@ -129,7 +132,8 @@ export function findNextZeroPacketInBuffer(
           ErrorCodes.InvalidPacket,
         );
       }
-    } else {
+    }
+    else {
       throw makeError(
         `Invalid packet starting position at index ${offset} in buffer with length ${buffer.length}.`,
         ErrorCodes.InvalidPacket,
@@ -167,18 +171,19 @@ export function *createPacketIterator(
       if (packetEnd <= buffer.length) {
         yield buffer.slice(offset, packetEnd);
         offset += length;
-      } else {
+      }
+      else {
         // Break if packet length exceeds rest of available buffer.
         if (breakOnIncompletePacket) {
           return buffer.slice(offset);
-        } else {
-          throw makeError(
-            `Invalid packet ending position at index ${packetEnd} in buffer with length ${buffer.length}.`,
-            ErrorCodes.InvalidPacket,
-          );
         }
+        throw makeError(
+          `Invalid packet ending position at index ${packetEnd} in buffer with length ${buffer.length}.`,
+          ErrorCodes.InvalidPacket,
+        );
       }
-    } else {
+    }
+    else {
       throw makeError(
         `Invalid packet starting position at index ${offset} in buffer with length ${buffer.length}.`,
         ErrorCodes.InvalidPacket,

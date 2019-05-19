@@ -114,6 +114,8 @@
     "no-switch-case-fall-through": true,
 
     // Disabled
+    "ordered-imports": false,
+    "no-null-undefined-union": false,
     "await-promise": false,
     "no-redundant-jsdoc": false,
     "strict-boolean-expressions": false,

@@ -28,21 +28,21 @@
     "typescript"
   ],
   "dependencies": {
-    "@types/node-fetch": "^2.1.6",
+    "@types/node-fetch": "2.3.4",
     "micro-signals": "^2.0.0",
-    "node-fetch": "^2.3.0"
+    "node-fetch": "^2.6.0"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "7.1.0",
+    "@microsoft/api-extractor": "7.1.5",
     "@revam/rollup-plugin-common": "1.2.1",
-    "@types/jest": "^24.0.6",
-    "@types/node": "^11.13.10",
-    "jest": "^24.1.0",
-    "rollup": "^1.11.3",
-    "ts-jest": "^24.0.0",
+    "@types/jest": "^24.0.13",
+    "@types/node": "^12.0.2",
+    "jest": "^24.8.0",
+    "rollup": "1.12.3",
+    "ts-jest": "^24.0.2",
     "ts-node": "8.1.0",
-    "tslint": "^5.12.1",
-    "typescript": "3.4.4"
+    "tslint": "^5.16.0",
+    "typescript": "3.4.5"
   },
   "scripts": {
     "api-extractor": "api-extractor run -c aeconfig.json",

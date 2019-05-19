@@ -66,7 +66,8 @@ export async function waitForChild(child: ChildProcessWithoutNullStreams): Promi
       waitForBuffer(child.stderr).then((buffer) => buffer.toString("utf8")),
     ]);
     return { exitCode, stdout, stderr };
-  } catch (error) {
+  }
+  catch (error) {
     return { exitCode: -1, stdout: Buffer.alloc(0), stderr: error && error.message || "Unkonwn error" };
   }
 }

@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import { STATUS_CODES } from "http";
 import fetch, { RequestInit, Response } from "node-fetch";
 import { isAbsolute, join, resolve } from "path";
-import { Readable } from "stream";
+import { PassThrough } from "stream";
 import { Context } from "./context";
 import { Service } from "./enum";
 import { defaultTail, fsStatusCode, hasHttpOrHttpsProtocol, hasHttpsProtocol, pathIsValid, waitForChild } from "./fetch-controller.private";
@@ -326,7 +326,7 @@ export class FetchController implements ServiceController {
       method: context.advertisement ? "GET" : "POST",
     });
     context.status = response.status;
-    context.body = (response.body as Readable);
+    context.body = response.body.pipe(new PassThrough());
     for (const [header, value] of response.headers) {
       context.setHeader(header, value);
     }

@@ -1,10 +1,11 @@
 import { ErrorCodes } from "../enum";
 import { makeError } from "../main.private";
 import { concat, decode, encode } from "./buffer";
+import { ExtendedError } from "../main";
 
 export type PacketReaderFunction = (packet: Uint8Array) => any;
 
-export enum PacketType {
+export const enum PacketType {
   Message = "\u0002",
   Error = "\u0003",
 }
@@ -17,15 +18,23 @@ export enum PacketType {
  * If the message do not end with a new-line (LN), a new-line (LN) will be
  * added to the message.
  *
- * @param type - {@link PacketType | Packet type} to encode.
  * @param message - Source message to encode.
- * @internal
+ * @param type - {@link PacketType | Packet type} to encode.
  */
-export function encodePacket(type: PacketType, message: string): Uint8Array {
+export function encodePacket(message: string, type: PacketType): Uint8Array {
   message = type + message;
   if (!message.endsWith("\n")) {
     message += "\n";
   }
+  return encodeRawPacket(message);
+}
+
+/**
+ * Encode a packet without modifying the source message.
+ *
+ * @param message - Source message to encode.
+ */
+export function encodeRawPacket(message: string): Uint8Array {
   return encode((message.length + 4).toString(16).padStart(4, "0") + message);
 }
 
@@ -41,48 +50,64 @@ export function encodePacket(type: PacketType, message: string): Uint8Array {
  * @param reader - Packet reader.
  */
 export async function *readPackets(
-  iterable: AsyncIterableIterator<Uint8Array>,
-  reader: (array: Uint8Array) => any,
+  iterable: IterableIterator<Uint8Array> | AsyncIterableIterator<Uint8Array>,
+  reader: (array: Uint8Array) => (void | never) | Promise<void | never> | PromiseLike<void | never>,
 ): AsyncIterableIterator<Uint8Array> {
   //#region init
   const backhaul: Uint8Array[] = [];
-  let array: Uint8Array | undefined;
-  let done = false;
+  let previousValue: [number, Uint8Array] | undefined;
+  let parsingDone = false;
+  let result: IteratorResult<Uint8Array>;
   do {
-    const r = await iterable.next();
-    if (r.done) {
-      break;
-    }
-    if (array) {
-      r.value = concat([array, r.value]);
-      array = undefined;
-    }
-    done = r.done;
-    const iterator = createPacketIterator(r.value, true, true);
-    let result: IteratorResult<Uint8Array>;
-    do {
-      result = iterator.next();
-      if (result.value) {
-        if (result.done) {
-          const length = readPacketLength(result.value);
-          if (length === 0) {
-            done = true;
+    result = await iterable.next();
+    // Only parse if value is given and has a length greater than zero.
+    if (result.value && result.value.length > 0) {
+      backhaul.push(result.value);
+      let buffer = result.value;
+      // Combine current array with previous array if needed.
+      if (previousValue) {
+        buffer = concat([previousValue[1], result.value]);
+        previousValue = undefined;
+      }
+      const packets = createPacketIterator(buffer, true, true);
+      let packetResult: IteratorResult<Uint8Array>;
+      do {
+        packetResult = packets.next();
+        if (packetResult.value) {
+          if (packetResult.done) {
+            const length = readPacketLength(packetResult.value);
+            if (length === 0) {
+              parsingDone = true;
+            }
+            else {
+              previousValue = [length, packetResult.value];
+            }
           }
           else {
-            array = result.value;
+            await reader(packetResult.value);
           }
         }
-        else {
-          await reader(result.value);
-        }
-      }
-    } while (!done);
-    backhaul.push(r.value);
-  } while (array);
+      } while (!packetResult.done);
+    }
+    // We're done parsing if `iterable` is done.
+    if (!parsingDone && result.done) {
+      parsingDone = true;
+    }
+  } while (!parsingDone);
+  // Throw if done parsing and array is still defined.
+  if (previousValue) {
+    throw invalidEndPosition(previousValue[0], previousValue[1].length);
+  }
+  // Yield an empty array here. Because the Context constructor need to parse
+  // the packets before it is fully initialised, and thus started the iterator.
+  //
+  // It is essentially a throw-away value.
   yield new Uint8Array(0);
   //#endregion init
-  yield* backhaul;
-  if (!done) {
+  if (backhaul.length) {
+    yield* backhaul;
+  }
+  if (!result.done) {
     yield* iterable;
   }
 }
@@ -102,45 +127,6 @@ export function readPacketLength(buffer: Uint8Array, offset: number = 0) {
     return -1;
   }
   return Number.parseInt(input, 16);
-}
-
-/**
- * Returns the first position of a zero-packet (0000) after offset.
- *
- * @param buffer - A valid packet buffer
- * @param offset - A valid packet start position
- * @internal
- */
-export function findNextZeroPacketInBuffer(
-  buffer: Uint8Array,
-  offset: number = 0,
-): number {
-  if (!buffer || buffer.length === 0) {
-    return -1;
-  }
-  do {
-    const length = readPacketLength(buffer, offset);
-    if (length === 0) {
-      return offset;
-    // All packet lengths less than 4, except 0, are invalid.
-    }
-    if (length > 3) {
-      offset += length;
-      if (offset > buffer.length) {
-        throw makeError(
-          `Invalid packet ending position at index ${offset} in buffer with length ${buffer.length}.`,
-          ErrorCodes.InvalidPacket,
-        );
-      }
-    }
-    else {
-      throw makeError(
-        `Invalid packet starting position at index ${offset} in buffer with length ${buffer.length}.`,
-        ErrorCodes.InvalidPacket,
-      );
-    }
-  } while (offset < buffer.length);
-  return -1;
 }
 
 /**
@@ -177,17 +163,25 @@ export function *createPacketIterator(
         if (breakOnIncompletePacket) {
           return buffer.slice(offset);
         }
-        throw makeError(
-          `Invalid packet ending position at index ${packetEnd} in buffer with length ${buffer.length}.`,
-          ErrorCodes.InvalidPacket,
-        );
+        throw invalidEndPosition(packetEnd, buffer.length);
       }
     }
     else {
-      throw makeError(
-        `Invalid packet starting position at index ${offset} in buffer with length ${buffer.length}.`,
-        ErrorCodes.InvalidPacket,
-      );
+      throw invalidStartPosition(offset, buffer.length);
     }
   } while (offset < buffer.length);
+}
+
+function invalidEndPosition(end: number, length: number): ExtendedError {
+  return makeError(
+    `Invalid packet ending position at index ${end} in buffer with length ${length}.`,
+    ErrorCodes.InvalidPacket,
+  );
+}
+
+function invalidStartPosition(start: number, length: number): ExtendedError {
+  return makeError(
+    `Invalid packet starting position at index ${start} in buffer with length ${length}.`,
+    ErrorCodes.InvalidPacket,
+  );
 }

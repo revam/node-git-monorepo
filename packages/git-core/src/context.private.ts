@@ -124,9 +124,7 @@ export function createAsyncIterator(body: Body): AsyncIterableIterator<Uint8Arra
     if (Symbol.asyncIterator in body && body === body[Symbol.asyncIterator]()) {
       return body as AsyncIterableIterator<Uint8Array>;
     }
-    if (Symbol.iterator in body || Symbol.asyncIterator in body) {
-      return (async function*(): AsyncIterableIterator<Uint8Array> { yield* body; })();
-    }
+    return (async function*(): AsyncIterableIterator<Uint8Array> { yield* body; })();
   }
   return createEmptyAsyncIterator();
 }
@@ -210,53 +208,46 @@ function parseCapabilities(output: Capabilities, input?: string): void {
  */
 export const ServiceReaders: Record<Service, (...arg: [Capabilities, Commands]) => (b: Uint8Array) => any> = {
   [Service.ReceivePack]: (capabilities: Capabilities, commands: Commands) => {
-    const pre_check = /[\da-f]{40} [\da-f]{40}/;
     const regex =
       /^[\da-f]{4}(?<c4t1>[\da-f]{40}) (?<c4t2>[\da-f]{40}) (?<r7e>refs\/[^\n\0 ]*?)(?<c10s>(?: [a-z\d_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
     return (buffer) => {
-      if (pre_check.test(decode(buffer.slice(4, 85)))) {
-        const value = decode(buffer);
-        const results = regex.exec(value);
-        if (results) {
-          // c4t1 -> commit 1, c4t2 -> commit 2, c10s -> capabilities, r7e -> reference
-          const { c4t1, c4t2, c10s, r7e } = results.groups!;
-          let kind: "create" | "delete" | "update";
-          if (c4t1 === "0000000000000000000000000000000000000000") {
-            kind = "create";
-          }
-          else if (c4t2 === "0000000000000000000000000000000000000000") {
-            kind = "delete";
-          }
-          else {
-            kind = "update";
-          }
-          commands.push({
-            commits: [c4t1, c4t2],
-            kind,
-            reference: r7e,
-          });
-          return parseCapabilities(capabilities, c10s);
+      const results = regex.exec(decode(buffer));
+      if (results) {
+        // c4t1 -> commit 1, c4t2 -> commit 2, c10s -> capabilities, r7e -> reference
+        const { c4t1, c4t2, c10s, r7e } = results.groups!;
+        let kind: "create" | "delete" | "update";
+        if (c4t1 === "0000000000000000000000000000000000000000") {
+          kind = "create";
         }
+        else if (c4t2 === "0000000000000000000000000000000000000000") {
+          kind = "delete";
+        }
+        else {
+          kind = "update";
+        }
+        commands.push({
+          commits: [c4t1, c4t2],
+          kind,
+          reference: r7e,
+        });
+        return parseCapabilities(capabilities, c10s);
       }
       throw makeError(`Malformed ${Service.ReceivePack} command in body.`, ErrorCodes.MalformedCommand, { service: Service.ReceivePack });
     };
   },
   [Service.UploadPack]: (capabilities, commands) => {
-    const pre_check = /want|have/;
     const regex = /^[\da-f]{4}(?<k2d>want|have) (?<c4t>[\da-f]{40})(?<c10s>(?: [a-z\d_\-]+(?:=[\w\d\.-_\/]+)?)* ?)?\n?$/;
     return (buffer) => {
-      if (pre_check.test(decode(buffer.slice(4, 8)))) {
-        const value = decode(buffer);
-        const results = regex.exec(value);
-        if (results) {
-          // c4t -> commit, c10s -> capabilities, k2d -> kind
-          const { c4t, c10s, k2d } = results.groups!;
-          commands.push({
-            commits: [c4t],
-            kind: k2d as "want" | "have",
-          });
-          return parseCapabilities(capabilities, c10s);
-        }
+      const value = decode(buffer);
+      const results = regex.exec(value);
+      if (results) {
+        // c4t -> commit, c10s -> capabilities, k2d -> kind
+        const { c4t, c10s, k2d } = results.groups!;
+        commands.push({
+          commits: [c4t],
+          kind: k2d as "want" | "have",
+        });
+        return parseCapabilities(capabilities, c10s);
       }
       throw makeError(`Malformed ${Service.UploadPack} command in body.`, ErrorCodes.MalformedCommand, { service: Service.UploadPack });
     };

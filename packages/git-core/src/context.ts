@@ -266,7 +266,7 @@ export class Context implements Response {
   /**
    * String messages from application to requester.
    */
-  private readonly __messages: Array<[PacketType, string]>;
+  private readonly __messages: Array<[string, PacketType]>;
 
   /**
    * Adds `message` to messages for {@link Response.body | response body}.
@@ -274,7 +274,7 @@ export class Context implements Response {
    * @param message - Message to add.
    */
   public addMessage(message: string): void {
-    this.__messages.push([PacketType.Message, message]);
+    this.__messages.push([message, PacketType.Message]);
   }
 
   /**
@@ -283,7 +283,7 @@ export class Context implements Response {
    * @param errorMessage - Error message to add.
    */
   public addError(errorMessage: string): void {
-    this.__messages.push([PacketType.Error, errorMessage]);
+    this.__messages.push([errorMessage, PacketType.Error]);
   }
 
   /**
@@ -315,7 +315,7 @@ export class Context implements Response {
         // Or add messages if service is used directly.
         else if (this.__messages.length) {
           // Consume messages by setting length to zero afterwards
-          const packedMessages = this.__messages.map(([t, m]) => encodePacket(t, m));
+          const packedMessages = this.__messages.map((a) => encodePacket(...a));
           this.__messages.length = 0;
           body = addMessagesToIterable(packedMessages, body);
           // Append length if previously known
@@ -450,6 +450,7 @@ export class Context implements Response {
   public setHeader(headerName: string, value?: number | string | string[]): void;
   public setHeader(headerName: string, value?: number | string | string[]): void {
     if (value instanceof Array) {
+      this.response.headers.delete(headerName);
       value.forEach((v) => this.response.headers.append(headerName, v));
       return;
     }
@@ -498,7 +499,10 @@ export class Context implements Response {
    * Get/set "Content-Type" header for response.
    */
   public get type(): string | undefined {
-    return this.response.headers.get("Content-Type") || undefined;
+    const value = this.response.headers.get("Content-Type");
+    if (typeof value === "string") {
+      return value;
+    }
   }
   public set type(value: string | undefined) {
     this.setHeader("Content-Type", value);
@@ -509,7 +513,8 @@ export class Context implements Response {
    */
   public get length(): number | undefined {
     const value = this.response.headers.get("Content-Length");
-    if (typeof value === "string") {
+    // if (typeof value === "string" && value.length > 0 && /^\d+$/.test(value)) {
+    if (value) {
       return Number.parseInt(value, 10);
     }
   }

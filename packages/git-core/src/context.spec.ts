@@ -1,12 +1,32 @@
 import { Headers } from "node-fetch";
 import * as lib from "./context";
 import * as pLib from "./context.private";
-import { Service } from "./enum";
-import { concat } from "./util/buffer";
+import { Service, ErrorCodes } from "./enum";
+import * as buffer from "./util/buffer";
+import * as assert from "../test/helpers/assert";
+import * as packet from "./util/packet";
 
 type ClassTypeArgs<T extends new (...args: any[]) => any> = T extends new (...args: infer R) => any ? R : any;
+type FunctionArgs<T> = T extends (...args: infer R) => any ? R : any;
+type MethodArgs<T, TKey extends keyof T> = FunctionArgs<T[TKey]>;
 
 describe("class Context", () => {
+
+  function createContext(
+    service: Service,
+    body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array> = async function *() { /**/ }(),
+    advertisement: boolean = true,
+  ): lib.Context | never {
+    const ctx = new lib.Context(
+      "127.0.0.1",
+      advertisement ? `/info/refs?service=git-${service}` : `/git-${service}`,
+      advertisement ? "GET" : "POST",
+      body,
+      advertisement ? {} : { "Content-Type": `application/x-git-${service}-request` },
+    );
+    expect(ctx).toBeInstanceOf(lib.Context);
+    return ctx;
+  }
 
   /**
    * Create an empty async iterable iterator.
@@ -15,7 +35,7 @@ describe("class Context", () => {
 
   //#region constructor
 
-  describe("public constructor():", () => {
+  describe("constructor():", () => {
     /**
      * Expect arguments to not make the constructor throw, and the expecting
      * results to match the provided values.
@@ -54,8 +74,8 @@ describe("class Context", () => {
       for await (const b of value.request.body) {
         buffers.push(b);
       }
-      const buffer = concat(buffers);
-      expect(buffer).toEqual(body);
+      const combined = buffer.concat(buffers);
+      expect(combined).toEqual(body);
       const raw = value.request.headers.raw();
       for (const key in headers) {
         expect(raw).toHaveProperty(key); // tslint:disable-line
@@ -1231,7 +1251,7 @@ describe("class Context", () => {
   //#region properties
   //#region instance properties
 
-  describe("public property advertisement:", () => {
+  describe("property advertisement:", () => {
     test("should be a boolean", () => {
       const args: Array<[ClassTypeArgs<typeof lib.Context>, boolean?]> = [
         [["127.0.0.1", "/", "GET", asyncIterable(), {}, undefined]],
@@ -1269,7 +1289,7 @@ describe("class Context", () => {
     });
   });
 
-  describe("public property body:", () => {
+  describe("property body:", () => {
     // Test statement using symbols
     test("should be the same as Context.response.body", () => {
       const context = new lib.Context();
@@ -1284,7 +1304,7 @@ describe("class Context", () => {
     });
   });
 
-  describe("public property headers:", () => {
+  describe("property headers:", () => {
     test("should be an instance of node-fetch#Headers", () => {
       const context = new lib.Context();
       expect(context).toBeInstanceOf(lib.Context);
@@ -1305,7 +1325,7 @@ describe("class Context", () => {
     });
   });
 
-  describe("public property ip:", () => {
+  describe("property ip:", () => {
     test("should be the same as Context.request.ip", () => {
       const ctx1 = new lib.Context("127.0.0.1");
       expect(ctx1).toBeInstanceOf(lib.Context);
@@ -1339,7 +1359,7 @@ describe("class Context", () => {
     });
   });
 
-  describe("public property isInitialised:", () => {
+  describe("property isInitialised:", () => {
     test("should only be false when advertisement is false, service is set, and body is still being parsed/read/analysed", () => {
       // Missing both
       const ctx1 = new lib.Context("127.0.0.1", "/", "POST", asyncIterable(), {}, true, undefined, undefined);
@@ -1373,7 +1393,41 @@ describe("class Context", () => {
     });
   });
 
-  describe("public property method:", () => {
+  describe("property length:", () => {
+    test('should reflect value of response header "Content-Length"', () => {
+      const context = new lib.Context();
+      const { response: { headers } } = context;
+      expect(context).toBeInstanceOf(lib.Context);
+
+      // Set header directly.
+      headers.set("Content-Length", "10");
+      expect(context.length).toBe(10);
+      expect(headers.get("Content-Length")).toBe("10");
+
+      // Unset header directly.
+      headers.delete("Content-Length");
+      expect(context.length).toBe(undefined);
+      expect(headers.get("Content-Length")).toBe(null);
+    });
+
+    test('should set/unset response header "Content-Length"', () => {
+      const context = new lib.Context();
+      const { response: { headers } } = context;
+      expect(context).toBeInstanceOf(lib.Context);
+
+      // Set header through property.
+      context.length = 20;
+      expect(context.length).toBe(20);
+      expect(headers.get("Content-Length")).toBe("20");
+
+      // Unset header through property.
+      context.length = undefined;
+      expect(context.length).toBe(undefined);
+      expect(headers.get("Content-Length")).toBe(null);
+    });
+  });
+
+  describe("property method:", () => {
     test("should be the same as Context.request.method", () => {
       const ctx1 = new lib.Context("127.0.0.1", "/", "GET");
       expect(ctx1).toBeInstanceOf(lib.Context);
@@ -1407,7 +1461,7 @@ describe("class Context", () => {
     });
   });
 
-  describe("public property pathname:", () => {
+  describe("property pathname:", () => {
     test("should default to a string, regardless of constructor input for value", () => {
       // Infer pathname from url and method
 
@@ -1446,43 +1500,9 @@ describe("class Context", () => {
       expect(typeof ctx5.pathname).toBe("string");
       expect(ctx5.pathname).toBe("path/to/repo");
     });
-
-    describe("public property url:", () => {
-      test("should be the same as Context.request.url", () => {
-        const ctx1 = new lib.Context("127.0.0.1", "/");
-        expect(ctx1).toBeInstanceOf(lib.Context);
-        expect(ctx1.url).toBe("/");
-        expect(ctx1.request.url).toBe("/");
-        expect(ctx1.url).toBe(ctx1.request.url);
-
-        const ctx2 = new lib.Context("127.0.0.1", "/path/to/some/repo?withAQuery=true");
-        expect(ctx2).toBeInstanceOf(lib.Context);
-        expect(ctx2.url).toBe("/path/to/some/repo?withAQuery=true");
-        expect(ctx2.request.url).toBe("/path/to/some/repo?withAQuery=true");
-        expect(ctx2.url).toBe(ctx2.request.url);
-      });
-
-      test("should be non-writable", () => {
-        const ctx1 = new lib.Context("127.0.0.1", "/");
-        expect(ctx1).toBeInstanceOf(lib.Context);
-        expect(ctx1.url).toBe("/");
-        // tslint:disable-next-line
-        // @ts-ignore
-        expect(() => ctx1.url = "/some/other/path?hidden=false").toThrow();
-        expect(ctx1.url).toBe("/");
-
-        const ctx2 = new lib.Context("127.0.0.1", "/path/to/some/repo?withAQuery=true");
-        expect(ctx2).toBeInstanceOf(lib.Context);
-        expect(ctx2.url).toBe("/path/to/some/repo?withAQuery=true");
-        // tslint:disable-next-line
-        // @ts-ignore
-        expect(() => ctx2.url = "/some/other/path?hidden=false").toThrow();
-        expect(ctx2.url).toBe("/path/to/some/repo?withAQuery=true");
-      });
-    });
   });
 
-  describe("public read-only property readable:", () => {
+  describe("property readable:", () => {
     test("should be non-writable", () => {
       const context = new lib.Context();
       expect(context).toBeInstanceOf(lib.Context);
@@ -1496,7 +1516,7 @@ describe("class Context", () => {
     describe("response():", () => undefined);
   });
 
-  describe("public property status:", () => {
+  describe("property status:", () => {
     test("should default to 404 for new instances", () => {
       const context = new lib.Context();
       expect(context).toBeInstanceOf(lib.Context);
@@ -1517,7 +1537,75 @@ describe("class Context", () => {
     });
   });
 
-  //#region instance properties
+  describe("property type:", () => {
+    test('should reflect value of response header "Content-Type"', () => {
+      const context = new lib.Context();
+      const { response: { headers } } = context;
+      expect(context).toBeInstanceOf(lib.Context);
+
+      // Set header directly.
+      headers.set("Content-Type", "");
+      expect(context.type).toBe("");
+      expect(headers.get("Content-Type")).toBe("");
+
+      // Unset header directly.
+      headers.delete("Content-Type");
+      expect(context.type).toBe(undefined);
+      expect(headers.get("Content-Type")).toBe(null);
+    });
+
+    test('should set/unset response header "Content-Type"', () => {
+      const context = new lib.Context();
+      const { response: { headers } } = context;
+      expect(context).toBeInstanceOf(lib.Context);
+
+      // Set header through property.
+      context.type = "application/javascript";
+      expect(context.type).toBe("application/javascript");
+      expect(headers.get("Content-Type")).toBe("application/javascript");
+
+      // Unset header through property.
+      context.type = undefined;
+      expect(context.type).toBe(undefined);
+      expect(headers.get("Content-Type")).toBe(null);
+    });
+  });
+
+  describe("property url:", () => {
+    test("should be the same as Context.request.url", () => {
+      const ctx1 = new lib.Context("127.0.0.1", "/");
+      expect(ctx1).toBeInstanceOf(lib.Context);
+      expect(ctx1.url).toBe("/");
+      expect(ctx1.request.url).toBe("/");
+      expect(ctx1.url).toBe(ctx1.request.url);
+
+      const ctx2 = new lib.Context("127.0.0.1", "/path/to/some/repo?withAQuery=true");
+      expect(ctx2).toBeInstanceOf(lib.Context);
+      expect(ctx2.url).toBe("/path/to/some/repo?withAQuery=true");
+      expect(ctx2.request.url).toBe("/path/to/some/repo?withAQuery=true");
+      expect(ctx2.url).toBe(ctx2.request.url);
+    });
+
+    test("should be non-writable", () => {
+      const ctx1 = new lib.Context("127.0.0.1", "/");
+      expect(ctx1).toBeInstanceOf(lib.Context);
+      expect(ctx1.url).toBe("/");
+      // tslint:disable-next-line
+      // @ts-ignore
+      expect(() => ctx1.url = "/some/other/path?hidden=false").toThrow();
+      expect(ctx1.url).toBe("/");
+
+      const ctx2 = new lib.Context("127.0.0.1", "/path/to/some/repo?withAQuery=true");
+      expect(ctx2).toBeInstanceOf(lib.Context);
+      expect(ctx2.url).toBe("/path/to/some/repo?withAQuery=true");
+      // tslint:disable-next-line
+      // @ts-ignore
+      expect(() => ctx2.url = "/some/other/path?hidden=false").toThrow();
+      expect(ctx2.url).toBe("/path/to/some/repo?withAQuery=true");
+    });
+  });
+
+  //#endregion instance properties
   //#region static properties
 
   //#endregion static properties
@@ -1525,12 +1613,12 @@ describe("class Context", () => {
   //#region methods
   //#region instance methods
 
-  describe("public method addMessage():", () => undefined);
+  describe("method addMessage():", () => undefined);
 
-  describe("public method addError():", () => undefined);
+  describe("method addError():", () => undefined);
 
-  describe("public method asyncIterableIterator():", () => {
-    function createContext(body: lib.Body): lib.Context {
+  describe("method asyncIterableIterator():", () => {
+    function createContextWithBody(body: lib.Body): lib.Context {
       const ctx = new lib.Context();
       expect(ctx).toBeInstanceOf(lib.Context);
       ctx.body = body;
@@ -1612,24 +1700,26 @@ describe("class Context", () => {
           new Uint8Array([48, 48, 48, 48]),
         ],
       ];
-}
+    }
 
-    const ReusableBodies: lib.Body[] = [
-      (async function *(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array(0); })(),
-      (async function *(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array([48, 48, 48, 48]); })(),
-    ];
+    function ReusableBodies(): lib.Body[] {
+      return [
+        (async function *(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array(0); })(),
+        (async function *(): AsyncIterableIterator<Uint8Array> { yield new Uint8Array([48, 48, 48, 48]); })(),
+      ];
+    }
 
     test("should return an async iterable iterator created from Context.body", async () => {
       for (const [initBody, expected] of Bodies()) {
-        const context = createContext(initBody);
+        const context = createContextWithBody(initBody);
         const body = context.toAsyncIterator();
         expect(initBody).not.toBe(body);
         expect(context.toAsyncIterator()).toBe(body);
         const {value: actual} = await body.next();
         expect(actual).toEqual(expected);
       }
-      for (const initBody of ReusableBodies) {
-        const context = createContext(initBody);
+      for (const initBody of ReusableBodies()) {
+        const context = createContextWithBody(initBody);
         const body = context.toAsyncIterator();
         expect(initBody).toBe(body);
         expect(context.toAsyncIterator()).toBe(body);
@@ -1638,13 +1728,13 @@ describe("class Context", () => {
 
     test("should set Context.body to return value of method", () => {
       for (const [initBody] of Bodies()) {
-        const context = createContext(initBody);
+        const context = createContextWithBody(initBody);
         const body = context.toAsyncIterator();
         expect(initBody).not.toBe(body);
         expect(context.body).toBe(body);
       }
-      for (const initBody of ReusableBodies) {
-        const context = createContext(initBody);
+      for (const initBody of ReusableBodies()) {
+        const context = createContextWithBody(initBody);
         const body = context.toAsyncIterator();
         expect(initBody).toBe(body);
         expect(context.body).toBe(body);
@@ -1652,37 +1742,226 @@ describe("class Context", () => {
     });
   });
 
-  describe("public method awaitInitialise():", () => {
-    test("should return a promise", async () => {
-      const context = new lib.Context();
-      expect(context).toBeInstanceOf(lib.Context);
+  describe("method awaitInitialise():", () => {
+    test("should be async", async () => {
+      const context = createContext(Service.UploadPack);
       const promise = context.awaitInitialised();
       await expect(promise).toBeInstanceOf(Promise);
-      await expect(promise).resolves.toBeUndefined();
+    });
+
+    test("should resolve if body-parser does not encounter any errors.", async () => Promise.all([
+      (async () => {
+        async function *body(): AsyncIterableIterator<Uint8Array> {
+          yield buffer.concat([
+            packet.encodeRawPacket("want 0000000000000000000000000000000000000001 foo version=2.19"),
+            packet.encodeRawPacket("have 0000000000000000000000000000000000000000"),
+            buffer.encode("0000"),
+            buffer.encode("POST<binary data>"),
+          ]);
+        }
+        const context = createContext(Service.UploadPack, body(), false);
+        expect(context.isInitialised).toBe(false);
+        await Promise.all([
+          assert.resolves(context.awaitInitialised(), undefined),
+          assert.resolves(
+            context.commands(),
+            [
+              {
+                commits: ["0000000000000000000000000000000000000001"],
+                kind: "want",
+              },
+              {
+                commits: ["0000000000000000000000000000000000000000"],
+                kind: "have",
+              },
+            ],
+          ),
+          assert.resolves(
+            context.capabilities(),
+            new Map([
+              [
+                "foo",
+                undefined,
+              ],
+              [
+                "version",
+                "2.19",
+              ],
+            ]),
+          ),
+        ]);
+      })(),
+      (async () => {
+        async function *body(): AsyncIterableIterator<Uint8Array> {
+          yield buffer.concat([
+            // First command AND capabilities client want/have.
+            // Create head
+            packet.encodeRawPacket(
+              "0000000000000000000000000000000000000000 0000000000000000000000000000000000000004 refs/heads/master foo bar version=2.19",
+            ),
+            // Other commands in this request
+            // Update head
+            packet.encodeRawPacket(
+              "0000000000000000000000000000000000000002 0000000000000000000000000000000000000003 refs/heads/feature/super-feature",
+            ),
+            // Delete head
+            packet.encodeRawPacket(
+              "0000000000000000000000000000000000000001 0000000000000000000000000000000000000000 refs/heads/feature/to-be-removed",
+            ),
+            // End of packets
+            buffer.encode("0000"),
+            // Start of binary data (should not read this far)
+            buffer.encode("POST<some binary gibberish>"),
+          ]);
+        }
+        const context = createContext(Service.ReceivePack, body(), false);
+        expect(context.isInitialised).toBe(false);
+        await Promise.all([
+          assert.resolves(context.awaitInitialised(), undefined),
+          assert.resolves(
+            context.commands(),
+            [
+              {
+                commits: ["0000000000000000000000000000000000000000", "0000000000000000000000000000000000000004"],
+                kind: "create",
+                reference: "refs/heads/master",
+              },
+              {
+                commits: ["0000000000000000000000000000000000000002", "0000000000000000000000000000000000000003"],
+                kind: "update",
+                reference: "refs/heads/feature/super-feature",
+              },
+              {
+                commits: ["0000000000000000000000000000000000000001", "0000000000000000000000000000000000000000"],
+                kind: "delete",
+                reference: "refs/heads/feature/to-be-removed",
+              },
+            ],
+          ),
+          assert.resolves(
+            context.capabilities(),
+            new Map([
+              [
+                "foo",
+                undefined,
+              ],
+              [
+                "bar",
+                undefined,
+              ],
+              [
+                "version",
+                "2.19",
+              ],
+            ]),
+          ),
+        ]);
+      })(),
+    ]));
+
+    test("should throw if body-parser encounter a malformed command", async () => {
+      const Packets = [
+        "want something",
+        "have something",
+        "a string",
+        "Z000000000000000000000000000000000000000 Z000000000000000000000000000000000000000 refs/heads/master",
+        "To throw or not to throw, that is the question.",
+      ];
+      await Promise.all(Object.values(Service).map(async (service: Service) => {
+        for (const Packet of Packets)  {
+          async function *body(): AsyncIterableIterator<Uint8Array> {
+            yield packet.encodeRawPacket(Packet);
+          }
+          const context = createContext(service, body(), false);
+          expect(context.isInitialised).toBe(false);
+          await assert.rejectsWithCode(context.awaitInitialised(), ErrorCodes.MalformedCommand);
+        }
+      }));
+    });
+
+    test("should throw if body-parser encounter an invalid packet with out-of-bounds ending position", async () => {
+      async function *body(): AsyncIterableIterator<Uint8Array> {
+        const encoded = packet.encodeRawPacket("want something");
+        // Invalidate ending position.
+        encoded[0] = 49;
+        yield encoded;
+      }
+      const context = createContext(Service.UploadPack, body(), false);
+      expect(context.isInitialised).toBe(false);
+      await assert.rejectsWithCode(context.awaitInitialised(), ErrorCodes.InvalidPacket);
+    });
+
+    test("should throw if body-parser encounter an invalid packet with invalid starting position", async () => {
+      async function *body(): AsyncIterableIterator<Uint8Array> {
+        yield buffer.encode("not a packet");
+      }
+      const context = createContext(Service.UploadPack, body(), false);
+      expect(context.isInitialised).toBe(false);
+      const promise = context.awaitInitialised();
+      await assert.rejectsWithCode(promise, ErrorCodes.InvalidPacket);
     });
   });
 
-  describe("public method capabilities():", () => {
-    test("should return a promise", async() => {
+  describe("method capabilities():", () => {
+    test("should be async", async() => {
       const context = new lib.Context();
-      expect(context).toBeInstanceOf(lib.Context);
+      assert.ok(context instanceof lib.Context);
       const promise = context.capabilities();
-      await expect(promise).toBeInstanceOf(Promise);
-      await expect(promise).resolves.toBeInstanceOf(Map);
+      assert.ok(promise instanceof Promise);
+      await assert.resolves(promise, new Map());
     });
   });
 
-  describe("public method commands():", () => {
-    test("should return a promise", async () => {
+  describe("method commands():", () => {
+    test("should be async", async () => {
       const context = new lib.Context();
-      expect(context).toBeInstanceOf(lib.Context);
+      assert.ok(context instanceof lib.Context);
       const promise = context.commands();
-      await expect(promise).toBeInstanceOf(Promise);
-      await expect(promise).resolves.toBeInstanceOf(Array);
+      assert.ok(promise instanceof Promise);
+      await assert.resolves(promise, []);
     });
   });
 
-  describe("public method setHeader():", () => undefined);
+  describe("method setHeader():", () => {
+    test("should set response headers", () => {
+      const headers: Array<{ keys: string[]; values: Array<MethodArgs<lib.Context, "setHeader">[1]>}> = [
+        {
+          keys: ["Context-Type", "context-type", "CONTEXT-TYPE", "CoNtExT-tYpE"],
+          values: [undefined, "", "application/javascript"],
+        },
+        {
+          keys: ["Context-Length", "context-length", "CONTEXT-LENGTH", "CoNtExT-lEnGtH"],
+          values: [undefined, 0, 100],
+        },
+        {
+          keys: ["Context-Encoding", "context-encoding", "CONTEXT-ENCODING", "CoNtExT-eNcOdInG"],
+          values: [undefined, "gzip", "compress", ["deflate", "gzip"]],
+        },
+      ];
+      for (const {keys, values} of headers) {
+        // Do it with a clean context
+        const context = new lib.Context();
+        // Be sure the headers are empty before we begin.
+        assert.strictEqual(Array.from(convertIterator(context.response.headers.entries())).length, 0);
+        for (const key of keys) {
+          assert.ok(!context.response.headers.has(key));
+        }
+        for (const value of values) {
+          context.setHeader(keys[0], value);
+          for (const key of keys) {
+            const result = context.headers.get(key);
+            assert.strictEqual(
+              result === null ? undefined : result,
+              value === undefined ? undefined : value instanceof Array ? value.join(", ") : `${value}`,
+            );
+          }
+        }
+        for (const key of keys) {
+          assert.ok(context.response.headers.has(key));
+        }
+      }
+    });
+  });
 
   //#endregion instance methods
   //#region static methods
@@ -1690,3 +1969,14 @@ describe("class Context", () => {
   //#endregion static methods
   //#endregion methods
 });
+
+function *convertIterator<T>(iterator: Iterator<T>): IterableIterator<T> {
+  let result: IteratorResult<T> = iterator.next();
+  while (!result.done) {
+    yield result.value;
+    result = iterator.next();
+  }
+  if (result.value) {
+    return result.value;
+  }
+}

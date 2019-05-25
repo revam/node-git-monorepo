@@ -9,7 +9,7 @@ import { checkServiceController } from "./main.private";
  *
  * @remarks
  *
- * Should **not** be extended.
+ * Do **not** subclass this class.
  *
  * @sealed
  * @public

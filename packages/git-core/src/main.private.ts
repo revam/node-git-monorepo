@@ -36,7 +36,8 @@ export function checkServiceController(target: unknown): target is ServiceContro
 export function makeError<TError extends ExtendedError = ExtendedError>(
   message: string,
   code: ErrorCodes,
-  extra?: Pick<TError, Exclude<keyof TError, keyof ExtendedError>>): TError {
+  extra?: Pick<TError, Exclude<keyof TError, keyof ExtendedError>>,
+): TError {
   const error = new Error(message) as TError;
   error.code = code;
   if (extra) {

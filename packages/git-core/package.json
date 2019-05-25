@@ -48,8 +48,9 @@
     "api-extractor": "api-extractor run -c aeconfig.json",
     "api-extractor:doc": "api-extractor run -c aeconfig.doc.json",
     "api-extractor:rollup": "api-extractor run -c aeconfig.rollup.json",
-    "build": "npm run cleanup && npm run review && npm run package",
-    "cleanup": "rm -rf dist coverage",
+    "build": "npm run review && npm run package",
+    "cleanup:package": "rm -rf dist",
+    "cleanup:coverage": "rm -rf coverage",
     "example:basic-fs-server": "ts-node examples/basic-fs-server.ts",
     "example:github-proxy-server": "ts-node examples/github-proxy-server.ts",
     "lint": "tslint -p .",
@@ -57,10 +58,11 @@
     "preapi-extractor": "npm run tsc:d.ts",
     "preapi-extractor:doc": "npm run tsc:d.ts",
     "preapi-extractor:rollup": "npm run tsc:d.ts",
-    "prepackage": "npm run api-extractor:rollup && npm run rollup",
+    "prepackage": "npm run cleanup:package && npm run api-extractor:rollup && npm run rollup",
     "prereview": "npm run lint && npm run test && npm run tsc:d.ts",
     "prereview:local": "npm run tsc:d.ts",
     "prerollup": "npm run tsc:config && npm run tsc:js",
+    "pretest": "npm run cleanup:coverage",
     "review": "api-extractor run -c aeconfig.review.json",
     "review:local": "api-extractor run -l -c aeconfig.review.json",
     "rollup": "rollup -c dist/config/rollup.config.js",
@@ -74,6 +76,7 @@
   "jest": {
     "collectCoverage": true,
     "collectCoverageFrom": [
+      "!src/main.ts",
       "src/**/*.ts"
     ],
     "transform": {

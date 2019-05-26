@@ -49,7 +49,7 @@
     "api-extractor:doc": "api-extractor run -c aeconfig.doc.json",
     "api-extractor:rollup": "api-extractor run -c aeconfig.rollup.json",
     "build": "npm run review && npm run package",
-    "cleanup:package": "rm -rf dist",
+    "cleanup:package": "rm -rf dist/package",
     "cleanup:coverage": "rm -rf coverage",
     "example:basic-fs-server": "ts-node examples/basic-fs-server.ts",
     "example:github-proxy-server": "ts-node examples/github-proxy-server.ts",

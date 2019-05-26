@@ -19,12 +19,13 @@ export default function middlewareFactory(
     let error: ExtendedError | undefined;
     try {
       context = new Context(
-        request.socket.remoteAddress,
         request.url,
         request.method,
         request,
         request.headers as any,
       );
+      context.state.req = request;
+      context.state.res = response;
       await controller.serve(context);
     } catch (err) {
       if (err instanceof Error) {
@@ -35,7 +36,7 @@ export default function middlewareFactory(
         error.inner = err;
       }
     } finally {
-      // Transmit error.
+      // Send response.
       if (context) {
         response.statusCode = context.status;
         for (const [header, value] of context.headers) {
@@ -51,24 +52,14 @@ export default function middlewareFactory(
       // We still need to handle responses when constructor throws.
       else if (error) {
         const status = response.statusCode = error.status || error.statusCode || 500;
-        const message = error.expose ? error.message : STATUS_CODES[status];
-        if (response instanceof Http2ServerResponse) {
-          response.stream.end(message);
-        }
-        else {
-          response.end(message);
-        }
+        const message = error.expose ? error.message : (STATUS_CODES[status] || "");
+        response.end(message);
       }
       // I don't know how.
       else {
         response.statusCode = 500;
         const message = STATUS_CODES[500]!;
-        if (response instanceof Http2ServerResponse) {
-          response.stream.end(message);
-        }
-        else {
-          response.end(message);
-        }
+        response.end(message);
       }
       if (next) {
         next(error);

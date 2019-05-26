@@ -31,32 +31,24 @@ export class Context implements Response {
 
   public constructor();
   public constructor(
-    ip: string,
-  );
-  public constructor(
-    ip: string,
     url: string,
   );
   public constructor(
-    ip: string,
     url: string,
     method: string,
   );
   public constructor(
-    ip: string,
     url: string,
     method: string,
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
   );
   public constructor(
-    ip: string,
     url: string,
     method: string,
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
     headers: Headers | Record<string, string>,
   );
   public constructor(
-    ip: string,
     url: string,
     method: string,
     body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
@@ -66,7 +58,6 @@ export class Context implements Response {
     service?: Service,
   );
   public constructor(
-    ip?: string,
     url?: string,
     method?: string,
     body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>,
@@ -78,7 +69,6 @@ export class Context implements Response {
   public constructor(...rest: [
     string?,
     string?,
-    string?,
     (AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>)?,
     (Headers | Record<string, string>)?,
     boolean?,
@@ -86,44 +76,37 @@ export class Context implements Response {
     Service?
   ]) {
     // tslint:disable:cyclomatic-complexity
-    const ip = rest.length >= 1 ? rest[0] : "127.0.0.1";
-    if (typeof ip !== "string") {
-      throw new TypeError("argument `ip` must be of type 'string'.");
-    }
-    if (!ip) {
-      throw new TypeError("argument `ip` must not be empty.");
-    }
-    const url = rest.length >= 2 ? rest[1] : "/";
+    const url = rest.length >= 1 ? rest[0] : "/";
     if (typeof url !== "string") {
       throw new TypeError("argument `url` must be of type 'string'.");
     }
     if (!url.length || url[0] !== "/") {
       throw new TypeError("argument `url` must start with '/'.");
     }
-    const method = rest.length >= 3 ? (rest[2] && rest[2].toUpperCase()) : "GET";
+    const method = rest.length >= 2 ? (rest[1] && rest[1].toUpperCase()) : "GET";
     if (!(typeof method === "string" && checkMethod(method))) {
       throw new TypeError("argument `method` must be one of the following HTTP verbs: GET, HEAD, PATCH, POST, PUT");
     }
-    let body = rest.length >= 4 ? asyncIterator(rest[3]) : createEmptyAsyncIterator();
-    const incomingHeaders = rest.length >= 5 ? rest[4] : {};
+    let body = rest.length >= 3 ? asyncIterator(rest[2]) : createEmptyAsyncIterator();
+    const incomingHeaders = rest.length >= 4 ? rest[3] : {};
     if (incomingHeaders === null || typeof incomingHeaders !== "object") {
       throw new TypeError("argument `headers` must be of type 'object'.");
     }
     const headers = createHeaders(incomingHeaders);
-    let advertisement = rest.length >= 6 ? rest[5] : false;
+    let advertisement = rest.length >= 5 ? rest[4] : false;
     if (typeof advertisement !== "boolean") {
       throw new TypeError("argument `advertisement`must be of type 'boolean'.");
     }
-    let pathname = rest.length >= 7 ? rest[6] : undefined;
+    let pathname = rest.length >= 6 ? rest[5] : undefined;
     if (!(pathname === undefined || typeof pathname === "string")) {
       throw new TypeError("argument `pathname` must be undefined or of type 'string'.");
     }
-    let service = rest.length >= 8 ? rest[7] : undefined;
+    let service = rest.length >= 7 ? rest[6] : undefined;
     if (!(service === undefined || typeof service === "string" && checkEnum(service, Service))) {
       throw new TypeError("argument `service` must be a value from enum Service.");
     }
     // Advertisement, path and service is inferred if none of them is supplied.
-    if (rest.length < 6) {
+    if (rest.length < 5) {
       [advertisement, pathname, service] = inferValues(url, method, headers.get("Content-Type"));
     }
     // Set some properties early.
@@ -147,7 +130,6 @@ export class Context implements Response {
     this.request = Object.freeze({
       body,
       headers,
-      ip,
       method,
       url,
     });
@@ -184,14 +166,9 @@ export class Context implements Response {
   public response: Response;
 
   /**
-   * Application/library defined properties for request.
-   *
-   * @remarks
-   *
-   * Up to extending libraries and/or applications on how to use this object,
-   * the only restriction set is: it _must_ be an object.
+   * {@inheritdoc State}
    */
-  public state: Record<PropertyKey, any>;
+  public state: State;
 
   /**
    * Resolves when request has been analysed.
@@ -401,13 +378,6 @@ export class Context implements Response {
   //#region request delegation
 
   /**
-   * {@inheritdoc Request.ip}
-   */
-  public get ip() {
-    return this.request.ip;
-  }
-
-  /**
    * {@inheritdoc Request.url}
    */
   public get url() {
@@ -460,7 +430,7 @@ export class Context implements Response {
     if (typeof value === "string") {
       this.response.headers.set(headerName, value);
     }
-    else {
+    else if (value === undefined) {
       this.response.headers.delete(headerName);
     }
   }
@@ -523,6 +493,23 @@ export class Context implements Response {
   }
 
   //#endregion response delegation
+}
+
+/**
+ * Application/library defined properties for request.
+ *
+ * @remarks
+ *
+ * Up to extending libraries and/or applications on how to use this object,
+ * the only restriction set is: it _must_ be an object.
+ *
+ * @public
+ */
+export interface State {
+  /**
+   * Index signature for unmapped properties.
+   */
+  [index: string]: any;
 }
 
 /**
@@ -622,10 +609,6 @@ export interface Request {
    * {@link Context}.
    */
   method: "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
-  /**
-   * String representation of remote IP address.
-   */
-  ip: string;
   /**
    * URL-string without origin of incoming request.
    */

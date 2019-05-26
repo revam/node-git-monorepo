@@ -18,7 +18,6 @@ describe("class Context", () => {
     advertisement: boolean = true,
   ): lib.Context | never {
     const ctx = new lib.Context(
-      "127.0.0.1",
       advertisement ? `/info/refs?service=git-${service}` : `/git-${service}`,
       advertisement ? "GET" : "POST",
       body,
@@ -101,7 +100,6 @@ describe("class Context", () => {
     test("with zero arguments", async () => valid(
       [],
       {
-        ip: "127.0.0.1",
         method: "GET",
         url: "/",
       },
@@ -113,78 +111,20 @@ describe("class Context", () => {
       },
     ));
 
-    test("with one argument: first argument shold be remote ip address", async () => Promise.all<any>([
+    test("with one arguments: first argument should be an URL-path", async () => Promise.all<any>([
       invalid([undefined]),
       invalid([null as any]),
       invalid([true as any]),
       invalid([false as any]),
       invalid([""]),
+      invalid(["https://example.org/"]),
+      invalid(["http://example.org/"]),
+      invalid(["repository/info/refs?service=git-upload-pack"]),
       valid(
         [
-          "127.0.0.1",
-        ],
-        {
-          ip: "127.0.0.1",
-          method: "GET",
-          url: "/",
-        },
-        {
-          advertisement: false,
-          isInitialised: true,
-          pathname: "",
-          service: undefined,
-        },
-      ),
-      valid(
-        [
-          "d10f:da6:cbee::17",
-        ],
-        {
-          ip: "d10f:da6:cbee::17",
-          method: "GET",
-          url: "/",
-        },
-        {
-          advertisement: false,
-          isInitialised: true,
-          pathname: "",
-          service: undefined,
-        },
-      ),
-      valid(
-        [
-          "10.0.0.1",
-        ],
-        {
-          ip: "10.0.0.1",
-          method: "GET",
-          url: "/",
-        },
-        {
-          advertisement: false,
-          isInitialised: true,
-          pathname: "",
-          service: undefined,
-        },
-      ),
-    ]));
-
-    test("with two arguments: second argument should be an URL-path", async () => Promise.all<any>([
-      invalid(["127.0.0.1", undefined]),
-      invalid(["127.0.0.1", null as any]),
-      invalid(["127.0.0.1", true as any]),
-      invalid(["127.0.0.1", false as any]),
-      invalid(["127.0.0.1", ""]),
-      invalid(["127.0.0.1", "https://example.org/"]),
-      invalid(["127.0.0.1", "http://example.org/"]),
-      invalid(["127.0.0.1", "repository/info/refs?service=git-upload-pack"]),
-      valid(
-        [
-          "127.0.0.1",
           "/",
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -197,11 +137,9 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/repository/path/info/refs?service=git-upload-pack",
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/repository/path/info/refs?service=git-upload-pack",
         },
@@ -216,21 +154,19 @@ describe("class Context", () => {
       ),
     ]));
 
-    test("with three arguments: third argument must be a valid HTTP verb", async () => Promise.all<any>([
-      invalid(["127.0.0.1", "/", undefined]),
-      invalid(["127.0.0.1", "/", null as any]),
-      invalid(["127.0.0.1", "/", ""]),
-      invalid(["127.0.0.1", "/", "some text"]),
-      invalid(["127.0.0.1", "/", "TRACE"]),
-      invalid(["127.0.0.1", "/", "CONNECT"]),
+    test("with two arguments: second argument must be a valid HTTP verb", async () => Promise.all<any>([
+      invalid(["/", undefined]),
+      invalid(["/", null as any]),
+      invalid(["/", ""]),
+      invalid(["/", "some text"]),
+      invalid(["/", "TRACE"]),
+      invalid(["/", "CONNECT"]),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -243,12 +179,10 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "get",
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -261,12 +195,10 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "gEt",
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -279,12 +211,10 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "HEAD",
         ],
         {
-          ip: "127.0.0.1",
           method: "HEAD",
           url: "/",
         },
@@ -297,12 +227,10 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "POST",
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/",
         },
@@ -315,12 +243,10 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "PATCH",
         ],
         {
-          ip: "127.0.0.1",
           method: "PATCH",
           url: "/",
         },
@@ -333,12 +259,10 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "PUT",
         ],
         {
-          ip: "127.0.0.1",
           method: "PUT",
           url: "/",
         },
@@ -351,12 +275,10 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "OPTIONS",
         ],
         {
-          ip: "127.0.0.1",
           method: "OPTIONS",
           url: "/",
         },
@@ -369,19 +291,17 @@ describe("class Context", () => {
       ),
     ]));
 
-    test("with four arguments: fourth argument should be an async iterable", async () => Promise.all<any>([
-      invalid(["127.0.0.1", "/", "GET", undefined]),
-      invalid(["127.0.0.1", "/", "GET", null as any]),
-      invalid(["127.0.0.1", "/", "GET", { async *[Symbol.iterator]() { return; } } as any]),
+    test("with three arguments: third argument should be an async iterable", async () => Promise.all<any>([
+      invalid(["/", "GET", undefined]),
+      invalid(["/", "GET", null as any]),
+      invalid(["/", "GET", { async *[Symbol.iterator]() { return; } } as any]),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           { async *[Symbol.asyncIterator]() { return; } },
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -394,13 +314,11 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -413,13 +331,11 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/info/refs?service=git-upload-pack",
           "GET",
           asyncIterable(),
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
@@ -432,13 +348,11 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/info/refs?service=git-receive-pack",
           "GET",
           asyncIterable(),
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repo/info/refs?service=git-receive-pack",
         },
@@ -451,13 +365,11 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/info/refs?service=git-upload-pack",
           "POST",
           asyncIterable(),
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
@@ -470,13 +382,11 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/info/refs?service=git-receive-pack",
           "POST",
           asyncIterable(),
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repo/info/refs?service=git-receive-pack",
         },
@@ -489,13 +399,11 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           { async *[Symbol.asyncIterator]() { yield new Uint8Array([48, 48, 48, 48]); } },
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -509,13 +417,11 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/git-upload-pack",
           "POST",
           { async *[Symbol.asyncIterator]() { yield new Uint8Array([48, 48, 48, 48]); } },
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repo/git-upload-pack",
         },
@@ -529,11 +435,9 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/git-receive-pack",
           "POST", { async *[Symbol.asyncIterator]() { yield new Uint8Array([48, 48, 48, 48]); } }],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repo/git-receive-pack",
         },
@@ -547,21 +451,19 @@ describe("class Context", () => {
       ),
     ]));
 
-    test("with five arguments: fifth argument should be a header-value record or instance of Headers", async () => Promise.all<any>([
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), undefined]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), null as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), 1 as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), "" as any]),
+    test("with four arguments: fourth argument should be a header-value record or instance of Headers", async () => Promise.all<any>([
+      invalid(["/", "GET", asyncIterable(), undefined]),
+      invalid(["/", "GET", asyncIterable(), null as any]),
+      invalid(["/", "GET", asyncIterable(), 1 as any]),
+      invalid(["/", "GET", asyncIterable(), "" as any]),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
           {},
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -574,14 +476,12 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
           new Headers(),
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -594,14 +494,12 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/info/refs?service=git-upload-pack",
           "GET",
           asyncIterable(),
           {},
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
@@ -614,14 +512,12 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/info/refs?service=git-receive-pack",
           "GET",
           asyncIterable(),
           {},
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repo/info/refs?service=git-receive-pack",
         },
@@ -634,14 +530,12 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/info/refs?service=git-upload-pack",
           "POST",
           asyncIterable(),
           {},
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
@@ -654,14 +548,12 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/info/refs?service=git-receive-pack",
           "POST",
           asyncIterable(),
           {},
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repo/info/refs?service=git-receive-pack",
         },
@@ -674,14 +566,12 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/git-upload-pack",
           "GET",
           asyncIterable(),
           {},
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repo/git-upload-pack",
         },
@@ -694,14 +584,12 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/git-receive-pack",
           "GET",
           asyncIterable(),
           {},
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repo/git-receive-pack",
         },
@@ -714,13 +602,11 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/git-upload-pack",
           "POST", asyncIterable(),
           { "content-type": "application/x-git-upload-pack-request" },
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repo/git-upload-pack",
         },
@@ -737,14 +623,12 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/git-receive-pack",
           "POST",
           asyncIterable(),
           { "content-type": "application/x-git-receive-pack-request" },
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repo/git-receive-pack",
         },
@@ -761,16 +645,15 @@ describe("class Context", () => {
       ),
     ]));
 
-    test("with six arguments: sixth argument should be a boolean", async () => Promise.all<any>([
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, undefined]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, null as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, "" as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, "undefined" as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, 0 as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, 1 as any]),
+    test("with five arguments: fifth argument should be a boolean", async () => Promise.all<any>([
+      invalid(["/", "GET", asyncIterable(), {}, undefined]),
+      invalid(["/", "GET", asyncIterable(), {}, null as any]),
+      invalid(["/", "GET", asyncIterable(), {}, "" as any]),
+      invalid(["/", "GET", asyncIterable(), {}, "undefined" as any]),
+      invalid(["/", "GET", asyncIterable(), {}, 0 as any]),
+      invalid(["/", "GET", asyncIterable(), {}, 1 as any]),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
@@ -778,7 +661,6 @@ describe("class Context", () => {
           false,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -791,7 +673,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
@@ -799,7 +680,6 @@ describe("class Context", () => {
           true,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -812,7 +692,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/info/refs?service=git-upload-pack",
           "GET",
           asyncIterable(),
@@ -820,7 +699,6 @@ describe("class Context", () => {
           true,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
@@ -833,7 +711,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repo/info/refs?service=git-upload-pack",
           "POST",
           asyncIterable(),
@@ -841,7 +718,6 @@ describe("class Context", () => {
           true,
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repo/info/refs?service=git-upload-pack",
         },
@@ -854,22 +730,21 @@ describe("class Context", () => {
       ),
     ]));
 
-    test("with seven arguments: seventh argument should be a string or undefined", async () => Promise.all<any>([
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, null as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, null as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, true as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, true as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, false as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, false as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, 0 as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, 0 as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, 1 as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, 1 as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, {} as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, {} as any]),
+    test("with six arguments: sixth argument should be a string or undefined", async () => Promise.all<any>([
+      invalid(["/", "GET", asyncIterable(), {}, false, null as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, null as any]),
+      invalid(["/", "GET", asyncIterable(), {}, false, true as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, true as any]),
+      invalid(["/", "GET", asyncIterable(), {}, false, false as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, false as any]),
+      invalid(["/", "GET", asyncIterable(), {}, false, 0 as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, 0 as any]),
+      invalid(["/", "GET", asyncIterable(), {}, false, 1 as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, 1 as any]),
+      invalid(["/", "GET", asyncIterable(), {}, false, {} as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, {} as any]),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
@@ -878,7 +753,6 @@ describe("class Context", () => {
           undefined,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -891,7 +765,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
@@ -900,7 +773,6 @@ describe("class Context", () => {
           undefined,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -913,7 +785,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
@@ -922,7 +793,6 @@ describe("class Context", () => {
           "path/to/repo",
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -935,7 +805,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
@@ -944,7 +813,6 @@ describe("class Context", () => {
           "path/to/repo",
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -957,20 +825,19 @@ describe("class Context", () => {
       ),
     ]));
 
-    test("with eight arguments: eighth argument must be a value of enum Service.", async () => Promise.all<any>([
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, undefined, null as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, undefined, null as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, undefined, "null" as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, undefined, "null" as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, undefined, "" as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, undefined, "" as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, undefined, 0 as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, undefined, 0 as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, false, undefined, 1 as any]),
-      invalid(["127.0.0.1", "/", "GET", asyncIterable(), {}, true, undefined, 1 as any]),
+    test("with seven arguments: seventh argument must be a value of enum Service.", async () => Promise.all<any>([
+      invalid(["/", "GET", asyncIterable(), {}, false, undefined, null as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, undefined, null as any]),
+      invalid(["/", "GET", asyncIterable(), {}, false, undefined, "null" as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, undefined, "null" as any]),
+      invalid(["/", "GET", asyncIterable(), {}, false, undefined, "" as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, undefined, "" as any]),
+      invalid(["/", "GET", asyncIterable(), {}, false, undefined, 0 as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, undefined, 0 as any]),
+      invalid(["/", "GET", asyncIterable(), {}, false, undefined, 1 as any]),
+      invalid(["/", "GET", asyncIterable(), {}, true, undefined, 1 as any]),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
@@ -980,7 +847,6 @@ describe("class Context", () => {
           undefined,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -993,7 +859,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/",
           "GET",
           asyncIterable(),
@@ -1003,7 +868,6 @@ describe("class Context", () => {
           undefined,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/",
         },
@@ -1016,7 +880,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repoA",
           "GET",
           asyncIterable(),
@@ -1026,7 +889,6 @@ describe("class Context", () => {
           undefined,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repoA",
         },
@@ -1039,7 +901,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repoA",
           "GET",
           asyncIterable(),
@@ -1049,7 +910,6 @@ describe("class Context", () => {
           undefined,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repoA",
         },
@@ -1062,7 +922,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repoA",
           "GET",
           asyncIterable(),
@@ -1072,7 +931,6 @@ describe("class Context", () => {
           Service.UploadPack,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repoA",
         },
@@ -1085,7 +943,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repoA",
           "GET",
           asyncIterable(),
@@ -1095,7 +952,6 @@ describe("class Context", () => {
           Service.UploadPack,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repoA",
         },
@@ -1108,7 +964,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repoA",
           "GET",
           asyncIterable(),
@@ -1118,7 +973,6 @@ describe("class Context", () => {
           Service.ReceivePack,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repoA",
         },
@@ -1131,7 +985,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repoA",
           "GET",
           asyncIterable(),
@@ -1141,7 +994,6 @@ describe("class Context", () => {
           Service.ReceivePack,
         ],
         {
-          ip: "127.0.0.1",
           method: "GET",
           url: "/path/to/repoA",
         },
@@ -1154,7 +1006,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repoA",
           "POST",
           asyncIterable(),
@@ -1164,7 +1015,6 @@ describe("class Context", () => {
           Service.UploadPack,
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repoA",
         },
@@ -1177,7 +1027,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repoA",
           "POST",
           asyncIterable(),
@@ -1187,7 +1036,6 @@ describe("class Context", () => {
           Service.UploadPack,
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repoA",
         },
@@ -1200,7 +1048,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repoA",
           "POST",
           asyncIterable(),
@@ -1210,7 +1057,6 @@ describe("class Context", () => {
           Service.ReceivePack,
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repoA",
         },
@@ -1223,7 +1069,6 @@ describe("class Context", () => {
       ),
       valid(
         [
-          "127.0.0.1",
           "/path/to/repoA",
           "POST",
           asyncIterable(),
@@ -1233,7 +1078,6 @@ describe("class Context", () => {
           Service.ReceivePack,
         ],
         {
-          ip: "127.0.0.1",
           method: "POST",
           url: "/path/to/repoA",
         },
@@ -1254,14 +1098,14 @@ describe("class Context", () => {
   describe("property advertisement:", () => {
     test("should be a boolean", () => {
       const args: Array<[ClassTypeArgs<typeof lib.Context>, boolean?]> = [
-        [["127.0.0.1", "/", "GET", asyncIterable(), {}, undefined]],
+        [["/", "GET", asyncIterable(), {}, undefined]],
 
         [[], false],
-        [["127.0.0.1", "/", "GET", asyncIterable(), {}], false],
-        [["127.0.0.1", "/", "GET", asyncIterable(), {}, false], false],
+        [["/", "GET", asyncIterable(), {}], false],
+        [["/", "GET", asyncIterable(), {}, false], false],
 
-        [["127.0.0.1", "/info/refs?service=git-upload-pack", "GET", asyncIterable(), {}], true],
-        [["127.0.0.1", "/", "GET", asyncIterable(), {}, true], true],
+        [["/info/refs?service=git-upload-pack", "GET", asyncIterable(), {}], true],
+        [["/", "GET", asyncIterable(), {}, true], true],
       ];
       for (const [arg, result] of args) {
         // Expect to throw
@@ -1325,59 +1169,25 @@ describe("class Context", () => {
     });
   });
 
-  describe("property ip:", () => {
-    test("should be the same as Context.request.ip", () => {
-      const ctx1 = new lib.Context("127.0.0.1");
-      expect(ctx1).toBeInstanceOf(lib.Context);
-      expect(ctx1.ip).toBe("127.0.0.1");
-      expect(ctx1.request.ip).toBe("127.0.0.1");
-      expect(ctx1.ip).toBe(ctx1.request.ip);
-
-      const ctx2 = new lib.Context("10.0.0.1");
-      expect(ctx2).toBeInstanceOf(lib.Context);
-      expect(ctx2.ip).toBe("10.0.0.1");
-      expect(ctx2.request.ip).toBe("10.0.0.1");
-      expect(ctx2.ip).toBe(ctx2.request.ip);
-    });
-
-    test("should be non-writable", () => {
-      const ctx1 = new lib.Context("127.0.0.1");
-      expect(ctx1).toBeInstanceOf(lib.Context);
-      expect(ctx1.ip).toBe("127.0.0.1");
-      // tslint:disable-next-line
-      // @ts-ignore
-      expect(() => ctx1.ip = "::1").toThrow();
-      expect(ctx1.ip).toBe("127.0.0.1");
-
-      const ctx2 = new lib.Context("10.0.0.1");
-      expect(ctx2).toBeInstanceOf(lib.Context);
-      expect(ctx2.ip).toBe("10.0.0.1");
-      // tslint:disable-next-line
-      // @ts-ignore
-      expect(() => ctx2.ip = "::1").toThrow();
-      expect(ctx2.ip).toBe("10.0.0.1");
-    });
-  });
-
   describe("property isInitialised:", () => {
     test("should only be false when advertisement is false, service is set, and body is still being parsed/read/analysed", () => {
       // Missing both
-      const ctx1 = new lib.Context("127.0.0.1", "/", "POST", asyncIterable(), {}, true, undefined, undefined);
+      const ctx1 = new lib.Context("/", "POST", asyncIterable(), {}, true, undefined, undefined);
       expect(ctx1).toBeInstanceOf(lib.Context);
       expect(ctx1.isInitialised).toBe(true);
 
       // Missing (non-)advertisement
-      const ctx2 = new lib.Context("127.0.0.1", "/", "POST", asyncIterable(), {}, true, undefined, Service.UploadPack);
+      const ctx2 = new lib.Context("/", "POST", asyncIterable(), {}, true, undefined, Service.UploadPack);
       expect(ctx2).toBeInstanceOf(lib.Context);
       expect(ctx2.isInitialised).toBe(true);
 
       // Missing service
-      const ctx3 = new lib.Context("127.0.0.1", "/", "POST", asyncIterable(), {}, false, undefined, undefined);
+      const ctx3 = new lib.Context("/", "POST", asyncIterable(), {}, false, undefined, undefined);
       expect(ctx3).toBeInstanceOf(lib.Context);
       expect(ctx3.isInitialised).toBe(true);
 
       // Meet the requirements
-      const ctx4 = new lib.Context("127.0.0.1", "/", "POST", asyncIterable(), {}, false, undefined, Service.UploadPack);
+      const ctx4 = new lib.Context("/", "POST", asyncIterable(), {}, false, undefined, Service.UploadPack);
       expect(ctx4).toBeInstanceOf(lib.Context);
       expect(ctx4.isInitialised).toBe(false);
     });
@@ -1429,13 +1239,13 @@ describe("class Context", () => {
 
   describe("property method:", () => {
     test("should be the same as Context.request.method", () => {
-      const ctx1 = new lib.Context("127.0.0.1", "/", "GET");
+      const ctx1 = new lib.Context("/", "GET");
       expect(ctx1).toBeInstanceOf(lib.Context);
       expect(ctx1.method).toBe("GET");
       expect(ctx1.request.method).toBe("GET");
       expect(ctx1.method).toBe(ctx1.request.method);
 
-      const ctx2 = new lib.Context("127.0.0.1", "/", "POST");
+      const ctx2 = new lib.Context("/", "POST");
       expect(ctx2).toBeInstanceOf(lib.Context);
       expect(ctx2.method).toBe("POST");
       expect(ctx2.request.method).toBe("POST");
@@ -1443,7 +1253,7 @@ describe("class Context", () => {
     });
 
     test("should be non-writable", () => {
-      const ctx1 = new lib.Context("127.0.0.1", "/", "GET");
+      const ctx1 = new lib.Context("/", "GET");
       expect(ctx1).toBeInstanceOf(lib.Context);
       expect(ctx1.method).toBe("GET");
       // tslint:disable-next-line
@@ -1451,7 +1261,7 @@ describe("class Context", () => {
       expect(() => ctx1.method = "PATCH").toThrow();
       expect(ctx1.method).toBe("GET");
 
-      const ctx2 = new lib.Context("127.0.0.1", "/", "POST");
+      const ctx2 = new lib.Context("/", "POST");
       expect(ctx2).toBeInstanceOf(lib.Context);
       expect(ctx2.method).toBe("POST");
       // tslint:disable-next-line
@@ -1467,7 +1277,7 @@ describe("class Context", () => {
 
       const url1 = "/info/refs?service=git-upload-pack";
       const [, pathname1] = pLib.inferValues(url1, "GET");
-      const ctx1 = new lib.Context("127.0.0.1", url1, "GET", asyncIterable());
+      const ctx1 = new lib.Context(url1, "GET", asyncIterable());
       expect(ctx1).toBeInstanceOf(lib.Context);
       expect(typeof pathname1).toBe("undefined");
       expect(typeof ctx1.pathname).toBe("string");
@@ -1476,7 +1286,7 @@ describe("class Context", () => {
 
       const url2 = "/path/to/repo/info/refs?service=git-upload-pack";
       const [, pathname2] = pLib.inferValues(url2, "GET");
-      const ctx2 = new lib.Context("127.0.0.1", url2, "GET", asyncIterable());
+      const ctx2 = new lib.Context(url2, "GET", asyncIterable());
       expect(ctx2).toBeInstanceOf(lib.Context);
       expect(typeof pathname2).toBe("string");
       expect(typeof ctx2.pathname).toBe("string");
@@ -1485,17 +1295,17 @@ describe("class Context", () => {
 
       // Set pathname in constructor
 
-      const ctx3 = new lib.Context("127.0.0.1", "/", "GET", asyncIterable(), {}, false, undefined);
+      const ctx3 = new lib.Context("/", "GET", asyncIterable(), {}, false, undefined);
       expect(ctx3).toBeInstanceOf(lib.Context);
       expect(typeof ctx3.pathname).toBe("string");
       expect(ctx3.pathname).toBe("");
 
-      const ctx4 = new lib.Context("127.0.0.1", "/", "GET", asyncIterable(), {}, false, "");
+      const ctx4 = new lib.Context("/", "GET", asyncIterable(), {}, false, "");
       expect(ctx4).toBeInstanceOf(lib.Context);
       expect(typeof ctx4.pathname).toBe("string");
       expect(ctx4.pathname).toBe("");
 
-      const ctx5 = new lib.Context("127.0.0.1", "/", "GET", asyncIterable(), {}, false, "path/to/repo");
+      const ctx5 = new lib.Context("/", "GET", asyncIterable(), {}, false, "path/to/repo");
       expect(ctx5).toBeInstanceOf(lib.Context);
       expect(typeof ctx5.pathname).toBe("string");
       expect(ctx5.pathname).toBe("path/to/repo");
@@ -1573,13 +1383,13 @@ describe("class Context", () => {
 
   describe("property url:", () => {
     test("should be the same as Context.request.url", () => {
-      const ctx1 = new lib.Context("127.0.0.1", "/");
+      const ctx1 = new lib.Context("/");
       expect(ctx1).toBeInstanceOf(lib.Context);
       expect(ctx1.url).toBe("/");
       expect(ctx1.request.url).toBe("/");
       expect(ctx1.url).toBe(ctx1.request.url);
 
-      const ctx2 = new lib.Context("127.0.0.1", "/path/to/some/repo?withAQuery=true");
+      const ctx2 = new lib.Context("/path/to/some/repo?withAQuery=true");
       expect(ctx2).toBeInstanceOf(lib.Context);
       expect(ctx2.url).toBe("/path/to/some/repo?withAQuery=true");
       expect(ctx2.request.url).toBe("/path/to/some/repo?withAQuery=true");
@@ -1587,7 +1397,7 @@ describe("class Context", () => {
     });
 
     test("should be non-writable", () => {
-      const ctx1 = new lib.Context("127.0.0.1", "/");
+      const ctx1 = new lib.Context("/");
       expect(ctx1).toBeInstanceOf(lib.Context);
       expect(ctx1.url).toBe("/");
       // tslint:disable-next-line
@@ -1595,7 +1405,7 @@ describe("class Context", () => {
       expect(() => ctx1.url = "/some/other/path?hidden=false").toThrow();
       expect(ctx1.url).toBe("/");
 
-      const ctx2 = new lib.Context("127.0.0.1", "/path/to/some/repo?withAQuery=true");
+      const ctx2 = new lib.Context("/path/to/some/repo?withAQuery=true");
       expect(ctx2).toBeInstanceOf(lib.Context);
       expect(ctx2.url).toBe("/path/to/some/repo?withAQuery=true");
       // tslint:disable-next-line

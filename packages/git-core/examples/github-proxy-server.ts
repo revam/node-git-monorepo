@@ -1,12 +1,21 @@
 /**
- * **Disclamer**: This is not meant to be used for production, and is only meant
- * to show how you _could_ proxy to a remote server using only the core
- * components and no framework.
+ * **Disclamer**: This is only meant to show how you _could_ proxy to a remote
+ * server using only the core components and no additional framework (e.g.
+ * express or koa), and should not be miss-used in any way.
  */
 
-import { Server } from "http";
+import { Server, IncomingMessage, ServerResponse } from "http";
+import { Http2ServerRequest, Http2ServerResponse } from "http2";
 import { BasicController } from "../src/main";
 import middlewareFactory, { addLogging, restrictPathName } from "./middleware";
+
+// Extend state.
+declare module "../src/context" {
+  export interface State {
+    req: IncomingMessage | Http2ServerRequest;
+    res: ServerResponse | Http2ServerResponse;
+  }
+}
 
 // tslint:disable:no-console
 
@@ -30,7 +39,7 @@ const AllowedHostNames = new Set<string>([
   domain,
   `${domain}:${port}`,
 ]);
-controller.use(function rejectOtherDomains({request: {headers}}) {
+controller.use(function rejectOtherDomains({ request: { headers } }) {
   let host = headers.get("Host");
   if (!host || !(host = host.trim()) || !AllowedHostNames.has(host)) {
     return this.reject(400);
@@ -42,7 +51,10 @@ controller.use(function rejectOtherDomains({request: {headers}}) {
 restrictPathName(controller);
 
 // Append client ip to Forwarded header
-controller.use(({request: {headers, ip}}) => {
+controller.use(({ request: { headers }, state: { req: { socket: { remoteAddress: ip } } } }) => {
+  if (!ip) {
+    return;
+  }
   let forwarded: string | null | string[] = headers.get("Forwarded");
   // Append ip to array.
   if (forwarded) {
@@ -59,7 +71,7 @@ controller.use(({request: {headers, ip}}) => {
 
 // Addend proxy to Via header
 const viaConstant = `HTTP/1.1 ${domain}${port !== 80 ? `:${port}` : ""}`;
-controller.use(({request: {headers}}) => {
+controller.use(({ request: { headers } }) => {
   let via: string | null | string[] = headers.get("Via");
   if (via) {
     via = via.split(", ");

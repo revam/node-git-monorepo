@@ -47,13 +47,12 @@ export interface CommandUploadPack {
 // @public
 export class Context implements Response {
     constructor();
-    constructor(ip: string);
-    constructor(ip: string, url: string);
-    constructor(ip: string, url: string, method: string);
-    constructor(ip: string, url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>);
-    constructor(ip: string, url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>);
-    constructor(ip: string, url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>, advertisement: boolean, pathname?: string, service?: Service);
-    constructor(ip?: string, url?: string, method?: string, body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers?: Headers | Record<string, string>, advertisement?: boolean, pathname?: string, service?: Service);
+    constructor(url: string);
+    constructor(url: string, method: string);
+    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>);
+    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>);
+    constructor(url: string, method: string, body: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers: Headers | Record<string, string>, advertisement: boolean, pathname?: string, service?: Service);
+    constructor(url?: string, method?: string, body?: AsyncIterable<Uint8Array> | AsyncIterableIterator<Uint8Array>, headers?: Headers | Record<string, string>, advertisement?: boolean, pathname?: string, service?: Service);
     addError(errorMessage: string): void;
     addMessage(message: string): void;
     readonly advertisement: boolean;
@@ -62,10 +61,9 @@ export class Context implements Response {
     capabilities(): Promise<Capabilities>;
     commands(): Promise<ReadonlyCommands>;
     headers: Headers;
-    readonly ip: string;
     readonly isInitialised: boolean;
     length: number | undefined;
-    readonly method: "HEAD" | "GET" | "OPTIONS" | "PATCH" | "POST" | "PUT";
+    readonly method: "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
     pathname: string;
     readonly readable: {
         request(): Readable;
@@ -77,7 +75,7 @@ export class Context implements Response {
     setHeader(headerName: string, value: number | string | string[]): void;
     setHeader(headerName: string): void;
     setHeader(headerName: string, value?: number | string | string[]): void;
-    state: Record<PropertyKey, any>;
+    state: State;
     status: number;
     toAsyncIterator(): AsyncIterableIterator<Uint8Array>;
     type: string | undefined;
@@ -185,7 +183,6 @@ export type ReadonlyCommands = ReadonlyArray<Readonly<CommandReceivePack | Comma
 export interface Request {
     body: AsyncIterableIterator<Uint8Array>;
     headers: Headers;
-    ip: string;
     method: "GET" | "HEAD" | "OPTIONS" | "PATCH" | "POST" | "PUT";
     url: string;
 }
@@ -209,6 +206,11 @@ export interface ServiceController {
     checkIfEnabled(context: Context): Promise<boolean>;
     checkIfExists(context: Context): Promise<boolean>;
     serve(context: Context): Promise<void>;
+}
+
+// @public
+export interface State {
+    [index: string]: any;
 }
 
 

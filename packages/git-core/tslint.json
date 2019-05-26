@@ -3,7 +3,7 @@
     "typeCheck": true
   },
   "linterOptions": {
-    "exclude": ["**/*.mjs"]
+    "exclude": ["**/*.mjs", "**/*.api.ts"]
   },
   "extends": "tslint:all",
   "rules": {
@@ -81,8 +81,6 @@
     ],
     "one-line": [
       true,
-      "check-catch",
-      "check-finally",
       "check-whitespace",
       "check-open-brace"
     ],
@@ -116,6 +114,8 @@
     "no-switch-case-fall-through": true,
 
     // Disabled
+    "ordered-imports": false,
+    "no-null-undefined-union": false,
     "await-promise": false,
     "no-redundant-jsdoc": false,
     "strict-boolean-expressions": false,
@@ -126,6 +126,7 @@
     "newline-before-return": false,
     "newline-per-chained-call": false,
     "no-conditional-assignment": false,
+    "no-default-import": false,
     "no-default-export": false,
     "no-magic-numbers": false,
     "no-namespace": false,

@@ -6,6 +6,39 @@
   "configurations": [
     {
       "type": "node",
+      "name": "Build package: @revam/git-core (debug)",
+      "request": "launch",
+      "preLaunchTask": "build @revam/git-core",
+      "program": "${workspaceFolder}/packages/git-core/node_modules/rollup/bin/rollup",
+      "args": [
+        "--config",
+        "dist/config/rollup.config.js"
+      ],
+      "cwd": "${workspaceFolder}/packages/git-core",
+      "showAsyncStacks": true,
+      "console": "externalTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "useWSL": true,
+      "sourceMaps": true,
+    },
+    {
+      "type": "node",
+      "name": "Test package: @revam/git-core (debug)",
+      "request": "launch",
+      "preLaunchTask": "build @revam/git-core",
+      "program": "${workspaceFolder}/packages/git-core/node_modules/jest/bin/jest",
+      "args": [
+        "--runInBand",
+      ],
+      "cwd": "${workspaceFolder}/packages/git-core",
+      "showAsyncStacks": true,
+      "console": "externalTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "useWSL": true,
+      "sourceMaps": true,
+    },
+    {
+      "type": "node",
       "name": "Test package: git-packet-streams (debug)",
       "request": "launch",
       "preLaunchTask": "build git-packet-streams",

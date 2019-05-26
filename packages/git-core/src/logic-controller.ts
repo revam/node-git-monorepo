@@ -1,450 +1,823 @@
 import { STATUS_CODES } from "http";
-import { ReadableSignal, Signal } from "micro-signals";
+import { ReadableSignal } from "micro-signals";
 import { Context } from "./context";
-import { ErrorCodes, Status } from "./enums";
-import { IError, IOuterError, ServiceDriver } from "./main";
-import { encodeString } from "./packet-utils";
+import { CompleteSignal, UsableSignal } from "./logic-controller.private";
+import { ServiceController } from "./main";
+import { checkServiceController } from "./main.private";
+import { encode } from "./util/buffer";
 
-const SymbolContext = Symbol("context");
-const SymbolOnError = Symbol("on error");
-
+const SymbolPrivate = Symbol("private");
 const SymbolOnComplete = Symbol("on complete");
-class OnCompleteSignal extends Signal<Context> {
-  // Dispatch payload to observers in parallel, and await results.
-  public async dispatchAsync(context: Context): Promise<void> {
-    try {
-      if (this._listeners.size && !context.isPending) {
-        await Promise.all(Array.from(this._listeners).map(async (fn) => fn.call(void 0, context)));
-      }
-    } catch (error) {
-      throw wrapError(error, ErrorCodes.ERR_FAILED_IN_COMPLETE_SIGNAL);
-    }
-  }
-}
-
 const SymbolOnUsable = Symbol("on usable");
-class OnUsableSignal extends Signal<Context> {
-  // Dispatch payload to observers one at the time, till request is not pending.
-  public async dispatchAsync(context: Context, logicController: LogicController): Promise<void> {
-    try {
-      if (this._listeners.size && context.isPending) {
-        const thisArg = new MiddlewareContext(logicController, context);
-        for (const fn of this._listeners) {
-          await fn.call(thisArg, context);
-          if (!context.isPending) {
-            break;
-          }
-        }
-      }
-    } catch (error) {
-      throw wrapError(error, ErrorCodes.ERR_FAILED_IN_USABLE_SIGNAL);
-    }
-  }
-}
 
 /**
- * Common logic for controlling a {@link ServiceDriver | service driver}.
+ * A {@link ServiceController} for controlling other {@link ServiceController}s
+ * with sane default business-logic.
  *
  * @remarks
  *
- * It also implements the {@link ServiceDriver} interface.
+ * Have some plugable aspects and makes configuring application-specific
+ * business-logic on top of a controller (e.g. {@link (FetchController:class)})
+ * easier.
  *
  * @public
  */
-export class LogicController implements ServiceDriver {
+export class LogicController implements ServiceController {
   /**
-   * The parent signal of `onComplete`.
-   * @internal
-   */
-  private [SymbolOnComplete]: OnCompleteSignal = new OnCompleteSignal();
-
-  /**
-   * The parent signal of `onError`.
-   * @internal
-   */
-  private [SymbolOnError]: Signal<any> = new Signal();
-
-  /**
-   * The parent signal of `onUsable`.
-   * @internal
-   */
-  private [SymbolOnUsable]: OnUsableSignal = new OnUsableSignal();
-
-  /**
-   * Service driver - doing the heavy-lifting for us.
-   */
-  public readonly driver: ServiceDriver;
-
-  /**
-   * Payload is distpatched to any observer after processing if request is
-   * **not** pending. If an observer returns a promise, will wait till the
-   * promise resolves before continuing.
+   * The parent signal of {@link (LogicController:class).onComplete}.
    *
-   * **Note:** Request or response should __not__ be tempered with here unless
-   * you know what you are doing.
+   * @remarks
+   *
+   * Only accessible by {@link (LogicController:class) | **this class**}, and not
+   * extending classes.
    */
-  public readonly onComplete: ReadableSignal<Context> = this[SymbolOnComplete].readOnly();
+  private readonly [SymbolOnComplete]: CompleteSignal;
 
   /**
-   * Payload is dispatched when any error is thrown from controller or the
-   * underlying driver.
+   * The parent signal of {@link (LogicController:class).onUsable}.
+   *
+   * @remarks
+   *
+   * Only accessible by {@link (LogicController:class) | **this class**}, and not
+   * extending classes.
    */
-  public readonly onError: ReadableSignal<any> = this[SymbolOnError].readOnly();
+  private readonly [SymbolOnUsable]: UsableSignal;
+
+  /**
+   * Private declaration(s).
+   *
+   * @privateRemarks
+   *
+   * Contains the upstream {@link ServiceController | service controller} and
+   * {@link MethodOverrides | method-override declarations}.
+   */
+  private readonly [SymbolPrivate]: { controller: ServiceController; methods?: MethodOverrides };
+
+  /**
+   * Symbol used to check if {@link Context} has been previously served.
+   */
+  private readonly __symbolCheck: symbol;
+
+  /**
+   * Symbol used to store {@link LogicControllerInstance} within
+   * {@link Context.state}.
+   */
+  private readonly __symbolInstance: symbol;
+
+  /**
+   * {@inheritdoc LogicControllerOptions.privacyMode}
+   */
+  private readonly privacyMode: boolean;
+
+  /**
+   * {@link Context | Payload} is dispatched after the
+   * {@link (LogicController:class) | controller} has served it.
+   *
+   * @remarks
+   *
+   * It is advised against tempering with {@link Context | `context`} here.
+   *
+   * If an observer returns a promise, will wait till the promise resolves
+   * before continuing.
+   */
+  public readonly onComplete: ReadableSignal<Context>;
 
   /**
    * Payload is dispatched to each observer in series till the (observer-)stack
    * is empty or the request is no longer pending. If an observer returns a
    * promise, will wait till the promise resolves before continuing.
    */
-  public readonly onUsable: ReadableSignal<Context> = this[SymbolOnUsable].readOnly();
+  public readonly onUsable: ReadableSignal<Context>;
 
   /**
-   * Create a new {@link (LogicController:class)} instance.
+   * Create a new instance of {@link (LogicController:class)}.
    *
-   * @param serviceDriver - The {@link ServiceDriver | driver} to use logic on.
+   * @param upstream - The upstream {@link ServiceController | controller}.
+   * @param options - {@link LogicControllerOptions | Optional options}.
    */
-  public constructor(serviceDriver: ServiceDriver) {
-    this.driver = serviceDriver;
+  public constructor(upstream: ServiceController, options: LogicControllerOptions = {}) {
+    if (!checkServiceController(upstream)) {
+      throw new TypeError("argument `upstream` must confront to the ServiceController interface");
+    }
+    const { overrides, privacyMode = false } = options;
+    if (overrides !== undefined && (overrides === null || typeof overrides !== "object")) {
+      throw new TypeError("argument `options.overrides` must be `undefined` or of type 'object'.");
+    }
+    if (overrides) {
+      for (const [key, value] of Object.entries(overrides)) {
+        // Disabled methods should be strictly marked with `true`, but input
+        // allows for booleans, so convert `false` to `true`.
+        if (value === false) {
+          overrides[key] = true;
+        }
+      }
+    }
+    this[SymbolOnComplete] = new CompleteSignal();
+    this.onComplete = this[SymbolOnComplete].readOnly();
+    this[SymbolOnUsable] = new UsableSignal();
+    this.onUsable = this[SymbolOnUsable].readOnly();
+    this[SymbolPrivate] = { controller: upstream, methods: overrides };
+    this.privacyMode = privacyMode;
+    this.__symbolCheck = Symbol("logic controller check");
+    this.__symbolInstance = Symbol("logic controller instance");
   }
 
   /**
-   * Uses middleware with controller. Adds all elements in `middleware` as
-   * listeners to signal `onUsable`.
+   * Uses {@link Middleware | middleware}. Adds all `middleware` as listeners
+   * to signal {@link (LogicController:class).onUsable | `onUsable`}.
    *
    * @param middleware - Middleware to use.
    */
   public use(...middleware: Middleware[]): this {
-    middleware.forEach((m) =>
-      this.onUsable.add((request) =>
-        m.call(request[SymbolContext], request)));
+    middleware.forEach((m) => this[SymbolOnUsable].add(m));
     return this;
   }
 
   /**
-   * Serve with sane behaviour.
+   * Serve {@link Context | `context`} with a sane default behaviour.
    *
    * @remarks
    *
-   * Throws if any observer in either any listerners in
-   * {@link (LogicController:class).onUsable | `onUsable`} or
-   * {@link (LogicController:class).onComplete | `onComplete`} throws, or if the
-   * underlying {@link ServiceDriver | driver} throws.
+   * Will only proccess **once** on the same instance of {@link Context}.
+   *
+   * Throws if the upstream {@link ServiceController | controller} throws, or if
+   * any listener of {@link (LogicController:class).onUsable | `onUsable`} or
+   * {@link (LogicController:class).onComplete | `onComplete`} throws.
    *
    * Also see {@link (LogicController:class).accept},
    * {@link (LogicController:class).reject}, and
-   * {@link (ServiceDriver:interface).serve}.
+   * {@link ServiceController.serve}.
+   *
+   * @param context - {@link Context} to use.
    */
   public async serve(context: Context): Promise<void> {
-    if (!context.isReady) {
-      await context.initialise();
-    }
-    if (context.isPending) {
-      await this[SymbolOnUsable].dispatchAsync(context, this);
-      // Recheck because an observer might have changed it.
-      if (context.isPending) {
-        if (! await this.checkIfExists(context)) {
-          await this.reject(context, 404); // 404 Not Found
-        }
-        else if (! await this.checkIfEnabled(context)) {
-          await this.reject(context, 403); // 403 Forbidden
-        }
-        else if (! await this.checkForAuth(context)) {
-          await this.reject(context, 401); // 401 Unauthorized
-        }
-        else {
-          await this.accept(context);
+    if (this.checkIfPending(context)) {
+      try {
+        let step = 0;
+        do {
+          switch (step++) { // tslint:disable-line:increment-decrement
+            // Dispatch context to all observers of `LogicController.onUsable`.
+            case 0:
+              const signal = this[SymbolOnUsable];
+              if (signal.isUsable) {
+                await this[SymbolOnUsable].dispatchAsync(context, this, this.__findInstance(context));
+              }
+              break;
+
+            // Return early if no service is available.
+            case 1:
+              if (context.service === undefined) {
+                this.__failure(context, this.checkForPrivacy(400)); // 400 Bad Request
+              }
+              break;
+
+            // Check if repository exists
+            case 2:
+              // It is done like this to keep it sync when possible.
+              if (!(this.checkIfDisabled("checkIfExists") || await this.checkIfExists(context))) {
+                this.reject(context, 404); // 404 Not Found
+              }
+              break;
+
+            // Check if service is enabled
+            case 3:
+              if (!(this.checkIfDisabled("checkIfEnabled") || await this.checkIfEnabled(context))) {
+                this.reject(context, this.checkForPrivacy(403)); // 403 Forbidden
+              }
+              break;
+
+            // Check for authenctication and/or authorization
+            case 4:
+              if (!(this.checkIfDisabled("checkForAuth") || await this.checkForAuth(context))) {
+                this.reject(context, this.checkForPrivacy(401)); // 401 Unauthorized
+              }
+              break;
+
+            // Serve request from upstream
+            case 5:
+              await this.accept(context); // xxx Unknown
+          }
+        // Check status between each step because an async interaction MAY have changed it.
+        } while (this.checkIfPending(context));
+      }
+      // ALWAYS dispatch on complete (when request have not previously been served by controller).
+      finally {
+        const signal = this[SymbolOnComplete];
+        if (signal.isUsable) {
+          // Dispatch context to all observers of `LogicController.onComplete`.
+          await signal.dispatchAsync(context);
         }
       }
-      await this[SymbolOnComplete].dispatchAsync(context);
     }
   }
 
   /**
-   * Accepts request and asks the underlying driver for an appropriate response.
-   * If driver returns a 4xx or 5xx, then the request is rejected and marked as
-   * a failure.
+   * Marks {@link Context | `context`} as accepted and asks the underlying
+   * {@link ServiceController | controller} to serve it.
    *
-   * @param context - An existing request.
+   * @remarks
+   *
+   * If `context` have a status in the `4xx` or `5xx` range after returning from
+   * upstream {@link ServiceController | controller}, then it is marked as a
+   * failure and the response body from upstream is discarded.
+   *
+   * Also see {@link ServiceController.serve} for upstream behaviour.
+   *
+   * @param context - {@link Context} to use.
    */
   public async accept(context: Context): Promise<void> {
-    if (!context.isPending) {
+    if (!this.checkIfPending(context)) {
       return;
     }
-    // No service -> invalid input -> 404 Not Found.
-    if (!context.service) {
-      context.updateStatus(Status.Failure);
-      context.statusCode = 404;
-      context.body = undefined;
-      this.createPlainBodyForResponse(context);
-      return;
-    }
-    if (context.statusCode > 300 && context.statusCode < 400) {
-      return this.redirect(context);
-    }
-    context.updateStatus(Status.Accepted);
+    this.__updateStatus(context, LogicController.Status.Accepted);
     try {
-      await this.driver.serve(context);
-    } catch (error) {
-      this.dispatchError(error);
-      context.statusCode = error && (error.status || error.statusCode) || 500;
-      context.body = undefined;
+      // Before we serve from upstream, check if the body-parser encountered any errors.
+      if (!context.isInitialised) {
+        await context.awaitInitialised(); // May throw
+      }
+      await this[SymbolPrivate].controller.serve(context); // May throw
     }
-    // If no status code is set or is below 300 with no body, reset response
-    // status and body and throw error.
-    if (context.statusCode < 300 && !context.body) {
-      const error = new Error("Response is within the 2xx range, but contains no body.") as IError;
-      error.code = ErrorCodes.ERR_INVALID_BODY_FOR_2XX;
-      this.dispatchError(error);
-      context.statusCode = 500;
-      context.body = undefined;
+    // If any of the above threw, set status/body and mark as failure.
+    catch (error) {
+      const statusCode = error && (error.status || error.statusCode) || 500;
+      const reason: string | undefined = error && (error.expose === true && error.message) ? error.message : undefined;
+      this.__failure(context, statusCode, reason);
+      throw error;
     }
-    // Mark any response with a status above or equal to 400 as a failure.
-    if (context.statusCode >= 400) {
-      context.updateStatus(Status.Failure);
-      this.createPlainBodyForResponse(context);
+    // Report as failure if status is above or equal to 400.
+    if (context.status >= 400) {
+      this.__failure(context, context.status);
     }
   }
 
   /**
-   * Rejects request with status code and an optional status message.
+   * Mark {@link Context | `context`} as rejected, and optionally set
+   * {@link Context.status | status code} and plain-text
+   * {@link Context.body | body}.
+   *
+   * @remarks
+   *
    * Only works with http status error codes.
    *
-   * Will redirect if statusCode is in the 3xx range.
-   *
-   * @param context - An existing request.
-   * @param statusCode - 3xx, 4xx or 5xx http status code.
-   *                     Default is `500`.
-   *
-   *                   Code will only be set if no prior code is set.
+   * @param context - {@link Context} to mark and use.
+   * @param statusCode - Optional. The status sent with response. Must be in the
+   *                     `4xx` or `5xx` range. Defaults to `500`.
    * @param reason - Reason for rejection.
    */
-  public async reject(context: Context, statusCode?: number, reason?: string): Promise<void> {
-    if (!context.isPending) {
+  public reject(context: Context, statusCode?: number, reason?: string): void {
+    if (!this.checkIfPending(context)) {
       return;
     }
-    // Redirect instead if the statusCode is in the 3xx range.
-    if (context.statusCode && context.statusCode > 300 && context.statusCode < 400) {
-      return this.redirect(context);
+    this.__updateStatus(context, LogicController.Status.Rejected);
+    if (!statusCode) {
+      statusCode = context.status;
     }
-    context.updateStatus(Status.Rejected);
-    if (context.statusCode < 400) {
-      if (!(statusCode && statusCode < 600 && statusCode >= 300)) {
-        statusCode = 500;
-      }
-      context.statusCode = statusCode;
-    }
-    this.createPlainBodyForResponse(context, reason);
+    this.__reject(context, statusCode, reason);
   }
 
   /**
-   * Redirects client with "Location" header. Header must be set beforehand.
+   * Redirects client with a `304` to a locally cached resource.
+   *
+   * @param context - {@link Context} to mark and use.
+   * @param statusCode - Set to `304` to indicate a local cached resource.
    */
-  public redirect(request: Context): Promise<void>;
+  public redirect(context: Context, statusCode: 304): void;
   /**
-   * Redirects client to cached entry.
+   * Redirects client with the `"Location"` header and an optional
+   * {@link Response.status | status code}.
+   *
+   * @remarks
+   *
+   * Will lead to a `500` status code if the `"Location"` header is not set
+   * before calling this method.
+   *
+   * @param context - {@link Context} to mark and use.
+   * @param statusCode - Optional. The status sent with response. Must be in the
+   *                     `3xx` range. Defaults to `308`.
    */
-  public redirect(request: Context, ststuCode: 304): Promise<void>;
+  public redirect(context: Context, statusCode?: number): void;
   /**
-   * Redirects client with "Location" header.
+   * Redirects client with argument `location` and an optional
+   * {@link Response.status | status code}.
+   *
+   * @param context - {@link Context} to mark and use.
+   * @param location - The location to redirect to.
+   * @param statusCode - Optional. The status sent with response. Must be in the
+   *                     `3xx` range. Defaults to `308`.
    */
-  public redirect(request: Context, statusCode: number): Promise<void>;
+  public redirect(context: Context, location: string, statusCode?: number): void;
   /**
-   * Redirects client to `location`. Can optionally set status code of redirect.
-   * @param location The location to redirect to.
+   * Overflow signature.
+   *
+   * @param context - {@link Context} to mark and use.
+   * @param locationOrStatus - Optional. Either the value to set for the
+   *                           "Location" header or the status code to use.
+   * @param statusCode - Optional. The status sent with response. Must be in the
+   *                     `3xx` range. Defaults to `308`.
    */
-  public redirect(request: Context, location: string, statusCode?: number): Promise<void>;
-  public redirect(reqiest: Context, locationOrStatus?: string | number, statusCode?: number): Promise<void>;
-  public async redirect(context: Context, location?: string | number, statusCode?: number): Promise<void> {
-    if (!context.isPending) {
+  public redirect(context: Context, locationOrStatus?: string | number, statusCode?: number): void;
+  public redirect(context: Context, location?: string | number, statusCode?: number): void {
+    if (!this.checkIfPending(context)) {
       return;
     }
+    this.__updateStatus(context, LogicController.Status.Redirect);
     if (typeof location === "number") {
       statusCode = location;
       location = undefined;
     }
-    if (location) {
-      context.set("Location", location[0] !== "/" ? `/${location}` : location);
+    else if (!statusCode) {
+      statusCode = context.status;
     }
-    // Reject if no "Location" header is not found and status is not 304
-    if (!context.response.headers.has("Location") && context.statusCode !== 304) {
-      context.statusCode = 500;
-      return this.reject(context);
-    }
-    context.updateStatus(Status.Redirect);
-    if (!(context.statusCode > 300 && context.statusCode < 400)) {
-      if (!(statusCode && statusCode > 300 && statusCode < 400)) {
-        statusCode = 308;
+    // Only check/set location if status is **NOT** 304.
+    if (statusCode !== 304) {
+      // Set header if `location` is provided.
+      if (location) {
+        context.setHeader("Location", location);
       }
-      context.statusCode = statusCode;
+      // Fail if header was not found
+      else if (!context.response.headers.has("Location")) {
+        return this.__failure(context, 500); // Internal Server Error
+      }
     }
-    context.response.headers.delete("Content-Type");
-    context.response.headers.delete("Content-Length");
-    context.body = undefined;
+    if (!(statusCode > 300 && statusCode < 400)) {
+      statusCode = 308; // Permanent Redirect
+    }
+    context.status = statusCode;
+    this.__encodeBody(context, STATUS_CODES[statusCode]!);
   }
 
   /**
-   * {@inheritdoc ServiceDriver.checkIfExists}
-   */
-  public async checkIfExists(context: Context): Promise<boolean> {
-    try {
-      return this.driver.checkIfExists(context);
-    } catch (error) {
-      this.dispatchError(error);
-    }
-    return false;
-  }
-
-  /**
-   * {@inheritdoc ServiceDriver.checkIfEnabled}
-   */
-  public async checkIfEnabled(context: Context): Promise<boolean> {
-    try {
-      return this.driver.checkIfEnabled(context);
-    } catch (error) {
-      this.dispatchError(error);
-    }
-    return false;
-  }
-
-  /**
-   * {@inheritdoc ServiceDriver.checkForAuth}
-   */
-  public async checkForAuth(context: Context): Promise<boolean> {
-    try {
-      return this.driver.checkForAuth(context);
-    } catch (error) {
-      this.dispatchError(error);
-    }
-    return false;
-  }
-
-  /**
-   * Creates a plain-text body for response, but only if no body exists.
+   * Mark {@link Context | `context`} as handled outside
+   * {@link (LogicController:class) | controller}.
    *
    * @remarks
    *
-   * The body is populated with `data` and any additional messages from
-   * `response.messages`.
+   * All processing of {@link Context | `context`} will be haltet after this is
+   * called.
    *
-   * @param context - Context.
-   * @param data - Data to write in plain text. Defaults to status message for
-   *               {@link (Context:namespace).statusCode | status code}.
+   * @param context - {@link Context} to mark.
    */
-  private createPlainBodyForResponse(
-    context: Context,
-    data: string = STATUS_CODES[context.statusCode]!,
-  ): void {
-    if (!context.body) {
-      const body = context.body = encodeString(data);
-      context.type = "text/plain; charset=utf-8";
-      context.length = body.length;
+  public setCustom(context: Context): void {
+    if (!this.checkIfPending(context)) {
+      return;
+    }
+    this.__updateStatus(context, LogicController.Status.Custom);
+  }
+
+  // tslint:disable:promise-function-async
+
+  /**
+   * {@inheritdoc ServiceController.checkForAuth}
+   */
+  public checkForAuth(context: Context): Promise<boolean> {
+    return this.argumentMethod("checkForAuth", context, true);
+  }
+
+  /**
+   * {@inheritdoc ServiceController.checkIfEnabled}
+   */
+  public checkIfEnabled(context: Context): Promise<boolean> {
+    return this.argumentMethod("checkIfEnabled", context, false);
+  }
+
+  /**
+   * {@inheritdoc ServiceController.checkIfExists}
+   */
+  public checkIfExists(context: Context): Promise<boolean> {
+    return this.argumentMethod("checkIfExists", context, false);
+  }
+
+  // tslint:enable:promise-function-async
+
+  /**
+   * Mark {@link Context | `context`} as a failure, and optionally set
+   * {@link Context.status | status code} and plain-text
+   * {@link Context.body | body}.
+   *
+   * @param context - {@link Context} to mark and use.
+   * @param statusCode - The status sent with response. Must be in the `4xx` or
+   *                     `5xx` range.
+   * @param reason - Reason for failure.
+   */
+  private __failure(context: Context, statusCode: number, reason?: string): void {
+    this.__updateStatus(context, LogicController.Status.Failure);
+    context.body = undefined;
+    this.__reject(context, statusCode, reason);
+  }
+
+  /**
+   *
+   * @param context - {@link Context} to use.
+   * @param statusCode - Optional. The status sent with response. Must be in the
+   *                     `4xx` or `5xx` range. Defaults to `500`.
+   * @param reason - Reason for rejection.
+   */
+  private __reject(context: Context, statusCode: number, reason?: string): void {
+    context.status = (statusCode < 600 && statusCode >= 400) ? statusCode : 500;
+    if (!context.body || typeof reason === "string") {
+      if (typeof reason !== "string") {
+        reason = STATUS_CODES[context.status] || "";
+      }
+      this.__encodeBody(context, reason);
     }
   }
 
   /**
-   * Dispatch error onto signal `onError`.
+   * Encode context body from `text`.
+   *
+   * @param context - {@link Context} to use.
+   * @param text - Text to encode in {@link Context.body | body}.
    */
-  private dispatchError(error: any): void {
-    setImmediate(() => this[SymbolOnError].dispatch(error));
+  private __encodeBody(context: Context, text: string): void {
+    const body = context.body = encode(text);
+    context.type = "text/plain; charset=utf-8";
+    context.length = body.length;
+  }
+
+  /**
+   * Check if method is disabled.
+   *
+   * @param method - Name of method to check.
+   * @returns `true` if method is disabled by controller, otherwise `false`.
+   */
+  private checkIfDisabled(method: keyof MethodOverrides): boolean {
+    const { methods } = this[SymbolPrivate];
+    return methods ? methods[method] === true : false;
+  }
+
+  /**
+   * Check if {@link (LogicController:class).privacyMode} is set, and return
+   * status code accordingly.
+   *
+   * @param status - Status code to set.
+   * @returns Returns `404` if {@link LogicControllerOptions.privacyMode} is
+   *          true, returns otherwise `status`.
+   */
+  private checkForPrivacy(status: number): number {
+    return this.privacyMode ? 404 : status;
+  }
+
+  /**
+   * Argument a {@link ServiceController | controller} method. Check for and
+   * (maybe) use override, and/or use original method.
+   *
+   * @remarks
+   *
+   * Will only return value from override or controller if it is a boolean.
+   * If it is not a boolean, then `defaultValue` is returned.
+   *
+   * If `method` is "serve", then it immediately returns `defaultValue`.
+   *
+   * @param method - Method from {@link ServiceController | other controller} to
+   *                 argument. Not allowed to pass "serve".
+   * @param context - {@link Context} to pass to function.
+   * @param defaultValue - Default value.
+   */
+  private async argumentMethod(
+    method: keyof MethodOverrides,
+    context: Context,
+    defaultValue: boolean,
+  ): Promise<boolean> {
+    const { controller, methods } = this[SymbolPrivate];
+    const fnOrValue = methods && methods[method];
+    if (fnOrValue === true) {
+      return defaultValue;
+    }
+    if (fnOrValue) {
+      // Store/retrive instance from context.state under private symbol.
+      const instance = this.__findInstance(context);
+      const result = await fnOrValue.call(instance, context);
+      if (typeof result === "boolean") {
+        return result;
+      }
+    }
+    const fn = controller[method];
+    if (fn) {
+      const result = await fn.call(controller, context);
+      if (typeof result === "boolean") {
+        return result;
+      }
+    }
+    return defaultValue;
+  }
+
+  /**
+   * Create or find an instance for `context`.
+   * @param context - {@link (Context:class) | Context} to find instance for.
+   */
+  private __findInstance(context: Context): LogicControllerInstance {
+    return this.__symbolInstance in context.state ?
+      context.state[this.__symbolInstance as any]
+    : context.state[this.__symbolInstance as any] = new LogicControllerInstance(this, context);
+  }
+
+  /**
+   * Check if `context` is still pending or has been used.
+   *
+   * @param context - {@link (Context:class) | Context} to check.
+   */
+  public checkIfPending(context: Context): boolean {
+    return !(this.__symbolCheck in context.state);
+  }
+
+  /**
+   * Check {@link (LogicController:namespace).Status | status} for `context`.
+   *
+   * @param context - {@link (Context:class) | Context} to use.
+   */
+  public checkStatus(context: Context): LogicController.Status {
+    return this.__symbolCheck in context.state ? context.state[this.__symbolCheck as any] : LogicController.Status.None;
+  }
+
+  /**
+   * Update {@link (LogicController:namespace).Status | status} in
+   * {@link (Context:class).state}.
+   *
+   * @remarks
+   *
+   * We can only set status once, except for failures, which can be
+   * set at any time.
+   */
+  private __updateStatus(context: Context, status: LogicController.Status): void {
+    context.state[this.__symbolCheck as any] = status;
+  }
+}
+
+export namespace LogicController {
+  /**
+   * Status of
+   *
+   * @public
+   */
+  export const enum Status {
+    /**
+     * The request has not been used with a {@link (LogicController:class)} yet.
+     */
+    None = "None",
+    /**
+     * The request was accepted.
+     */
+    Accepted = "Accepted",
+    /**
+     * The request was rejected.
+     */
+    Rejected = "Rejected",
+    /**
+     * The request resulted in a failure.
+     */
+    Failure = "Failure",
+    /**
+     * The request is being redirected.
+     */
+    Redirect = "Redirect",
+    /**
+     * The request was handled by a third-party.
+     */
+    Custom = "Custom",
   }
 }
 
 /**
- * Middeware for controller.
+ * Options for {@link (LogicController:class)}.
  *
  * @public
  */
-export type Middleware = (this: MiddlewareContext, context: Context) => any;
+export interface LogicControllerOptions {
+  /**
+   * Override _some_ method definitions from {@link ServiceController}. See
+   * {@link MethodOverrides} for more info.
+   *
+   * @defaultValue
+   *
+   * Not set.
+   */
+  overrides?: MethodOverrides;
+  /**
+   * Sets all rejections in {@link (LogicController:class).serve} to use status
+   * code `404`, as to protect the _privacy_ of hidden repositories by not
+   * telling the clients what exist and what not.
+   *
+   * @remarks
+   *
+   * It is recommended to turn this of, bacause it interfares with the git
+   * client when requesting use of the {@link Service.ReceivePack} with
+   * auth. by **NOT** sending the expected `401` status code.
+   *
+   * @defaultValue
+   *
+   * Defaults to `false`.
+   */
+  privacyMode?: boolean;
+}
 
-class MiddlewareContext {
-  /* @internal */
-  private [SymbolContext]: LogicController;
+/**
+ * A bound instance between a {@link (LogicController:class)} and
+ * {@link (Context:class)}.
+ *
+ * @public
+ */
+export class LogicControllerInstance {
+  /**
+   * Private declaration(s).
+   *
+   * @privateRemarks
+   *
+   * The bound {@link (LogicController:class)} for instance.
+   */
+  private readonly [SymbolPrivate]: LogicController;
 
   /**
-   * Request data.
+   * Bound {@link Context} for instance.
    */
   public readonly context: Context;
 
-  public constructor(controller: LogicController, request: Context) {
-    this[SymbolContext] = controller;
-    this.context = request;
+  /**
+   * Create an new instance.
+   *
+   * @privateRemarks
+   *
+   * Should only be called by {@link (LogicController:class)}.
+   *
+   * @param controller - {@link (LogicController:class)} to bind.
+   * @param context - {@link Context} to bind.
+   * @internal
+   */
+  public constructor(controller: LogicController, context: Context) {
+    this[SymbolPrivate] = controller;
+    this.context = context;
   }
 
   /**
-   * Accepts request and asks the underlying driver for an appropriate response.
-   * If driver returns a 4xx or 5xx, then the request is rejected and marked as
-   * a failure.
+   * Marks {@link LogicControllerInstance.context | `context`} as accepted and
+   * asks the underlying {@link ServiceController | controller} to serve it.
+   *
+   * @remarks
+   *
+   * If `context` returns with a status in the `4xx` or `5xx` range, then it is
+   * marked as a failure instead.
    */
   public async accept(): Promise<void> {
-    return this[SymbolContext].accept(this.context);
+    return this[SymbolPrivate].accept(this.context);
   }
 
   /**
-   * Rejects request with status code and an optional status message.
+   * Mark {@link LogicControllerInstance.context | `context`} as handled outside
+   * {@link (LogicController:class) | controller}.
+   *
+   * @remarks
+   *
+   * All processing of {@link Context | context} will be haltet after this is
+   * called.
+   */
+  public setCustom(): void {
+    return this[SymbolPrivate].setCustom(this.context);
+  }
+
+  /**
+   * Mark {@link LogicControllerInstance.context | `context`} as rejected, and
+   * optionally set {@link Context.status | status code} and plain-text
+   * {@link Context.body | body}.
+   *
+   * @remarks
+   *
    * Only works with http status error codes.
    *
-   * Will redirect if statusCode is in the 3xx range.
+   * @param statusCode - Optional. The status sent with response. Must be in the
+   *                     `4xx` or `5xx` range. Defaults to `500`.
+   * @param reason - Reason for rejection.
+   */
+  public reject(statusCode?: number, reason?: string): void {
+    return this[SymbolPrivate].reject(this.context, statusCode, reason);
+  }
+
+  /**
+   * Redirects client with a `304` to a locally cached resource.
    *
-   * @param statusCode 3xx, 4xx or 5xx http status code.
-   *                   Default is `500`.
+   * @param statusCode - Set to `304` to indicate a local cached resource.
+   */
+  public redirect(statusCode: 304): void;
+  /**
+   * Redirects client with the `"Location"` header and an optional
+   * {@link Response.status | status code}.
    *
-   *                   Code will only be set if no prior code is set.
-   * @param body Reason for rejection.
+   * @remarks
+   *
+   * Will lead to a `500` status code if the `"Location"` header is not set
+   * before calling this method.
+   *
+   * @param statusCode - Optional. The status sent with response. Must be in the
+   *                     `3xx` range. Defaults to `308`.
    */
-  public async reject(statusCode?: number, body?: string): Promise<void> {
-    return this[SymbolContext].reject(this.context, statusCode, body);
+  public redirect(statusCode?: number): void;
+  /**
+   * Redirects client with argument `location` and an optional
+   * {@link Response.status | status code}.
+   *
+   * @param location - The location to redirect to.
+   * @param statusCode - Optional. The status sent with response. Must be in the
+   *                     `3xx` range. Defaults to `308`.
+   */
+  public redirect(location: string, statusCode?: number): void;
+  /**
+   * Overflow signature.
+   *
+   * @param locationOrStatus - Optional. Either the value to set for the
+   *                           "Location" header or the status code to use.
+   * @param statusCode - Optional. The status sent with response. Must be in the
+   *                     `3xx` range. Defaults to `308`.
+   */
+  public redirect(locationOrStatus?: string | number, statusCode?: number): void;
+  public redirect(location?: string | number, statusCode?: number): void {
+    return this[SymbolPrivate].redirect(this.context, location, statusCode);
   }
 
   /**
-   * Redirects client with "Location" header. Header must be set beforehand.
+   * Check for authorization to repository and/or service, and/or authentication
+   * of requester.
+   *
+   * @remarks
+   *
+   * See {@link (LogicController:class).checkForAuth}.
+   *
+   * @returns True if request should gain access to repository and/or service.
    */
-  public redirect(): Promise<void>;
-  /**
-   * Redirects client to cached entry.
-   */
-  public redirect(ststuCode: 304): Promise<void>;
-  /**
-   * Redirects client with "Location" header.
-   */
-  public redirect(statusCode: number): Promise<void>;
-  /**
-   * Redirects client to `location`. Can optionally set status code of redirect.
-   * @param location The location to redirect to.
-   */
-  public redirect(location: string, statusCode?: number): Promise<void>;
-  public async redirect(location?: string | number, statusCode?: number): Promise<void> {
-    return this[SymbolContext].redirect(this.context, location, statusCode);
+  public async checkForAuth(): Promise<boolean> {
+    return this[SymbolPrivate].checkForAuth(this.context);
   }
 
   /**
-   * Check for access to repository and/or service.
-   */
-  public async checkForAccess(): Promise<boolean> {
-    return this[SymbolContext].checkForAuth(this.context);
-  }
-
-  /**
-   * Checks if service is enabled.
-   * Can still *atempt* forcefull use of service.
+   * Checks if service is enabled for repository.
+   *
+   * @remarks
+   *
+   * See {@link (LogicController:class).checkIfEnabled}.
+   *
+   * @returns True if service is enabled for requested repository, otherwise
+   *          false.
    */
   public async checkIfEnabled(): Promise<boolean> {
-    return this[SymbolContext].checkIfEnabled(this.context);
+    return this[SymbolPrivate].checkIfEnabled(this.context);
   }
 
   /**
    * Checks if repository exists.
+   *
+   * @remarks
+   *
+   * See {@link (LogicController:class).checkIfExists}.
+   *
+   * @returns True if repository exists, otherwise false.
    */
   public async checkIfExists(): Promise<boolean> {
-    return this[SymbolContext].checkIfExists(this.context);
+    return this[SymbolPrivate].checkIfExists(this.context);
   }
 }
 
-function wrapError(error: any, code: ErrorCodes): IOuterError {
-  const outerError: Partial<IOuterError> = new Error("Error thown from signal");
-  outerError.code = code;
-  if (error && (error.status || error.statusCode)) {
-    outerError.statusCode = error.status || error.statusCode;
-  }
-  outerError.inner = error;
-  return outerError as IOuterError;
-}
+/**
+ * Middeware for {@link (LogicController:class)}.
+ *
+ * @remarks
+ *
+ * All middleware are registered as listeners for signal
+ * {@link (LogicController:class).onUsable}.
+ *
+ * @param this - Refers to a {@link LogicControllerInstance | bound instance} of
+ *               the {@link (LogicController:class) | controller} calling the
+ *               {@link MethodOverride | method}.
+ * @param context - {@link Context} to use.
+ * @public
+ */
+export type Middleware = (this: LogicControllerInstance, context: Context) => any;
+
+/**
+ * {@link MethodOverride | Method overrides} used by {@link (LogicController:class)}.
+ *
+ * @remarks
+ *
+ * It is possible to disable a method by setting its value here to either
+ * `false` or `true` instead of a {@link MethodOverride | function}.
+ *
+ * All methods should return directly, or through a promise-like resolving to,
+ * either a boolean (`true` or `false`) or void (`undefined`). If the method
+ * returns void, control is handed back to the method being overriden.
+ *
+ * @public
+ */
+export type MethodOverrides = Partial<Record<Exclude<keyof ServiceController, "serve">, boolean | MethodOverride>>;
+
+/**
+ * A method overriding functinoality for a method in
+ * {@link ServiceController}.
+ *
+ * @remarks
+ *
+ * @param this - Refers to a {@link LogicControllerInstance | bound instance} of
+ *               the {@link (LogicController:class) | controller} calling the
+ *               {@link MethodOverride | method}.
+ * @param context - {@link Context} to check.
+ * @returns Either a boolean or undefined.
+ *
+ * @public
+ */
+export type MethodOverride = (this: LogicControllerInstance, context: Context) =>
+  (void | boolean) | Promise<void | boolean> | PromiseLike<void | boolean>;

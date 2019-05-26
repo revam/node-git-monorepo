@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "declaration": false,
+    "declarationMap": false,
+    "outDir": "dist/config",
+    "rootDir": "config"
+  },
+  "include": [
+    "config/**/*.ts"
+  ],
+}

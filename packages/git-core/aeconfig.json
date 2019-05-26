@@ -1,0 +1,26 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "mainEntryPointFilePath": "<projectFolder>/dist/build/main.d.ts",
+  "apiReport": {
+    "enabled": true,
+    "reportFileName": "review.api.md",
+    "reportFolder": "<projectFolder>",
+    "reportTempFolder": "<projectFolder>/dist"
+  },
+  "docModel": {
+    "enabled": true,
+    "apiJsonFilePath": "<projectFolder>/dist/git-core.api.json"
+  },
+  "messages": {
+  },
+  "tsdocMetadata": {
+    "enabled": true,
+    "tsdocMetadataFilePath": "<projectFolder>/dist/package/tsdoc-metadata.json"
+  },
+  "dtsRollup": {
+    "enabled": true,
+    "untrimmedFilePath": "",
+    "betaTrimmedFilePath": "",
+    "publicTrimmedFilePath": "<projectFolder>/dist/package/index.d.ts"
+  }
+}

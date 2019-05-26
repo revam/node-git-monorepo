@@ -1,11 +1,10 @@
 {
   "name": "@revam/git-core",
-  "description": "Core library for other git packages",
+  "description": "Framework-independent core-components for creating a git http(s) server with javascript/typescript",
   "version": "0.1.1",
   "private": true,
-  "main": "index.js",
-  "module": "index.mjs",
-  "types": "index.d.ts",
+  "module": "./dist/build/main.js",
+  "types": "./dist/build/main.d.ts",
   "license": "ISC",
   "author": "Mikal Stordal <mikalstordal@gmail.com>",
   "engines": {
@@ -13,7 +12,8 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/revam/node-git-monorepo.git"
+    "url": "git+https://github.com/revam/node-git-monorepo.git",
+    "directory": "packages/git-core"
   },
   "homepage": "https://github.com/revam/node-git-monorepo/tree/master/packages/git-core#readme",
   "bugs": {
@@ -27,45 +27,62 @@
     "module",
     "typescript"
   ],
-  "files": [
-    "index.js",
-    "index.mjs"
-  ],
   "dependencies": {
+    "@types/node-fetch": "2.3.4",
     "micro-signals": "^2.0.0",
-    "node-fetch": "^2.3.0"
+    "node-fetch": "^2.6.0"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.0.17",
-    "@types/jest": "^24.0.6",
-    "@types/node": "^11.9.5",
-    "@types/node-fetch": "^2.1.6",
-    "jest": "^24.1.0",
-    "read-pkg": "^4.0.1",
-    "rollup": "^1.2.3",
-    "rollup-plugin-copy": "^0.2.3",
-    "ts-jest": "^24.0.0",
-    "tslint": "^5.12.1",
-    "typescript": "^3.3.3",
-    "write-pkg": "^3.2.0"
+    "@microsoft/api-extractor": "7.1.5",
+    "@revam/rollup-plugin-common": "1.2.1",
+    "@types/jest": "^24.0.13",
+    "@types/node": "^12.0.2",
+    "jest": "^24.8.0",
+    "rollup": "1.12.3",
+    "ts-jest": "^24.0.2",
+    "ts-node": "8.1.0",
+    "tslint": "^5.16.0",
+    "typescript": "3.4.5"
   },
   "scripts": {
-    "api-extractor": "api-extractor run --typescript-compiler-folder node_modules/typescript",
-    "build": "npm run cleanup && npm run lint && npm run api-extractor && npm run test && npm run rollup && npm pack ./dist/package",
-    "cleanup": "rm -rf dist",
-    "lint": "tslint -p . src/**/*.ts",
-    "preapi-extractor": "npm run tsc:declaration",
-    "prerollup": "npm run tsc:lib",
-    "rollup": "rollup -c",
-    "test": "jest --runInBand",
-    "tsc": "npm run tsc:lib && npm run tsc:declaration",
-    "tsc:declaration": "tsc -p . --removeComments false --sourceMap false --declaration true --declarationMap true --emitDeclarationOnly true",
-    "tsc:lib": "tsc -p . --removeComments true --sourceMap true --declaration false --declarationMap false --emitDeclarationOnly false"
+    "api-extractor": "api-extractor run -c aeconfig.json",
+    "api-extractor:doc": "api-extractor run -c aeconfig.doc.json",
+    "api-extractor:rollup": "api-extractor run -c aeconfig.rollup.json",
+    "build": "npm run review && npm run package",
+    "cleanup:package": "rm -rf dist/package",
+    "cleanup:coverage": "rm -rf coverage",
+    "example:basic-fs-server": "ts-node examples/basic-fs-server.ts",
+    "example:github-proxy-server": "ts-node examples/github-proxy-server.ts",
+    "lint": "tslint -p .",
+    "package": "npm pack ./dist/package",
+    "preapi-extractor": "npm run tsc:d.ts",
+    "preapi-extractor:doc": "npm run tsc:d.ts",
+    "preapi-extractor:rollup": "npm run tsc:d.ts",
+    "prepackage": "npm run cleanup:package && npm run api-extractor:rollup && npm run rollup",
+    "prereview": "npm run lint && npm run test && npm run tsc:d.ts",
+    "prereview:local": "npm run tsc:d.ts",
+    "prerollup": "npm run tsc:config && npm run tsc:js",
+    "pretest": "npm run cleanup:coverage",
+    "review": "api-extractor run -c aeconfig.review.json",
+    "review:local": "api-extractor run -l -c aeconfig.review.json",
+    "rollup": "rollup -c dist/config/rollup.config.js",
+    "test": "jest",
+    "tsc": "tsc -p tsconfig.build.json",
+    "tsc:config": "tsc -p tsconfig.config.json",
+    "tsc:dev": "npm run tsc && npm run tsc:config",
+    "tsc:d.ts": "tsc -p tsconfig.build.d.ts.json",
+    "tsc:js": "tsc -p tsconfig.build.js.json"
   },
   "jest": {
+    "collectCoverage": true,
+    "collectCoverageFrom": [
+      "!src/main.ts",
+      "src/**/*.ts"
+    ],
     "transform": {
       "^.+\\.tsx?$": "ts-jest"
     },
+    "testEnvironment": "node",
     "testPathIgnorePatterns": [
       "node_modules",
       "dist"

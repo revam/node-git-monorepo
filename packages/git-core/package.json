@@ -33,7 +33,7 @@
   ],
   "dependencies": {
     "micro-signals": "^2.0.0",
-    "node-fetch": "^2.3.0"
+    "node-fetch": "^2.6.1"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "^7.0.17",
